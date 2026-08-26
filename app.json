@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "cs2-simulator",
+    "slug": "cs2-simulator",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.cs2simulator.app",
+      "buildNumber": "1.0.0"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#1a1a24",
+        "foregroundImage": "./assets/icon.png"
+      },
+      "package": "com.cs2simulator.app",
+      "versionCode": 1
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    }
+  }
+}
