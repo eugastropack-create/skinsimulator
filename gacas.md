@@ -62,6 +62,7 @@ cskasa/
     ├── TradeUpScreen.js      # Trade-Up sözleşme ekranı (10 slot, analiz, geçmiş)
     └── components/
         ├── HoverCard.js      # ⭐ Hover'da 3B yükselen kart (tüm liste kartları)
+        ├── Icons.js          # ⭐ CS simgeleri (yeşil ★ kredi, yeşil $) + ValuePill
         ├── LanguageSwitcher.js # ⭐ Globe ikonlu EN/TR değiştirici
         ├── Disclaimer.js     # ⭐ Sorumluluk reddi (footer, EN/TR)
         ├── Toast.js          # Bildirim sistemi + useToast hook
@@ -472,6 +473,30 @@ menü kalır — böylece çark/terminal ekranı sayfanın üstüne yerleşir.
 > içine koymak iç içe dikey kaydırma (scroll-in-scroll) üretir ve sayfa
 > "yapışır". Kaydırma yalnızca içerik alanındadır.
 
+### 6.2.13 CS Arayüz Dili ve Simgeler
+
+Site açık tema kalmaya devam ediyor (bkz. 6.2.3) ama **biçim dili** oyun
+arayüzüne yaklaştırıldı:
+
+| Öğe | Önce | Sonra |
+|---|---|---|
+| Köşeler | 12–999 px (hap) | **4–6 px (keskin panel)** |
+| Menü etiketleri | normal | **BÜYÜK HARF + harf aralığı** |
+| Sayısal değerler | orantılı font | **monospace (tabular)** |
+| Kredi simgesi | `⭐` emoji (sarı) | **yeşil ★** (`#4ade80` — CS operasyon yıldızı) |
+| Para simgesi | `💰` emoji | **yeşil `$`** |
+
+#### ⚠️ Emoji yerine çizilmiş simge — neden
+`⭐`/`💰` her işletim sisteminde farklı görünür (Windows, macOS ve Android'de
+üç ayrı çizim) ve oyun arayüzü hissini bozar. `components/Icons.js` içindeki
+simgeler tipografiyle çizildiği için **her yerde aynı** görünür ve tema
+renklerine bağlıdır.
+
+#### ⚠️ Sayılar neden monospace
+Bakiye/fiyat değiştikçe rakam genişliği sabit kaldığı için rozet yerinde durur,
+komşu elemanları itip kaydırmaz. Oyun arayüzlerinde sayaçların tabular olması
+bu yüzden standarttır.
+
 ### 6.2.14 Logo Görseli (`assets/logo-skinsimulator.png`)
 
 Metin logo (`Skin` + `Simulator`) yerini **saydam zeminli görsel logoya** bıraktı
@@ -510,6 +535,30 @@ Düz chroma eşiği bu boşlukları doğru şekilde saydam bırakır.
 Görsel çok geniş bir şerittir (1100×112, oran **9.82**). Yükseklik daima
 genişlikten türetilir; ikisini birden sabitlemek görseli ezer. Ana kabukta
 genişlik `min(440, ekran × 0.78)`, mini çubukta 170 px.
+
+### 6.2.145 Üst Çubuk Yerleşimi (mobil / masaüstü)
+
+| | SOL | SAĞ |
+|---|---|---|
+| **Masaüstü** (tek satır) | mod anahtarı | butonlar → `$` bakiye → `★` kredi |
+| **Mobil** (iki satır) | 1. satır: mod + para/kredi · 2. satır: butonlar | — |
+
+Mod anahtarı eskiden Envanter ile Sıfırla **arasına sıkışmıştı**; ne işe
+yaradığı anlaşılmıyordu. Artık kendi başına en solda ve mobilde **her zaman ilk
+satırda**.
+
+> **Ölçüm:** masaüstü çubuk 82 → **51 px**; mobil başlığın tamamı
+> 420 → **309 px**.
+
+#### ⚠️ Para grubu TEK yerde tanımlı
+Kırılım noktasına göre farklı satırda render edildiği için `moneyGroup`
+değişkeni bir kez tanımlanıp iki yere yerleştiriliyor. Kopyalanırsa biri
+güncellenip diğeri unutulur.
+
+#### ⚠️ `utilityRowWideRight` neden `flex: 1`
+`flex: 0` verildiğinde sağ grup sıkışıp sarmalanıyordu (1280 px'te 18 px
+genişliğe düşüyordu). `flex: 1` + `justifyContent: 'flex-end'` ile kalan alanı
+alıp içeriğini sağa yaslıyor.
 
 ### 6.2.15 Kaydırmaya Bağlı (Scroll-Linked) Üst Menü
 
@@ -967,6 +1016,11 @@ npm run ios      # iOS
 | **2026-08-28** | **Başlık animasyonu yeniden yazıldı:** DOM sürücülü (React render yok), smoothstep easing, opaklık/mini marka kademeli. **Bug:** p=0'da uygulanan `height`+`overflow` logoyu ve arama listesini kırpıyordu → en üstte artık hiç stil yazılmıyor |
 | **2026-08-28** | **Bug:** rAF ile scroll toplama geri alındı — donmuş sekmede başlık yarıda kilitleniyordu; boyama senkron yapıldı |
 | **2026-08-28** | **Terminal görsel bütünlüğü:** cihaz tüm aşamalarda ekranda kalıyor; eşya paneli beyaz karttan CRT diline (koyu zemin, mint monospace, nadirlik kenarı) taşındı |
+| **2026-08-28** | **Üst çubuk yeniden düzenlendi:** mod solda (mobilde her zaman üstte), para/kredi sağda; masaüstü 82→51 px, mobil başlık 420→309 px |
+| **2026-08-28** | **Kutu kartı:** sağ üstte artık fiyat ARALIĞI değil kutunun KENDİ fiyatı (yeşil $); EV/ROI kartın altındaki şeride taşındı |
+| **2026-08-28** | **"Animasyonu geç" tiki** — 1x ve 5x açılışlar anında sonuçlanır (yalnızca görsel; olasılıkları etkilemez) |
+| **2026-08-28** | **CS arayüz dili:** keskin köşeler, büyük harf menü, tabular sayılar, emoji yerine yeşil ★/$ simgeleri (`components/Icons.js`) |
+| **2026-08-28** | **Trade-Up:** 10 slot 5×2 ızgaraya oturdu; olası çıktılar artık **görsel + ihtimal + tahmini fiyat** ve en değerliden sıralı. **Bug:** sidebar genişliği iki yerde ayrı yazıldığı (320 vs 330) ve panel padding'i hesaba katılmadığı için 5. kart alt satıra düşüyordu |
 | **2026-08-28** | **Fiyatlar canlıya bağlandı:** ölü kaynak (301→HTML) yerine ByMykel price-tracker; CORS açık, cent→dolar dönüşümü |
 | **2026-08-28** | **Bug (kritik):** `min_float` yokluğu yüzünden eşya isimleri aşınma eki almıyor, tüm eşya fiyatları sessizce mock'a düşüyordu. `lookupLivePrice` ile giderildi — eşleşme 0/17 → 17/17, ROI %138 → %42.9 (gerçekçi) |
 | **2026-08-28** | **Trade-Up:** ücretsizlik yapısal hâle getirildi (`gameMode` prop'u kaldırıldı), `Toplam Maliyet` → **`Girdi Değeri`** (nötr renk) + "ücretsiz simülatör" rozeti |

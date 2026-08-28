@@ -31,10 +31,11 @@ const DICT = {
   en: {
     // --- Üst yardımcı çubuk ---
     'util.inventory': '🎒 Inventory ({n})',
-    'util.wallet': '💼 Wallet',
-    'util.unlimited': '♾️ Unlimited',
+    'util.wallet': 'WALLET MODE',
+    'util.unlimited': 'UNLIMITED MODE',
     'util.reset': '🔄 Reset',
-    'util.buyPass': '🎟️ +40 ⭐ · $16.00',
+    'util.buyPass': '+40 credits · $16.00',
+    'util.buyPassShort': '+40 · $16',
     'util.unlimitedBalance': '♾️ Unlimited Balance',
     'util.virtualEarnings': '🧪 virtual: ${n}',
     'util.language': 'Language',
@@ -94,7 +95,7 @@ const DICT = {
     'common.multiOpen': 'Multi Open',
     'common.openX': '{n}x Open',
     'common.insufficientBalance': 'Insufficient balance! (${n} required)',
-    'common.insufficientCredits': 'Insufficient credits! ({n} ⭐ required)',
+    'common.insufficientCredits': 'Insufficient credits! ({n} needed)',
     'common.contentsUnreadable': 'Could not read this container’s contents.',
 
     // --- Kasa / Souvenir ---
@@ -106,6 +107,8 @@ const DICT = {
     'case.batchSequential': '🎁 Opening {n}x — {done}/{total}',
     'case.batchDone': '✅ {n}x Opened!',
     'case.instantShow': '⏩ Show Now',
+    'case.skipAnim': 'Skip animation',
+    'case.skipAnimHint': 'Open instantly, without the spinner',
 
     // --- Terminal ---
     'terminal.subtitle': 'Armory Terminal · pay in USD · no key required',
@@ -153,12 +156,12 @@ const DICT = {
     // --- Armory ---
     'armory.charmCapsule': '🔗 Charm Capsule',
     'armory.stickerCapsule': '🏷️ Sticker Capsule',
-    'armory.limitedTag': '🔥 Limited Edition Item — Guaranteed Special Item (25⭐)',
+    'armory.limitedTag': 'Limited Edition Item — Guaranteed Special Item (25 credits)',
     'armory.mintCost': 'Mint Cost',
     'armory.floatRange': 'Float Range',
     'armory.rarity': 'Rarity',
-    'armory.spendStars': 'Spend Credits ({n}⭐)',
-    'armory.mint': 'Mint ({n}⭐)',
+    'armory.spendStars': 'Spend {n} Credits',
+    'armory.mint': 'Mint ({n} credits)',
     'armory.minting': 'Minting…',
     'armory.extracting': 'Extracting item…',
     'armory.mintedTitle': 'Special Item Minted!',
@@ -169,7 +172,7 @@ const DICT = {
     'armory.marketValue': 'Market Value',
     'armory.profitRoi': 'Profit/Loss (%ROI)',
     'armory.batchDone': '✅ {n}x Opened!',
-    'armory.insufficientStars': 'Insufficient credits! ({n}⭐ required)',
+    'armory.insufficientStars': 'Insufficient credits! ({n} needed)',
 
     // --- İçerik önizlemesi ---
     'contents.title': 'Contents & Drop Rates',
@@ -238,7 +241,7 @@ const DICT = {
     'inv.multiSelectOn': '✓ Selection Mode On',
     'inv.selectAll': 'Select All',
     'inv.selectNone': 'Deselect All',
-    'inv.sellSelected': '💰 Sell Selected ({n}) — ${total}',
+    'inv.sellSelected': 'Sell Selected ({n}) — ${total}',
     'inv.clear': '🗑 Clear',
     'inv.sell': 'Sell',
 
@@ -301,10 +304,11 @@ const DICT = {
   // ==========================================================
   tr: {
     'util.inventory': '🎒 Envanter ({n})',
-    'util.wallet': '💼 Cüzdan',
-    'util.unlimited': '♾️ Sınırsız',
+    'util.wallet': 'CÜZDAN MODU',
+    'util.unlimited': 'SINIRSIZ MOD',
     'util.reset': '🔄 Sıfırla',
-    'util.buyPass': '🎟️ +40 ⭐ · $16.00',
+    'util.buyPass': '+40 kredi · $16.00',
+    'util.buyPassShort': '+40 · $16',
     'util.unlimitedBalance': '♾️ Sınırsız Bakiye',
     'util.virtualEarnings': '🧪 sanal: ${n}',
     'util.language': 'Dil',
@@ -359,7 +363,7 @@ const DICT = {
     'common.multiOpen': 'Çoklu Açılış',
     'common.openX': '{n}x Aç',
     'common.insufficientBalance': 'Yetersiz bakiye! (${n} gerekli)',
-    'common.insufficientCredits': 'Yetersiz kredi! ({n} ⭐ gerekli)',
+    'common.insufficientCredits': 'Yetersiz kredi! ({n} gerekli)',
     'common.contentsUnreadable': 'Bu kutunun içeriği okunamadı.',
 
     'case.openCase': 'KASAYI AÇ',
@@ -370,6 +374,8 @@ const DICT = {
     'case.batchSequential': '🎁 {n}x Açılıyor — {done}/{total}',
     'case.batchDone': '✅ {n}x Açıldı!',
     'case.instantShow': '⏩ Hemen Göster',
+    'case.skipAnim': 'Animasyonu geç',
+    'case.skipAnimHint': 'Çark olmadan anında aç',
 
     'terminal.subtitle': 'Armory Terminali · dolar ile ödeme · anahtar gerekmez',
     'terminal.start': 'TERMİNALİ BAŞLAT',
@@ -414,12 +420,12 @@ const DICT = {
 
     'armory.charmCapsule': '🔗 Charm Kapsülü',
     'armory.stickerCapsule': '🏷️ Sticker Kapsülü',
-    'armory.limitedTag': '🔥 Limited Edition Item — Garantili Özel Eşya (25⭐)',
+    'armory.limitedTag': 'Limited Edition Item — Garantili Özel Eşya (25 kredi)',
     'armory.mintCost': 'Basım Maliyeti',
     'armory.floatRange': 'Float Aralığı',
     'armory.rarity': 'Nadirlik',
-    'armory.spendStars': 'Kredi Harca ({n}⭐)',
-    'armory.mint': 'Bas ({n}⭐)',
+    'armory.spendStars': '{n} Kredi Harca',
+    'armory.mint': 'Bas ({n} kredi)',
     'armory.minting': 'Basılıyor…',
     'armory.extracting': 'Eşya çıkarılıyor…',
     'armory.mintedTitle': 'Özel Eşya Basıldı!',
@@ -430,7 +436,7 @@ const DICT = {
     'armory.marketValue': 'Piyasa Değeri',
     'armory.profitRoi': 'Kâr/Zarar (%ROI)',
     'armory.batchDone': '✅ {n}x Açıldı!',
-    'armory.insufficientStars': 'Yetersiz kredi! ({n}⭐ gerekli)',
+    'armory.insufficientStars': 'Yetersiz kredi! ({n} gerekli)',
 
     'contents.title': 'İçerik & Çıkış Oranları',
     'contents.inlineTitle': 'Bu Kutudan Çıkabilecekler ({n})',
@@ -486,7 +492,7 @@ const DICT = {
     'inv.multiSelectOn': '✓ Seçim Modu Açık',
     'inv.selectAll': 'Tümünü Seç',
     'inv.selectNone': 'Hiçbirini Seçme',
-    'inv.sellSelected': '💰 Seçilenleri Sat ({n}) — ${total}',
+    'inv.sellSelected': 'Seçilenleri Sat ({n}) — ${total}',
     'inv.clear': '🗑 Sıfırla',
     'inv.sell': 'Sat',
 

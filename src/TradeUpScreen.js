@@ -152,20 +152,20 @@ function TradeCard({ entry, index, cardWidth, locked, onPress, onLockedPress, on
 }
 
 const card = StyleSheet.create({
-  empty: { minHeight: 178, backgroundColor: C.surfaceAlt, borderRadius: 6, borderWidth: 2, borderColor: C.borderStrong, borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center' },
+  empty: { minHeight: 158, backgroundColor: C.surfaceAlt, borderRadius: 4, borderWidth: 2, borderColor: C.borderStrong, borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center' },
   emptyIcon: { color: C.accent, fontSize: 28, fontWeight: '800' },
   emptyTxt: { color: C.textDim, fontSize: 11, fontWeight: '800', marginTop: 4 },
   lockedCard: { backgroundColor: C.surfaceSunken, borderColor: C.borderStrong, opacity: 0.75 },
   lockIcon: { fontSize: 22 },
   lockedTxt: { color: C.textDim, fontSize: 11, fontWeight: '800', marginTop: 4 },
-  filled: { minHeight: 178, backgroundColor: C.surface, borderRadius: 6, borderWidth: 1, borderColor: C.border, borderTopWidth: 4, padding: 11, position: 'relative' },
+  filled: { minHeight: 158, backgroundColor: C.surface, borderRadius: 4, borderWidth: 1, borderColor: C.border, borderTopWidth: 4, padding: 8, position: 'relative' },
   removeBtn: { position: 'absolute', top: 7, right: 7, width: 22, height: 22, borderRadius: 11, backgroundColor: C.dangerSoft, alignItems: 'center', justifyContent: 'center', zIndex: 2 },
   removeTxt: { color: C.danger, fontSize: 12, fontWeight: '800' },
-  img: { width: '100%', height: 50, marginTop: 6 },
-  name: { color: C.text, fontSize: 11, fontWeight: '700', marginTop: 8, textAlign: 'center' },
-  price: { color: C.success, fontSize: 12, fontWeight: '800', textAlign: 'center', marginTop: 2 },
-  cloneBtn: { marginTop: 8, backgroundColor: C.accent, paddingVertical: 7, borderRadius: 8, alignItems: 'center' },
-  cloneTxt: { color: C.onAccent, fontSize: 10, fontWeight: '800' }
+  img: { width: '100%', height: 42, marginTop: 4 },
+  name: { color: C.text, fontSize: 10, fontWeight: '700', marginTop: 6, textAlign: 'center' },
+  price: { color: C.success, fontSize: 11, fontWeight: '800', textAlign: 'center', marginTop: 1 },
+  cloneBtn: { marginTop: 6, backgroundColor: C.accent, paddingVertical: 5, borderRadius: 4, alignItems: 'center' },
+  cloneTxt: { color: C.onAccent, fontSize: 9, fontWeight: '800' }
 });
 
 // SAĞ PANEL / ALT PANEL İÇERİĞİ (geniş ekranda sticky sidebar, dar ekranda
@@ -214,20 +214,35 @@ function SummaryContent({ analysis, filledCount, profitAmount, profitPct, t }) {
       ) : (
         <>
           <Text style={ts.outcomesTitle}>{t('tradeup.outcomes', { n: analysis.outcomes.length })}</Text>
-          <View style={ts.outcomesWrap}>
-            {/* Bıçak havuzu 500+ öğe olabildiği için listeyi kırpıyoruz — hepsini
+          <View style={ts.outcomeList}>
+            {/* ⚠️ Bıçak havuzu 500+ öğe olabildiği için liste kırpılır — hepsini
                 basmak paneli kullanılamaz hale getirirdi. EV ve çekiliş yine de
-                TÜM havuz üzerinden hesaplanıyor. */}
-            {analysis.outcomes.slice(0, OUTCOME_RENDER_CAP).map((o, i) => (
-              <View key={i} style={ts.outcomePill}>
-                <Text style={ts.outcomePillTxt} numberOfLines={1}>{o.skin.name}</Text>
-                <Text style={ts.outcomePillPct}>%{o.chance < 0.5 ? o.chance.toFixed(2) : o.chance.toFixed(0)}</Text>
-              </View>
-            ))}
+                TÜM havuz üzerinden hesaplanıyor.
+                ⚠️ EN DEĞERLİDEN sıralanıyor: kırpma yapıldığı için rastgele 24
+                değil, EN İYİ 24 ödül gösterilsin. */}
+            {[...analysis.outcomes]
+              .sort((a, b) => (b.price ?? 0) - (a.price ?? 0))
+              .slice(0, OUTCOME_RENDER_CAP)
+              .map((o, i) => (
+                <View key={i} style={ts.outcomeRow}>
+                  {/* Kullanıcı ne kazanabileceğini GÖRSÜN — sadece isim yetmiyor */}
+                  <Image source={{ uri: o.skin.image }} style={ts.outcomeImg} resizeMode="contain" />
+                  <View style={ts.outcomeInfo}>
+                    <Text style={[ts.outcomeName, { color: o.skin.rarity?.color || C.text }]} numberOfLines={1}>
+                      {o.skin.name}
+                    </Text>
+                    <Text style={ts.outcomePct}>
+                      %{o.chance < 0.5 ? o.chance.toFixed(2) : o.chance.toFixed(1)}
+                    </Text>
+                  </View>
+                  {/* Tahmini fiyat — ihtimalin yanında değeri de görünsün */}
+                  <Text style={ts.outcomePrice}>${(o.price ?? 0).toFixed(2)}</Text>
+                </View>
+              ))}
             {analysis.outcomes.length > OUTCOME_RENDER_CAP && (
-              <View style={[ts.outcomePill, { borderWidth: 1, borderColor: C.borderStrong }]}>
-                <Text style={ts.outcomePillTxt}>{t('tradeup.moreItems', { n: analysis.outcomes.length - OUTCOME_RENDER_CAP })}</Text>
-              </View>
+              <Text style={ts.outcomeMore}>
+                {t('tradeup.moreItems', { n: analysis.outcomes.length - OUTCOME_RENDER_CAP })}
+              </Text>
             )}
           </View>
         </>
@@ -277,7 +292,7 @@ export default function TradeUpScreen({ inventory, setInventory, priceMap, allCo
   // deneme-yanılma yaparken sayfayı aşağı kaydırmaya gerek kalmaz. Dar
   // ekranda (mobil) sidebar'a yer yok; panel grid'in altına iner.
   const isWideLayout = winWidth >= 900;
-  const SIDEBAR_WIDTH = 320;
+  const SIDEBAR_WIDTH = SIDEBAR_W;
   const SCROLLBAR_GUTTER = 20;
   const CONTENT_PADDING = 20; // ScrollView content padding (10 sol + 10 sağ)
   const GRID_GAP = 8;
@@ -286,10 +301,22 @@ export default function TradeUpScreen({ inventory, setInventory, priceMap, allCo
   // YANLIŞ — dikey tarayıcı kaydırma çubuğu (~15-17px) gerçek içerik alanını
   // daraltıyor. Ölçüme güvenmek yerine sabit bir pay (SCROLLBAR_GUTTER)
   // ayırıyoruz — az bir boşluk pahasına HER ZAMAN doğru sığdırıyor.
-  const gridAreaWidth = isWideLayout
+  // ⚠️ GRID PANELİNİN KENDİ PADDING'İ DE DÜŞÜLMELİ.
+  // Zincir (1280px'te ölçüldü):
+  //   pencere 1280 → sidebar(330) → kaydırma çubuğu(~15) → ScrollView 935
+  //   → içerik padding(2×10) → panel 915 → PANEL padding(2×10) → grid 893
+  // Panel padding'i hesaba katılmadığı için alan 910 sanılıyor, 5 kart
+  // 910px istiyor ve 893'e sığmayıp 4'e düşüyordu — "10 slot iki satıra
+  // sığsın" hedefi bu yüzden tutmuyordu.
+  const PANEL_PADDING = 20; // ts.gridPanel padding (10 sol + 10 sağ)
+  const gridAreaWidth = (isWideLayout
     ? winWidth - SIDEBAR_WIDTH - CONTENT_PADDING - SCROLLBAR_GUTTER
-    : winWidth - CONTENT_PADDING - SCROLLBAR_GUTTER;
-  const columns = gridAreaWidth >= 1150 ? 5 : gridAreaWidth >= 900 ? 4 : gridAreaWidth >= 620 ? 3 : 2;
+    : winWidth - CONTENT_PADDING - SCROLLBAR_GUTTER) - PANEL_PADDING;
+  // ⚠️ 10 SLOT İKİ SATIRDA: Kullanıcı "silahlar ekranın çok altında kalıyor"
+  // dedi. Sebep, kartların geniş olması yüzünden 10 slotun 3-5 satıra
+  // yayılmasıydı. Artık mümkün olan her yerde 5 sütun tercih ediliyor →
+  // 5×2 = 10, tek ekranda görünüyor. Kartlar da daha DAR ve DİKEY.
+  const columns = gridAreaWidth >= 860 ? 5 : gridAreaWidth >= 640 ? 4 : gridAreaWidth >= 420 ? 3 : 2;
   const cardWidth = (gridAreaWidth - GRID_GAP * (columns - 1)) / columns;
 
   // Eşya adı -> ait olduğu koleksiyon(lar) ters-haritası. Gerçek CS2'de trade-up
@@ -837,9 +864,17 @@ export default function TradeUpScreen({ inventory, setInventory, priceMap, allCo
   );
 }
 
+const TU_MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+
+// ⚠️ TEK KAYNAK: Sidebar genişliği hem sütun hesabında hem de stilde
+// kullanılıyor. İki yere ayrı ayrı yazıldığında biri 320, diğeri 330 kalmış
+// ve grid alanı 10px fazla hesaplandığı için 5. kart alt satıra düşüyordu
+// (ölçüldü: hesap 920px, gerçek 877px). Artık ikisi de bu sabitten okur.
+const SIDEBAR_W = 330;
+
 const ts = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8, gap: 10, flexWrap: 'wrap' },
   title: { color: C.text, fontSize: 17, fontWeight: '800' },
   freeBadge: { backgroundColor: C.successSoft, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 6 },
   freeBadgeTxt: { color: C.success, fontSize: 11, fontWeight: '800' },
@@ -855,17 +890,17 @@ const ts = StyleSheet.create({
   excludedCard: { width: 72, alignItems: 'center', backgroundColor: C.surface, borderRadius: 10, padding: 7 },
   excludedLock: { fontSize: 12, marginBottom: 2 },
   excludedName: { color: C.textDim, fontSize: 8, textAlign: 'center', marginTop: 2 },
-  scrollContent: { padding: 14, paddingBottom: 26 },
+  scrollContent: { padding: 10, paddingBottom: 20 },
 
   // GİRDİ PANELİ — belirgin, keskin hatlı kutucuk
-  gridPanel: { backgroundColor: C.surface, borderRadius: 8, borderWidth: 1, borderColor: C.borderStrong, padding: 14 },
+  gridPanel: { backgroundColor: C.surface, borderRadius: 6, borderWidth: 1, borderColor: C.borderStrong, padding: 10 },
   gridPanelHeader: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingBottom: 12, marginBottom: 14, borderBottomWidth: 1, borderBottomColor: C.border, gap: 10
+    paddingBottom: 8, marginBottom: 10, borderBottomWidth: 1, borderBottomColor: C.border, gap: 10
   },
   gridPanelTitle: { color: C.text, fontSize: 13, fontWeight: '800', letterSpacing: 0.3, flexShrink: 1 },
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
-  sidebar: { width: 330, backgroundColor: C.surfaceAlt, borderLeftWidth: 1, borderLeftColor: C.borderStrong },
+  sidebar: { width: SIDEBAR_W, backgroundColor: C.surfaceAlt, borderLeftWidth: 1, borderLeftColor: C.borderStrong },
   sidebarScroll: { padding: 16 },
   summaryPanel: { backgroundColor: C.surface, borderRadius: 8, borderWidth: 1, borderColor: C.borderStrong, padding: 16, marginTop: 14 },
   summaryTitle: { color: C.text, fontSize: 14, fontWeight: '800', letterSpacing: 0.2 },
@@ -877,10 +912,21 @@ const ts = StyleSheet.create({
   sourceTxt: { color: C.accentDeep, fontSize: 10, marginTop: 12, fontWeight: '600' },
   emptyHint: { color: C.textDim, fontSize: 12, textAlign: 'center', marginTop: 10, lineHeight: 19 },
   outcomesTitle: { color: C.textSoft, fontSize: 11, fontWeight: '800', marginTop: 16, marginBottom: 8 },
-  outcomesWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  outcomePill: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.surfaceAlt, borderWidth: 1, borderColor: C.border, borderRadius: 6, paddingHorizontal: 11, paddingVertical: 7, gap: 6, maxWidth: '100%' },
-  outcomePillTxt: { color: C.textSoft, fontSize: 10, flexShrink: 1, fontWeight: '600' },
-  outcomePillPct: { color: C.accentDeep, fontSize: 10, fontWeight: '800' },
+  // OLASI ÇIKTILAR — görsel + ad + ihtimal + tahmini fiyat (satır listesi).
+  // Eskiden sadece ad + yüzde içeren "pill"lerdi; kullanıcı ne kazanacağını
+  // göremiyordu.
+  outcomeList: { gap: 4 },
+  outcomeRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 9,
+    backgroundColor: C.surfaceAlt, borderWidth: 1, borderColor: C.border,
+    borderRadius: 4, paddingHorizontal: 8, paddingVertical: 6
+  },
+  outcomeImg: { width: 38, height: 28 },
+  outcomeInfo: { flex: 1, minWidth: 0 },
+  outcomeName: { fontSize: 10.5, fontWeight: '800' },
+  outcomePct: { color: C.textDim, fontSize: 9.5, fontWeight: '700', marginTop: 1 },
+  outcomePrice: { color: C.success, fontSize: 11.5, fontWeight: '800', fontFamily: TU_MONO },
+  outcomeMore: { color: C.textDim, fontSize: 10, fontWeight: '700', textAlign: 'center', paddingVertical: 6 },
   knifeBanner: { backgroundColor: '#fdf6dd', borderLeftWidth: 4, borderLeftColor: C.gold, borderRadius: 6, padding: 12, marginTop: 14 },
   knifeBannerTxt: { color: '#8a6d08', fontSize: 10, lineHeight: 16, fontWeight: '600' },
   footer: { padding: 14, paddingBottom: 22, backgroundColor: C.surface, ...shadow.bar },
@@ -890,7 +936,7 @@ const ts = StyleSheet.create({
   pickerCard: { flex: 1, backgroundColor: C.surface, margin: 5, padding: 9, borderRadius: 8, borderWidth: 1, borderColor: C.border, alignItems: 'center', maxWidth: '31%' },
   resultOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(38, 48, 61, 0.55)', justifyContent: 'center', alignItems: 'center', zIndex: 100 },
   resultBox: { backgroundColor: C.surface, padding: 28, borderRadius: 10, borderWidth: 3, alignItems: 'center', width: '90%', maxWidth: 420, ...shadow.modal },
-  subTabRow: { flexDirection: 'row', paddingHorizontal: 14, paddingTop: 8, gap: 8 },
+  subTabRow: { flexDirection: 'row', paddingHorizontal: 14, paddingTop: 6, gap: 8 },
   subTabBtn: { paddingVertical: 9, paddingHorizontal: 16, borderRadius: 6, backgroundColor: C.surface, borderWidth: 1, borderColor: C.borderStrong },
   subTabBtnActive: { backgroundColor: C.accent },
   subTabTxt: { color: C.textSoft, fontSize: 12, fontWeight: '800' },

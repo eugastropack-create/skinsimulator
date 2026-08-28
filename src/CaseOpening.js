@@ -222,6 +222,17 @@ function RevealCard({ item }) {
 //   • Kademeler pakete göre DİNAMİK tespit edilir (bkz. getSouvenirTiers)
 export default function CaseOpening({ crate, onBack, balance, setBalance, inventory, setInventory, gameMode, priceMap, onOpen, mode = 'case' }) {
   const { t } = useI18n();
+  // ============================================================
+  // ANİMASYONU GEÇ (kullanıcı tercihi)
+  // ============================================================
+  // İşaretliyken 1x ve 5x açılışlar çarkı hiç oynatmadan ANINDA sonuçlanır.
+  // Çok sayıda açılış yapan kullanıcı için 8.6 saniyelik çark her seferinde
+  // beklemek demekti. 10x/25x zaten çark kullanmıyor (sıralı beliriş).
+  //
+  // ⚠️ Bu YALNIZCA GÖRSEL bir tercihtir: sonuç zaten çark başlamadan önce
+  // belirleniyor (bkz. `rollOneItem` / `winnerData`), dolayısıyla animasyonu
+  // atlamak olasılıkları veya ödülü HİÇBİR ŞEKİLDE değiştirmez.
+  const [skipAnim, setSkipAnim] = useState(false);
   const [opening, setOpening] = useState(false);
   const [wonItem, setWonItem] = useState(null);
   const [errorMsg, setErrorMsg] = useState('');
@@ -415,6 +426,15 @@ export default function CaseOpening({ crate, onBack, balance, setBalance, invent
       ]).start();
     };
 
+    if (skipAnim) {
+      // ANINDA AÇ: şeridi doğrudan son konumuna koy ve sonucu hemen göster.
+      // Şerit yine de çizilir (kazanan göstergenin altında durur) — böylece
+      // kullanıcı ne çıktığını bağlamıyla birlikte görür, sadece bekleme yok.
+      translateX.setValue(toValue);
+      settleOnce(reveal);
+      return;
+    }
+
     spinAnimRef.current.start(() => settleOnce(reveal));
 
     // BEKCI: animasyon beklenen sureden ~1.2sn sonra hala bitmediyse
@@ -482,7 +502,8 @@ export default function CaseOpening({ crate, onBack, balance, setBalance, invent
     // diğerini hiçbir şekilde etkilemez.
     const results = Array.from({ length: count }, () => rollOneItem());
     const totalWon = results.reduce((acc, r) => acc + r.price, 0);
-    const animated = count <= 5;
+    // `skipAnim` işaretliyse 5x de mini çark oynatmaz, doğrudan sonuç ızgarası gelir.
+    const animated = count <= 5 && !skipAnim;
 
     setSessionSpent(prev => prev + totalCost);
     setSessionOpened(prev => prev + count);
@@ -528,6 +549,13 @@ export default function CaseOpening({ crate, onBack, balance, setBalance, invent
       // SIRALI BELİRME: her SEQUENTIAL_REVEAL_STEP_MS'de bir sonraki eşya
       // gösterime girer. "Hemen Göster" bu zamanlayıcıyı iptal edip hepsini
       // anında açığa çıkarır (bkz. instantShowAll).
+      // skipAnim: sıralı belirişi de atla — hepsi tek karede görünsün.
+      if (skipAnim) {
+        setBatch({ items: results, count, spending: totalCost, totalWon, animated: false, sequential: true, revealed: true });
+        setRevealedCount(count);
+        return;
+      }
+
       setBatch({ items: results, count, spending: totalCost, totalWon, animated: false, sequential: true, revealed: false });
       setRevealedCount(0);
       const step = (i) => {
@@ -750,6 +778,22 @@ export default function CaseOpening({ crate, onBack, balance, setBalance, invent
               <Text style={styles.openBtnPrice}>${TOTAL_COST_PER_OPEN.toFixed(2)}</Text>
             </TouchableOpacity>
 
+            {/* ANİMASYONU GEÇ — 1x ve 5x için */}
+            <TouchableOpacity
+              style={styles.skipRow}
+              onPress={() => setSkipAnim(v => !v)}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: skipAnim }}
+            >
+              <View style={[styles.checkbox, skipAnim && styles.checkboxOn]}>
+                {skipAnim && <Text style={styles.checkboxMark}>✓</Text>}
+              </View>
+              <View style={{ flexShrink: 1 }}>
+                <Text style={styles.skipLabel}>{t('case.skipAnim')}</Text>
+                <Text style={styles.skipHint}>{t('case.skipAnimHint')}</Text>
+              </View>
+            </TouchableOpacity>
+
             <Text style={styles.multiLabel}>{t('common.multiOpen')}</Text>
             <View style={styles.multiRow}>
               {[5, 10, 25].map(n => (
@@ -818,6 +862,22 @@ const styles = StyleSheet.create({
   openBtn: { backgroundColor: C.accent, paddingVertical: 14, paddingHorizontal: 46, borderRadius: 14, alignItems: 'center', marginTop: 8, ...shadow.card, shadowColor: C.accent, shadowOpacity: 0.4 },
   openBtnTxt: { color: C.onAccent, fontSize: 16, fontWeight: '800', letterSpacing: 0.6 },
   openBtnPrice: { color: C.onAccent, fontSize: 13, marginTop: 3, opacity: 0.9, fontWeight: '600' },
+  // --- ANİMASYONU GEÇ ---
+  skipRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 16,
+    backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
+    borderRadius: 6, paddingHorizontal: 14, paddingVertical: 10, maxWidth: 340
+  },
+  checkbox: {
+    width: 20, height: 20, borderRadius: 4,
+    borderWidth: 2, borderColor: C.borderStrong,
+    alignItems: 'center', justifyContent: 'center', backgroundColor: C.surface
+  },
+  checkboxOn: { backgroundColor: C.accent, borderColor: C.accent },
+  checkboxMark: { color: C.onAccent, fontSize: 12, fontWeight: '900', lineHeight: 14 },
+  skipLabel: { color: C.text, fontSize: 13, fontWeight: '800' },
+  skipHint: { color: C.textDim, fontSize: 10.5, marginTop: 1 },
+
   multiLabel: { color: C.textDim, fontSize: 11, fontWeight: '700', marginTop: 20, marginBottom: 8 },
   multiRow: { flexDirection: 'row', gap: 10, flexWrap: 'wrap', justifyContent: 'center' },
   multiBtn: { backgroundColor: C.surface, paddingVertical: 10, paddingHorizontal: 18, borderRadius: 12, alignItems: 'center', ...shadow.card },

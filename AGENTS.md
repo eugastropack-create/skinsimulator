@@ -77,6 +77,7 @@ Güncellenmesi gereken tipik bölümler:
 | `src/TerminalOpening.js` | Armory terminali — **adım adım teklif seçimi** (1/5 → 5/5, %5 ile 6.) | **Çark KULLANMAZ, kasa DEĞİLDİR.** **DOLAR** kullanır (kredi değil). Teklif geçişine **animasyon EKLEME** — anında olmalı. Son seçenekte Pas Geç devre dışı |
 | `src/CapsuleOpening.js` | Sticker kapsülü (titreme/yırtılma/patlama) | **Çark KULLANMAZ**. Yarılar tek görselden `overflow:hidden` ile üretilir |
 | `src/components/HoverCard.js` | Hover'da 3B yükselen kart | CSS transition kullanır, `Animated` **değil** — geri çevirme |
+| `src/components/Icons.js` | CS simgeleri (yeşil ★ / $) + `ValuePill` | Emoji'ye geri dönme — platformlar arası tutarsız. Sayılar monospace kalmalı |
 | `src/utils.js` | Float üretimi, aşınma eşlemesi, mock fiyat, para formatı | `generateFloat` **ağırlıklı** dağılım kullanır, uniform'a döndürme |
 | `src/prices.js` | Canlı/mock fiyat çözümleme, EV/ROI, kararlı sıralama değeri | Altın kademe `contains_rare`'den gelir; sıralamada `getStableSortValue()` kullan |
 | `src/CaseOpening.js` | Kasa **ve Souvenir** açılışı (`mode` prop'u) | Gösterge KUTU değil OK (`WinnerPointer`) — kutuya geri dönme; `ITEM_PITCH`/`getRouletteWidth()` matematiğini bozma; jitter EKLEME; altın kademe `contains_rare`'den çekilir; **sekme (bounce)** ve **bekçi** mantığını kaldırma |
@@ -173,6 +174,9 @@ Bu durumda:
 | Arka plan sekmesinde `setTimeout` ≥1 sn'ye kısılıyor | Zincirleme zamanlayıcılı animasyonlar test ortamında yavaşlar — **bug değil** |
 | `setState` güncelleyicisi içinde yan etki | Güncelleyici SAF olmalı (StrictMode iki kez çalıştırır) — yeni değeri dışarıda hesapla |
 | Döngüde `t` değişkeni çeviri fonksiyonunu gölgeliyor | Döngü değişkenine `item` de |
+| Aynı ölçüyü hem JS sabitinde hem stilde yazmak | Sapıyorlar (sidebar 320 vs 330 → grid 10px şişti). TEK sabitten oku |
+| Izgara genişliği hesabında kapsayıcı padding'ini unutmak | Zinciri say: ScrollView → içerik padding → panel padding → grid |
+| CSS `textTransform` ile büyük harf | `textContent` kaynak metni verir; test/otomasyon `innerText` ile eşleşir |
 | Kaydırmada menüyü tek eşikle daraltmak | Menü kapanınca içerik yukarı kayıp offset eşiğin altına düşer → **sonsuz aç/kapa**. İki eşik (histerezis) kullan |
 | `localStorage` native'de YOK, gizli sekmede HATA fırlatır | `Platform.OS !== 'web'` kontrolü + `try/catch`; hata = "kapatılmamış say" |
 | `onLayout` (RN-Web) bazı düğümlerde HİÇ ateşlenmiyor | Ölçümü DOM `ref.offsetHeight` ile yap; `onLayout`'u native yedeği olarak bırak |
@@ -241,5 +245,7 @@ Bu durumda:
 | **2026-08-28** | **Başlık animasyonu DOM sürücülü + easing'li**; p=0 kırpma hatası giderildi; rAF geri alındı |
 | **2026-08-28** | **Terminal görsel bütünlüğü** (cihaz hiç sökülmez, panel CRT dilinde) |
 | **2026-08-28** | **Trade-Up ücretsizliği yapısal hâle getirildi** + etiket/renk düzeltmesi |
+| **2026-08-28** | **Üst çubuk yerleşimi (mod sol / para sağ), CS simgeleri, kart fiyat+istatistik ayrımı** |
+| **2026-08-28** | **"Animasyonu geç" tiki; Trade-Up 5×2 ızgara + görselli/fiyatlı çıktı listesi** |
 | **2026-08-28** | **Fiyat kaynağı ByMykel price-tracker'a taşındı** (eskisi ölmüştü); isim eşleştirme hatası giderildi — EV/ROI artık gerçekten canlı |
 | **2026-08-28** | **Saydam logo görseli** metin logonun yerini aldı (chroma maskesi; flood-fill bilerek kullanılmadı) |

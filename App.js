@@ -12,7 +12,7 @@ import { fetchCrates, fetchKeychains, fetchCollections, fetchStickerCapsules, fe
 import {
   fetchLivePrices, calculateCaseStats, calculateArmoryStats, calculateCharmStats,
   calculateStickerStats, calculateSouvenirStats, calculateTerminalStats,
-  getContainerValueRange
+  getContainerPrice
 } from './src/prices';
 import { ACTIVE_ARMORY_COLLECTION_NAMES } from './src/armoryData';
 import { useToast, ToastBanner } from './src/components/Toast';
@@ -21,6 +21,7 @@ import ContentsModal from './src/components/ContentsModal';
 import ItemInspectModal from './src/components/ItemInspectModal';
 import SellConfirmModal from './src/components/SellConfirmModal';
 import HoverCard from './src/components/HoverCard';
+import { StarIcon, DollarIcon, ValuePill, STAR_GREEN } from './src/components/Icons';
 import LanguageSwitcher from './src/components/LanguageSwitcher';
 import Disclaimer from './src/components/Disclaimer';
 import { I18nProvider, useI18n } from './src/i18n';
@@ -200,7 +201,8 @@ function AppShell() {
   const SHRINK_RANGE = 170;
   const SCALE_DROP = 0.12;
   const MINI_BAR_H = 46;
-  const logoW = Math.min(440, Math.round(width * 0.78));
+  // Mobilde logo oranı düşürülüyor — başlığın dikey yükü azalsın.
+  const logoW = Math.min(440, Math.round(width * (width < 720 ? 0.62 : 0.78)));
   const MINI_LOGO_W = 170;
 
   const listRef = useRef(null);
@@ -644,19 +646,21 @@ function AppShell() {
   // KUTU KARTI — hover'da 3B yükselen, çerçevesiz, yumuşak gölgeli kart
   // ============================================================
   const ContainerCard = ({ item, kind }) => {
-    const range = getContainerValueRange(priceMap, item, kind);
     const badge = KIND_BADGE[item.isCharmCollection ? 'charm' : kind];
+    // ⚠️ Sağ üstte artık FİYAT ARALIĞI değil, kutunun KENDİ fiyatı var.
+    // Aralık ("$0.97 – $1980.00") kutunun ne kadara alındığını değil, içinden
+    // ne çıkabileceğini anlatıyordu ve alışveriş kararı verirken yanıltıcıydı.
+    const ownPrice = getContainerPrice(priceMap, item, kind === 'terminal' ? 'terminal' : kind);
     return (
       <HoverCard
         style={s.card}
         onPress={() => setOpenTarget({ kind, subject: item })}
       >
-        {/* YEŞİL FİYAT ARALIĞI — sağ üst köşe */}
-        {range && (
-          <View style={s.rangeBadge}>
-            <Text style={s.rangeTxt}>${range.low.toFixed(2)} – ${range.high.toFixed(2)}</Text>
-          </View>
-        )}
+        {/* SAĞ ÜST — kutunun kendi fiyatı, yeşil */}
+        <View style={s.priceBadge}>
+          <DollarIcon size={11} />
+          <Text style={s.priceTxt}>{ownPrice.toFixed(2)}</Text>
+        </View>
 
         {badge && (
           <View style={[s.kindBadge, { backgroundColor: badge.color }]}>
@@ -667,13 +671,23 @@ function AppShell() {
         <Image source={{ uri: item.image }} style={s.cardImg} resizeMode="contain" />
         <Text style={s.cardName} numberOfLines={2}>{item.name}</Text>
 
-        <View style={s.cardMetaRow}>
-          {item.expectedReturn != null && (
+        {/* ALT — istatistikler (EV / ROI). Sağ üstten buraya taşındı. */}
+        <View style={s.cardStats}>
+          {item.expectedReturn != null ? (
             <>
-              <Text style={s.evText}>EV ${item.expectedReturn.toFixed(2)}</Text>
-              <Text style={[s.roiText, { color: item.roi >= 100 ? C.success : C.danger }]}>%{(item.roi ?? 0).toFixed(0)}</Text>
+              <View style={s.statCell}>
+                <Text style={s.statCellLbl}>EV</Text>
+                <Text style={s.statCellVal}>${item.expectedReturn.toFixed(2)}</Text>
+              </View>
+              <View style={s.statDivider} />
+              <View style={s.statCell}>
+                <Text style={s.statCellLbl}>{t('common.roi')}</Text>
+                <Text style={[s.statCellVal, { color: item.roi >= 100 ? C.success : C.danger }]}>
+                  %{(item.roi ?? 0).toFixed(0)}
+                </Text>
+              </View>
             </>
-          )}
+          ) : <View style={s.statCell} />}
         </View>
 
         <View style={s.cardFooter}>
@@ -762,6 +776,25 @@ function AppShell() {
     return <CaseOpening crate={subject} mode="case" inventory={inventory} {...common} />;
   };
 
+  // Para + kredi göstergeleri. Kırılım noktasına göre farklı satırda
+  // render edildiği için TEK yerde tanımlanıp iki yere yerleştiriliyor —
+  // kopyalanırsa biri güncellenip diğeri unutulur.
+  const moneyGroup = (
+    <View style={s.utilityGroup}>
+      {gameMode === 'wallet' ? (
+        <>
+          <ValuePill icon={<DollarIcon size={isNarrow ? 12 : 13} />} value={balance.toFixed(2)} tone="money" compact={isNarrow} />
+          <ValuePill icon={<StarIcon size={isNarrow ? 12 : 13} />} value={String(stars)} tone="star" compact={isNarrow} />
+        </>
+      ) : (
+        <View style={s.unlimitedPill}>
+          <Text style={s.unlimitedTxt}>{t('util.unlimitedBalance')}</Text>
+          {sandboxEarnings > 0 && <Text style={s.sandboxTxt}>{t('util.virtualEarnings', { n: sandboxEarnings.toFixed(2) })}</Text>}
+        </View>
+      )}
+    </View>
+  );
+
   return (
     <SafeAreaView style={s.container}>
       <StatusBar style="dark" />
@@ -793,8 +826,8 @@ function AppShell() {
           <View style={s.miniRight}>
             {gameMode === 'wallet' ? (
               <>
-                <Text style={s.miniStat}>💰 ${balance.toFixed(2)}</Text>
-                <Text style={s.miniStat}>⭐ {stars}</Text>
+                <View style={s.miniStatWrap}><DollarIcon size={11} /><Text style={s.miniStat}>{balance.toFixed(2)}</Text></View>
+                <View style={s.miniStatWrap}><StarIcon size={11} /><Text style={[s.miniStat, { color: STAR_GREEN }]}>{stars}</Text></View>
               </>
             ) : (
               <Text style={[s.miniStat, { color: C.success }]}>♾️</Text>
@@ -819,48 +852,66 @@ function AppShell() {
           yapıyordu. Artık tek sarmalayıcı ölçülüp tek bir yükseklik/opaklık/
           ölçek değeriyle sürülüyor — hareket tek parça. */}
       <View ref={headerRef}>
-      <View style={s.utilityBar}>
-        <View style={s.utilityGroup}>
-          {gameMode === 'wallet' ? (
-            <>
-              <View style={s.statPill}><Text style={s.statTxt}>💰 ${balance.toFixed(2)}</Text></View>
-              <View style={s.statPill}><Text style={s.statTxt}>⭐ {stars}</Text></View>
-              <TouchableOpacity style={s.buyPassBtn} onPress={buyArmoryPass}>
-                <Text style={s.buyPassTxt}>{t('util.buyPass')}</Text>
-              </TouchableOpacity>
-            </>
-          ) : (
-            <View style={s.unlimitedPill}>
-              <Text style={s.unlimitedTxt}>{t('util.unlimitedBalance')}</Text>
-              {sandboxEarnings > 0 && <Text style={s.sandboxTxt}>{t('util.virtualEarnings', { n: sandboxEarnings.toFixed(2) })}</Text>}
-            </View>
-          )}
+      {/* ============================================================
+          ÜST YARDIMCI ÇUBUK
+          ============================================================
+          YERLEŞİM (kullanıcı isteği):
+            SOL  → mod anahtarı (Cüzdan / Sınırsız)
+            SAĞ  → $ bakiye ve ★ kredi
+          Mod anahtarı eskiden Envanter ile Sıfırla arasına sıkışmıştı; ne
+          olduğu anlaşılmıyordu. Artık kendi başına, en solda ve ilk sırada.
+
+          ⚠️ MOBİLDE İKİ SATIR: dar ekranda hepsi tek satıra sığmıyor ve
+          sarmalanınca dağınık görünüyordu. Mobilde 1. satır MOD + PARA,
+          2. satır gezinme butonları. "Cüzdan modu her zaman en üstte"
+          isteği bu şekilde karşılanıyor. */}
+      {/* ⚠️ MASAÜSTÜ TEK SATIR / MOBİL İKİ SATIR:
+          Mobilde hepsi tek satıra sığmadığı için 2 satıra bölünüyor. Masaüstünde
+          ise bölmek gereksiz yere dikey alan yerdi — orada iki grup yan yana. */}
+      <View style={[s.utilityBar, isNarrow ? s.utilityBarNarrow : s.utilityBarWide]}>
+        {/* ---------- SOL: mod anahtarı ---------- */}
+        <View style={[s.utilityRow, isNarrow && s.utilityRowNarrow]}>
+          <TouchableOpacity
+            style={[s.modeBtn, gameMode !== 'wallet' && s.modeBtnUnlimited]}
+            onPress={() => setGameMode(m => m === 'wallet' ? 'unlimited' : 'wallet')}
+          >
+            <Text style={[s.modeBtnTxt, gameMode !== 'wallet' && s.modeBtnTxtUnlimited]}>
+              {gameMode === 'wallet' ? t('util.wallet') : t('util.unlimited')}
+            </Text>
+          </TouchableOpacity>
+
+          {/* MOBİLDE para/kredi 1. satırda, modun sağında durur — böylece
+              "cüzdan modu her zaman en üstte" ve para sağda olur. */}
+          {isNarrow && moneyGroup}
         </View>
 
-        <View style={s.utilityGroup}>
+        {/* ---------- SAĞ: gezinme butonları + (masaüstünde) para ---------- */}
+        <View style={[s.utilityRow, isNarrow ? s.utilityRowNarrowSecond : s.utilityRowWideRight]}>
+          {gameMode === 'wallet' && (
+            <TouchableOpacity style={s.buyPassBtn} onPress={buyArmoryPass}>
+              <StarIcon size={11} color={C.onAccent} />
+              <Text style={s.buyPassTxt}>{t('util.buyPassShort')}</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             style={[s.ghostBtn, tab === 'inventory' && s.ghostBtnActive]}
             onPress={() => switchTab('inventory')}
           >
             <Text style={[s.ghostBtnTxt, tab === 'inventory' && s.ghostBtnTxtActive]}>{t('util.inventory', { n: inventory.length })}</Text>
           </TouchableOpacity>
-          {/* REHBER / BLOG — envanterin hemen yanında, üst çubuğa entegre */}
           <TouchableOpacity
             style={[s.ghostBtn, tab === 'blog' && s.ghostBtnActive]}
             onPress={() => { setBlogSection('about'); switchTab('blog'); }}
           >
             <Text style={[s.ghostBtnTxt, tab === 'blog' && s.ghostBtnTxtActive]}>{t('util.blog')}</Text>
           </TouchableOpacity>
-
-          <TouchableOpacity style={s.ghostBtn} onPress={() => setGameMode(m => m === 'wallet' ? 'unlimited' : 'wallet')}>
-            <Text style={s.ghostBtnTxt}>{gameMode === 'wallet' ? t('util.wallet') : t('util.unlimited')}</Text>
-          </TouchableOpacity>
           <TouchableOpacity style={s.dangerGhostBtn} onPress={() => setResetAllConfirmOpen(true)}>
             <Text style={s.dangerGhostTxt}>{t('util.reset')}</Text>
           </TouchableOpacity>
-
-          {/* DİL DEĞİŞTİRİCİ (globe) — EN / TR anlık geçiş */}
           <LanguageSwitcher />
+
+          {/* MASAÜSTÜNDE para/kredi EN SAĞDA */}
+          {!isNarrow && moneyGroup}
         </View>
       </View>
 
@@ -876,7 +927,7 @@ function AppShell() {
             1) LOGO — üst-orta
             ============================================================ */}
         {!compact && (
-        <TouchableOpacity style={s.logoWrap} activeOpacity={0.75} onPress={goHome}>
+        <TouchableOpacity style={[s.logoWrap, isNarrow && s.logoWrapNarrow]} activeOpacity={0.75} onPress={goHome}>
           {/* Saydam zeminli logo — dar ekranlarda kucultulur, orani korunur */}
           <Image
             source={LOGO_SRC}
@@ -889,7 +940,7 @@ function AppShell() {
         {/* ============================================================
             2) CANLI ARAMA — yazdıkça altında dinamik sonuç listesi açılır
             ============================================================ */}
-        <View style={[s.searchZone, compact && s.searchZoneCompact]}>
+        <View style={[s.searchZone, compact && s.searchZoneCompact, isNarrow && s.searchZoneNarrow]}>
           <View style={[s.searchBox, (searchFocused || searchQuery) && s.searchBoxActive]}>
             <Text style={s.searchIcon}>🔍</Text>
             <TextInput
@@ -959,10 +1010,10 @@ function AppShell() {
             {NAV_TABS.map(item => (
               <TouchableOpacity
                 key={item.key}
-                style={[s.navBtn, tab === item.key && s.navBtnActive, webTransition('background-color, color', 160)]}
+                style={[s.navBtn, isNarrow && s.navBtnNarrow, tab === item.key && s.navBtnActive, webTransition('background-color, color', 160)]}
                 onPress={() => switchTab(item.key)}
               >
-                <Text style={[s.navTxt, tab === item.key && s.navTxtActive]}>{t(item.labelKey)}</Text>
+                <Text style={[s.navTxt, isNarrow && s.navTxtNarrow, tab === item.key && s.navTxtActive]}>{t(item.labelKey)}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -1074,7 +1125,12 @@ function AppShell() {
                             </TouchableOpacity>
                           )}
                           {item.isStatTrak && <Text style={s.stTag}>ST™</Text>}
-                          {!showQuickSell && <Text style={s.priceTag}>${item.price?.toFixed(2)}</Text>}
+                          {!showQuickSell && (
+                            <View style={s.priceTagWrap}>
+                              <DollarIcon size={9} />
+                              <Text style={s.priceTag}>{item.price?.toFixed(2)}</Text>
+                            </View>
+                          )}
 
                           {/* Eşya Kaynağı Etiketi */}
                           <View style={s.sourceTag}><Text style={s.sourceTxt}>{item.source}</Text></View>
@@ -1172,29 +1228,63 @@ function AppShell() {
   );
 }
 
+// Sayısal değerlerde tabular (monospace) yazı: rakam genişliği sabit kaldığı
+// için bakiye/fiyat değişince düzen kaymaz — oyun arayüzü standardı.
+const MONO_FONT = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
 
   // --- ÜST YARDIMCI ÇUBUK ---
+  // ⚠️ CS ARAYÜZ DİLİ: köşeler KESKİN (radius 4), kenarlıklar ince ve görünür,
+  // etiketler BÜYÜK HARF + harf aralıklı. Oyun arayüzleri yuvarlak "hap"
+  // biçimlerini değil, keskin panel kenarlarını kullanır.
   utilityBar: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    flexWrap: 'wrap', gap: 8, paddingHorizontal: 18, paddingVertical: 10,
+    paddingHorizontal: 18, paddingVertical: 8, gap: 8,
     backgroundColor: C.surface, ...shadow.bar, zIndex: 30
   },
+  // Mobilde daha sıkı: header'ın kapladığı dikey alan belirgin şekilde azalır.
+  utilityBarNarrow: { paddingHorizontal: 12, paddingVertical: 6, gap: 6 },
+  // Masaüstü: iki grup TEK satırda yan yana
+  utilityBarWide: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  // Sağ grup kalan alanı alır ve içeriğini SAĞA yaslar; `flex: 0` verilirse
+  // sıkışıp sarmalanıyordu (ölçüldü: 1280px'te 18px genişliğe düşüyordu).
+  utilityRowWideRight: { flex: 1, justifyContent: 'flex-end' },
+
+  utilityRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    flexWrap: 'wrap', gap: 8
+  },
+  utilityRowNarrow: { justifyContent: 'space-between', flexWrap: 'nowrap' },
+  utilityRowNarrowSecond: { justifyContent: 'flex-start', flexWrap: 'wrap', gap: 6 },
+
   utilityGroup: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-  statPill: { backgroundColor: C.surfaceAlt, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999 },
-  statTxt: { color: C.text, fontSize: 13, fontWeight: '800' },
-  buyPassBtn: { backgroundColor: C.accent, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999 },
-  buyPassTxt: { color: C.onAccent, fontSize: 12, fontWeight: '800' },
-  unlimitedPill: { backgroundColor: C.successSoft, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 999 },
-  unlimitedTxt: { color: C.success, fontWeight: '800', fontSize: 12 },
+
+  // MOD ANAHTARI — en solda, tek başına, durumu renkten okunuyor
+  modeBtn: {
+    backgroundColor: C.accentSoft, borderWidth: 1, borderColor: C.accentBorder,
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 4
+  },
+  modeBtnUnlimited: { backgroundColor: C.successSoft, borderColor: '#9fdcc2' },
+  modeBtnTxt: { color: C.accentDeep, fontSize: 11, fontWeight: '800', letterSpacing: 0.8 },
+  modeBtnTxtUnlimited: { color: C.success },
+
+  buyPassBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: C.accent, paddingHorizontal: 11, paddingVertical: 6, borderRadius: 4
+  },
+  buyPassTxt: { color: C.onAccent, fontSize: 11, fontWeight: '800', letterSpacing: 0.3 },
+
+  unlimitedPill: { backgroundColor: C.successSoft, borderWidth: 1, borderColor: '#9fdcc2', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 4 },
+  unlimitedTxt: { color: C.success, fontWeight: '800', fontSize: 11, letterSpacing: 0.5 },
   sandboxTxt: { color: '#8b6ce0', fontSize: 10, fontWeight: '700', marginTop: 2 },
-  ghostBtn: { backgroundColor: C.surfaceAlt, paddingHorizontal: 13, paddingVertical: 8, borderRadius: 999 },
-  ghostBtnActive: { backgroundColor: C.accent },
-  ghostBtnTxt: { color: C.textSoft, fontSize: 12, fontWeight: '800' },
+
+  ghostBtn: { backgroundColor: C.surfaceAlt, borderWidth: 1, borderColor: C.border, paddingHorizontal: 11, paddingVertical: 6, borderRadius: 4 },
+  ghostBtnActive: { backgroundColor: C.accent, borderColor: C.accent },
+  ghostBtnTxt: { color: C.textSoft, fontSize: 11, fontWeight: '800', letterSpacing: 0.3 },
   ghostBtnTxtActive: { color: C.onAccent },
-  dangerGhostBtn: { backgroundColor: C.dangerSoft, paddingHorizontal: 13, paddingVertical: 8, borderRadius: 999 },
-  dangerGhostTxt: { color: C.danger, fontSize: 12, fontWeight: '800' },
+  dangerGhostBtn: { backgroundColor: C.dangerSoft, borderWidth: 1, borderColor: '#f3cfcf', paddingHorizontal: 11, paddingVertical: 6, borderRadius: 4 },
+  dangerGhostTxt: { color: C.danger, fontSize: 11, fontWeight: '800', letterSpacing: 0.3 },
 
   // --- SABIT KABUK ---
   // ⚠️ `overflow` BURADA TANIMLANMAZ. Kırpma yalnızca kaydırma sırasında,
@@ -1213,16 +1303,19 @@ const s = StyleSheet.create({
   },
   miniLogoBtn: { paddingVertical: 2, paddingRight: 8 },
   miniRight: { flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1 },
-  miniStat: { color: C.textSoft, fontSize: 12, fontWeight: '800' },
+  miniStatWrap: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  miniStat: { color: C.success, fontSize: 12, fontWeight: '800', fontFamily: MONO_FONT },
   miniInvBtn: { backgroundColor: C.surfaceAlt, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999 },
   miniInvTxt: { color: C.textSoft, fontSize: 11, fontWeight: '800' },
 
   // --- LOGO ---
   logoWrap: { alignItems: 'center', marginTop: 26, marginBottom: 4 },
+  logoWrapNarrow: { marginTop: 12, marginBottom: 2 },
 
   // --- ARAMA ---
   searchZone: { alignItems: 'center', marginTop: 18, paddingHorizontal: 18, zIndex: 20 },
   searchZoneCompact: { marginTop: 12 },
+  searchZoneNarrow: { marginTop: 10, paddingHorizontal: 12 },
   searchBox: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     width: '100%', maxWidth: 640, backgroundColor: C.surface,
@@ -1251,13 +1344,17 @@ const s = StyleSheet.create({
   navWrap: { alignItems: 'center', paddingHorizontal: 18, zIndex: 10, marginTop: 0 },
   navWrapCompact: { marginTop: 12 },
   navRow: {
-    flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 4,
-    backgroundColor: C.surface, padding: 6, borderRadius: 999, ...shadow.card
+    flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 3,
+    backgroundColor: C.surface, padding: 5, borderRadius: 6,
+    borderWidth: 1, borderColor: C.border, ...shadow.card
   },
-  navBtn: { paddingVertical: 10, paddingHorizontal: 20, borderRadius: 999 },
+  navBtn: { paddingVertical: 9, paddingHorizontal: 18, borderRadius: 4 },
+  navBtnNarrow: { paddingVertical: 7, paddingHorizontal: 11 },
   navBtnActive: { backgroundColor: C.accent },
-  navTxt: { color: C.textSoft, fontSize: 14, fontWeight: '700' },
-  navTxtActive: { color: C.onAccent, fontWeight: '800' },
+  // BÜYÜK HARF + harf aralığı: oyun menüsü tipografisi
+  navTxt: { color: C.textSoft, fontSize: 12.5, fontWeight: '800', letterSpacing: 0.9, textTransform: 'uppercase' },
+  navTxtNarrow: { fontSize: 10.5, letterSpacing: 0.4 },
+  navTxtActive: { color: C.onAccent },
 
   // --- İÇERİK / LİSTELER ---
   content: { flex: 1, marginTop: 22 },
@@ -1275,18 +1372,32 @@ const s = StyleSheet.create({
   emptyTxt: { color: C.textDim, textAlign: 'center', marginTop: 40, fontSize: 13 },
 
   card: {
-    flex: 1, backgroundColor: C.surface, marginBottom: 14, borderRadius: 18,
-    padding: 16, alignItems: 'center', position: 'relative', minHeight: 210
+    flex: 1, backgroundColor: C.surface, marginBottom: 14, borderRadius: 6,
+    borderWidth: 1, borderColor: C.border,
+    padding: 16, alignItems: 'center', position: 'relative', minHeight: 236
   },
-  rangeBadge: { position: 'absolute', top: 10, right: 10, backgroundColor: C.successSoft, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999, zIndex: 2 },
-  rangeTxt: { color: C.success, fontSize: 10, fontWeight: '800' },
-  kindBadge: { position: 'absolute', top: 10, left: 10, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999, zIndex: 2 },
+  // SAĞ ÜST — kutunun KENDİ fiyatı (yeşil, dolar)
+  priceBadge: {
+    position: 'absolute', top: 10, right: 10, zIndex: 2,
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: C.successSoft, borderWidth: 1, borderColor: '#bfe8d5',
+    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4
+  },
+  priceTxt: { color: C.success, fontSize: 12, fontWeight: '800', fontFamily: MONO_FONT },
+  kindBadge: { position: 'absolute', top: 10, left: 10, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 3, zIndex: 2 },
   kindBadgeTxt: { color: '#fff', fontSize: 9, fontWeight: '800' },
   cardImg: { width: 100, height: 92, marginTop: 20, marginBottom: 10 },
   cardName: { color: C.text, textAlign: 'center', fontSize: 12, fontWeight: '700', lineHeight: 17 },
-  cardMetaRow: { flexDirection: 'row', gap: 8, marginTop: 8, alignItems: 'center', minHeight: 14 },
-  evText: { color: C.accentDeep, fontSize: 10, fontWeight: '800' },
-  roiText: { fontSize: 10, fontWeight: '800' },
+  // ALT İSTATİSTİK ŞERİDİ — EV / ROI (sağ üstten buraya taşındı)
+  cardStats: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 12, marginTop: 10, paddingTop: 8,
+    borderTopWidth: 1, borderTopColor: C.border, width: '100%', minHeight: 34
+  },
+  statCell: { alignItems: 'center', minWidth: 52 },
+  statCellLbl: { color: C.textDim, fontSize: 8.5, fontWeight: '800', letterSpacing: 0.8 },
+  statCellVal: { color: C.text, fontSize: 12, fontWeight: '800', fontFamily: MONO_FONT, marginTop: 1 },
+  statDivider: { width: 1, height: 20, backgroundColor: C.border },
   cardFooter: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 'auto', paddingTop: 12 },
   inspectBtn: { backgroundColor: C.surfaceAlt, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999 },
   inspectTxt: { color: C.textSoft, fontSize: 10, fontWeight: '800' },
@@ -1310,7 +1421,9 @@ const s = StyleSheet.create({
   bulkSellBtn: { backgroundColor: C.success, paddingHorizontal: 16, paddingVertical: 9, borderRadius: 999 },
   bulkSellDisabled: { backgroundColor: C.borderStrong },
   bulkSellTxt: { color: C.onAccent, fontSize: 11, fontWeight: '800' },
-  invCard: { flex: 1, backgroundColor: C.surface, marginBottom: 14, borderRadius: 14, padding: 10, alignItems: 'center', borderBottomWidth: 3, position: 'relative', minHeight: 132 },
+  // ENVANTER KARTI — CS envanter hücresi hissi: keskin köşe, ince kenarlık,
+  // altta kalın nadirlik şeridi (oyundaki renk kodunun aynısı).
+  invCard: { flex: 1, backgroundColor: C.surface, marginBottom: 14, borderRadius: 4, borderWidth: 1, borderColor: C.border, padding: 10, alignItems: 'center', borderBottomWidth: 3, position: 'relative', minHeight: 132 },
   invCardPicked: { borderWidth: 2, borderColor: C.success },
   invImg: { width: 66, height: 54, marginTop: 18 },
   invName: { color: C.textSoft, textAlign: 'center', fontSize: 10, marginTop: 6, fontWeight: '600' },
@@ -1321,7 +1434,8 @@ const s = StyleSheet.create({
   quickSellBtn: { position: 'absolute', top: 5, right: 5, backgroundColor: C.success, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, zIndex: 4 },
   quickSellTxt: { color: C.onAccent, fontSize: 9, fontWeight: '800' },
   stTag: { position: 'absolute', top: 6, left: 7, color: C.warn, fontSize: 8, fontWeight: '800' },
-  priceTag: { position: 'absolute', top: 6, right: 8, color: C.success, fontSize: 10, fontWeight: '800' },
+  priceTagWrap: { position: 'absolute', top: 6, right: 8, flexDirection: 'row', alignItems: 'center', gap: 1, zIndex: 2 },
+  priceTag: { color: C.success, fontSize: 10, fontWeight: '800', fontFamily: MONO_FONT },
   sourceTag: { position: 'absolute', bottom: 6, right: 6, backgroundColor: C.surfaceAlt, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 999 },
   sourceTxt: { color: C.textDim, fontSize: 7, fontWeight: '800' }
 });
