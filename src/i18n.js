@@ -40,9 +40,6 @@ const DICT = {
     'util.language': 'Language',
     'util.blog': '📖 Guides',
 
-    // --- Logo / fiyat kaynağı ---
-    'app.priceLive': '🟢 Live market prices',
-    'app.priceMock': '🟡 Simulated prices (live source unreachable)',
 
     // --- Arama ---
     'search.placeholder': 'Search Cases or Items',
@@ -313,8 +310,6 @@ const DICT = {
     'util.language': 'Dil',
     'util.blog': '📖 Rehber',
 
-    'app.priceLive': '🟢 Canlı piyasa fiyatları',
-    'app.priceMock': '🟡 Simüle fiyatlar (canlı kaynak erişilemedi)',
 
     'search.placeholder': 'Kasa veya Eşya Ara',
     'search.empty': 'Sonuç bulunamadı',

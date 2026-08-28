@@ -127,8 +127,12 @@ Bu bir anlık ticker **değildir**. Toplayıcı, Steam'in hız sınırları yüz
 hafta zaten güncellenmişse **atlıyor**. Pratikte veri birkaç günlük ile birkaç
 haftalık arasında olabilir. Gerçek piyasa fiyatlarıdır ama **anlık değildir**.
 
-Kaynak erişilemezse uygulama kırılmaz: her yerde simüle fiyata düşer ve logonun
-altında `🟡 Simüle fiyatlar` rozeti görünür.
+Kaynak erişilemezse uygulama kırılmaz: her yerde simüle fiyata düşer.
+
+> ⚠️ Eskiden logonun altında bir `🟢 Canlı / 🟡 Simüle` rozeti vardı; **kullanıcı
+> isteğiyle kaldırıldı** (28 Ağu 2026). Fiyat kaynağının durumunu artık yalnızca
+> tarayıcı konsolundaki `✅ Canlı fiyat verisi yüklendi: N eşya` satırından
+> anlarsınız.
 
 ---
 

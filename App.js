@@ -883,11 +883,6 @@ function AppShell() {
             resizeMode="contain"
             style={{ width: logoW, height: logoW / LOGO_ASPECT }}
           />
-          {!loadingData && (
-            <Text style={s.priceSourceTxt}>
-              {priceMap ? t('app.priceLive') : t('app.priceMock')}
-            </Text>
-          )}
         </TouchableOpacity>
         )}
 
@@ -1224,7 +1219,6 @@ const s = StyleSheet.create({
 
   // --- LOGO ---
   logoWrap: { alignItems: 'center', marginTop: 26, marginBottom: 4 },
-  priceSourceTxt: { color: C.textDim, fontSize: 11, fontWeight: '600', marginTop: 6 },
 
   // --- ARAMA ---
   searchZone: { alignItems: 'center', marginTop: 18, paddingHorizontal: 18, zIndex: 20 },

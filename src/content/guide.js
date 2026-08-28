@@ -66,10 +66,11 @@ export const GUIDE = {
           'cases, capsules and terminals appear here automatically shortly after Valve ' +
           'adds them to the game.' },
         { type: 'p', text:
-          'Prices are resolved from a public market price feed. When that feed cannot be ' +
-          'reached from your browser, the simulator automatically falls back to a ' +
-          'simulated pricing model and tells you so with a badge under the logo. Values ' +
-          'shown are always estimates and should never be used as trading advice.' }
+          'Prices are resolved from a public Steam market price feed, refreshed on the ' +
+          'order of weeks rather than continuously. If that feed cannot be reached, the ' +
+          'simulator automatically falls back to a simulated pricing model so the site ' +
+          'keeps working. Values shown are always estimates and should never be used as ' +
+          'trading advice.' }
       ]
     },
 
@@ -342,10 +343,11 @@ export const GUIDE = {
           'gömülü değildir; bu sayede Valve oyuna yeni kasa, kapsül veya terminal ' +
           'eklediğinde bunlar burada da kendiliğinden belirir.' },
         { type: 'p', text:
-          'Fiyatlar açık bir piyasa fiyat kaynağından çözülür. Bu kaynağa tarayıcınızdan ' +
-          'ulaşılamadığında simülatör otomatik olarak simüle fiyatlandırmaya geçer ve ' +
-          'bunu logonun altındaki rozetle size bildirir. Gösterilen değerler her zaman ' +
-          'tahmindir ve asla alım-satım tavsiyesi olarak kullanılmamalıdır.' }
+          'Fiyatlar açık bir Steam piyasa fiyat kaynağından çözülür; bu kaynak sürekli ' +
+          'değil, haftalar mertebesinde tazelenir. Kaynağa ulaşılamadığında simülatör ' +
+          'otomatik olarak simüle fiyatlandırmaya geçer ve site çalışmaya devam eder. ' +
+          'Gösterilen değerler her zaman tahmindir ve asla alım-satım tavsiyesi olarak ' +
+          'kullanılmamalıdır.' }
       ]
     },
 
