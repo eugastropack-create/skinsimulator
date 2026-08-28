@@ -1,101 +1,296 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { StyleSheet, Text, View, Image, TouchableOpacity, SafeAreaView, FlatList, TextInput, Modal, ActivityIndicator, Alert } from 'react-native';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { StyleSheet, Text, View, Image, TouchableOpacity, SafeAreaView, FlatList, TextInput, Modal, ActivityIndicator, ScrollView, useWindowDimensions } from 'react-native';
 import Slider from '@react-native-community/slider';
-import { getWearFromFloat } from './utils';
-import { getRealisticPrice } from './prices';
+import { getWearFromFloat, formatSignedMoney, generatePattern } from './utils';
+import { getRealisticPrice, POPULAR_SKIN_PRIORITY } from './prices';
+import { fetchSkins } from './api';
+import { useToast, ToastBanner } from './components/Toast';
+import { useI18n } from './i18n';
+import { C, RARITY, shadow } from './theme';
 
 const NEXT_RARITY_NAME = { 'Consumer Grade': 'Industrial Grade', 'Industrial Grade': 'Mil-Spec Grade', 'Mil-Spec Grade': 'Restricted', 'Restricted': 'Classified', 'Classified': 'Covert' };
-const RARITY_LABELS = { 'Consumer Grade': 'Consumer', 'Industrial Grade': 'Industrial', 'Mil-Spec Grade': 'Mil-Spec', 'Restricted': 'Restricted', 'Classified': 'Classified' };
+const RARITY_LABELS = { 'Consumer Grade': 'Consumer', 'Industrial Grade': 'Industrial', 'Mil-Spec Grade': 'Mil-Spec', 'Restricted': 'Restricted', 'Classified': 'Classified', 'Covert': 'Covert' };
 
-// GİRDİ kuralı: Bıçak, Eldiven, Charm, Sticker VE üst-tier (Covert/Kırmızı, Contraband,
-// Rare Special) eşyalar kontrata KONULAMAZ — bunlar zaten trade-up'ın en üst ürünüdür.
+// Sağ paneldeki "Olası Çıktılar" listesinde en fazla kaç pill basılacağı
+// (bıçak/eldiven havuzu 670 öğe — hepsini basmak paneli kilitler).
+const OUTCOME_RENDER_CAP = 24;
+
+// ============================================================
+// SLOT SAYILARI
+// ============================================================
+// Standart trade-up (Consumer..Classified) gerçek CS2'deki gibi 10 eşya ister.
+// SİMÜLATÖRE ÖZEL Covert->Sarı (Bıçak/Eldiven) tarifi ise yalnızca 5 eşya ister;
+// bu yüzden Covert seçildiği anda kalan 5 yuva KİLİTLENİR (🔒) ve doldurulamaz.
+const TOTAL_SLOTS = 10;
+const KNIFE_RECIPE_SLOTS = 5;
+
+// Bıçak/eldiven tespiti: ByMykel verisinde bunların ADI "★" ile başlar ve
+// hepsi rarity.name === 'Covert' taşır — yani nadirliğe bakarak normal Covert
+// silahlardan (AWP | Asiimov gibi) AYIRT EDİLEMEZLER. Güvenilir ayrım
+// `category.name` alanıdır: 'Knives' (576 adet) / 'Gloves' (94 adet).
+const isKnife = (item) => item?.category?.name === 'Knives' || /^★/.test(item?.name || '') && !/Gloves|Hand Wraps/i.test(item?.name || '');
+const isGloves = (item) => item?.category?.name === 'Gloves' || /(Gloves|Hand Wraps)/i.test(item?.name || '');
+
+// ============================================================
+// GİRDİ kuralı — SİMÜLATÖRE ÖZEL ESNETME
+// ============================================================
+// Gerçek CS2'de Covert (Kırmızı) eşyalar trade-up GİRDİSİ olamaz (zaten
+// hiyerarşinin en üstüdürler). Bu simülatörde bu sınırı BİLEREK esnetiyoruz:
+// kullanıcı 5 Covert birleştirip Bıçak/Eldiven çekilişi yapabilsin (bkz. COVERT->KNIFE
+// özel tarifi, aşağıda). Bıçak/eldivenin KENDİSİ hâlâ girdi olamaz — aksi halde
+// sonsuz bıçak->bıçak döngüsü oluşurdu.
 const isValidTradeUpInput = (item) => {
   const r = item.rarity?.name || ''; const n = item.name || '';
-  if (['Covert', 'Contraband', 'Rare Special'].includes(r)) return false; 
-  if (/(Knife|Gloves|Charm|Sticker|Patch|Pin)/i.test(n)) return false;
-  return true;
+  if (isKnife(item) || isGloves(item)) return false;
+  if (['Contraband', 'Rare Special'].includes(r)) return false;
+  if (/(Charm|Sticker|Patch|Pin)/i.test(n)) return false;
+  return true; // 'Covert' ARTIK İZİNLİ (simülatöre özel kural)
 };
 
-// ÇIKTI kuralı: Bıçak/Eldiven/Charm/Sticker sonuç olarak da çıkamaz, ANCAK Covert
-// (Kırmızı) burada İZİN VERİLİR — çünkü gerçek CS2'de Classified -> Covert, trade-up'ın
-// olabileceği EN ÜST seviyesidir. (Önceki sürümde bu ikisi aynı fonksiyondaydı ve bu da
-// Classified eşyalarla sözleşme imzalamayı tamamen imkansız hale getiren bug'a sebep oluyordu.)
+// ÇIKTI kuralı: Bıçak/Eldiven/Charm/Sticker STANDART akışta sonuç olarak çıkamaz,
+// ANCAK Covert (Kırmızı) burada İZİN VERİLİR — çünkü gerçek CS2'de
+// Classified -> Covert, standart trade-up'ın olabileceği EN ÜST seviyesidir.
+// (Bıçaklar yalnızca aşağıdaki Covert->Knife özel tarifiyle çıkabilir.)
 const isValidTradeUpOutput = (item) => {
-  const n = item.name || '';
-  if (/(Knife|Gloves|Charm|Sticker|Patch|Pin)/i.test(n)) return false;
+  if (isKnife(item) || isGloves(item)) return false;
+  if (/(Charm|Sticker|Patch|Pin)/i.test(item.name || '')) return false;
   return true;
 };
 
-// Bağımsız ve Kompakt Float Kaydırıcı
+// Bağımsız ve Kompakt Float Kaydırıcı — hem slider hem klavyeden yazma destekli.
+// NOT: Metin kutusu `value` prop'una DOĞRUDAN bağlı DEĞİL — kendi local state'i var.
+// Eskiden her tuş vuruşunda onChange(n) tetiklenip value.toFixed(4) kutuya geri
+// yazılıyordu; bu da imleci/yazılan karakteri anında eziyordu (kullanıcı klavyeyle
+// yazamıyormuş gibi hissediyordu). Artık kutu kendi metnini serbestçe tutuyor,
+// sadece SLIDER gibi DIŞARIDAN gelen değişikliklerde value ile senkronlanıyor.
 function CompactFloatSlider({ value, min, max, onChange }) {
   const wearName = getWearFromFloat(value);
+  const [text, setText] = useState(value.toFixed(4));
+  const lastCommitted = useRef(value);
+
+  useEffect(() => {
+    if (Math.abs(value - lastCommitted.current) > 0.00001) {
+      setText(value.toFixed(4));
+      lastCommitted.current = value;
+    }
+  }, [value]);
+
+  const handleTextChange = (t) => {
+    setText(t);
+    const n = parseFloat(t.replace(',', '.'));
+    if (!isNaN(n) && n >= min && n <= max) {
+      lastCommitted.current = n;
+      onChange(n);
+    }
+  };
+
+  const handleSliderChange = (v) => {
+    lastCommitted.current = v;
+    setText(v.toFixed(4));
+    onChange(v);
+  };
+
   return (
     <View style={fc.wrapper}>
       <View style={fc.row}>
-        <Text style={fc.wearLabel}>{wearName}</Text>
-        <TextInput style={fc.input} keyboardType="numeric" value={value.toFixed(4)} onChangeText={t => { const n = parseFloat(t); if(!isNaN(n) && n>=min && n<=max) onChange(n); }} />
+        <Text style={fc.wearLabel} numberOfLines={1}>{wearName}</Text>
+        <TextInput
+          style={fc.input}
+          keyboardType="numeric"
+          value={text}
+          onChangeText={handleTextChange}
+          onBlur={() => setText(value.toFixed(4))}
+        />
       </View>
-      <Slider style={{ width: '100%', height: 20 }} minimumValue={min} maximumValue={max} value={value} onValueChange={onChange} minimumTrackTintColor="#f39c12" maximumTrackTintColor="#333" thumbTintColor="#fff" />
+      <Slider style={{ width: '100%', height: 22 }} minimumValue={min} maximumValue={max} value={value} onValueChange={handleSliderChange} minimumTrackTintColor={C.accent} maximumTrackTintColor={C.surfaceSunken} thumbTintColor={C.accentDeep} />
     </View>
   );
 }
 
 const fc = StyleSheet.create({
-  wrapper: { width: '100%', paddingHorizontal: 2, marginTop: 4 },
+  wrapper: { width: '100%', marginTop: 6 },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  wearLabel: { color: '#f39c12', fontSize: 8, fontWeight: 'bold' },
-  input: { backgroundColor: '#111', color: '#2ecc71', fontSize: 9, paddingVertical: 1, paddingHorizontal: 4, borderRadius: 2, borderWidth: 1, borderColor: '#f39c12', width: 45, textAlign: 'center' }
+  wearLabel: { color: C.textDim, fontSize: 9, fontWeight: '800', flexShrink: 1, marginRight: 4 },
+  input: { backgroundColor: C.surfaceAlt, color: C.text, fontSize: 10, paddingVertical: 4, paddingHorizontal: 6, borderRadius: 8, width: 56, textAlign: 'center', fontWeight: '700', outlineStyle: 'none' }
 });
 
-function CompactSlot({ entry, index, onPress, onRemove, onClone, onFloatChange }) {
+// Dikey KART formatındaki eşya kutucuğu. `locked` -> AKILLI YUVA KİLİTLEME:
+// mevcut seçime göre bu boş slotun doldurulmasının bir anlamı kalmadıysa
+// (üst nadirlikte hiç uygun çıktı bulunamıyorsa) kilitli gösterilir.
+function TradeCard({ entry, index, cardWidth, locked, onPress, onLockedPress, onRemove, onClone, onFloatChange, t }) {
   if (!entry) {
+    if (locked) {
+      return (
+        <TouchableOpacity style={[card.empty, card.lockedCard, { width: cardWidth }]} onPress={onLockedPress}>
+          <Text style={card.lockIcon}>🔒</Text>
+          <Text style={card.lockedTxt}>{t('tradeup.locked')}</Text>
+        </TouchableOpacity>
+      );
+    }
     return (
-      <TouchableOpacity style={slot.empty} onPress={onPress}>
-        <Text style={slot.emptyTxt}>+ Ekle</Text>
+      <TouchableOpacity style={[card.empty, { width: cardWidth }]} onPress={onPress}>
+        <Text style={card.emptyIcon}>+</Text>
+        <Text style={card.emptyTxt}>{t('tradeup.addItem')}</Text>
       </TouchableOpacity>
     );
   }
   const min = entry.skin.min_float ?? 0; const max = entry.skin.max_float ?? 1;
   return (
-    <View style={[slot.filled, { borderTopColor: entry.skin.rarity?.color || '#555' }]}>
-      <TouchableOpacity style={slot.removeX} onPress={() => onRemove(index)}><Text style={slot.removeTxt}>✕</Text></TouchableOpacity>
-      <TouchableOpacity style={slot.cloneBtn} onPress={() => onClone(index)}><Text style={slot.cloneTxt}>Kopyala</Text></TouchableOpacity>
-      
-      <View style={{flexDirection: 'row', alignItems: 'center', marginTop: 12, marginBottom: 2}}>
-        <Image source={{ uri: entry.skin.image }} style={slot.img} resizeMode="contain" />
-        <View style={{flex: 1, marginLeft: 4}}>
-          <Text style={slot.name} numberOfLines={1}>{entry.skin.name}</Text>
-          <Text style={slot.price}>${entry.price.toFixed(2)}</Text>
-        </View>
-      </View>
+    <View style={[card.filled, { width: cardWidth, borderTopColor: entry.skin.rarity?.color || C.borderStrong }]}>
+      <TouchableOpacity style={card.removeBtn} onPress={() => onRemove(index)}>
+        <Text style={card.removeTxt}>✕</Text>
+      </TouchableOpacity>
+      <Image source={{ uri: entry.skin.image }} style={card.img} resizeMode="contain" />
+      <Text style={card.name} numberOfLines={1}>{entry.skin.name}</Text>
+      <Text style={card.price}>${entry.price.toFixed(2)}</Text>
       <CompactFloatSlider value={entry.float} min={min} max={max} onChange={v => onFloatChange(index, v)} />
+      <TouchableOpacity style={card.cloneBtn} onPress={() => onClone(index)}>
+        <Text style={card.cloneTxt}>{t('tradeup.clone')}</Text>
+      </TouchableOpacity>
     </View>
   );
 }
 
-const slot = StyleSheet.create({
-  empty: { width: '48%', height: 80, backgroundColor: '#1e1e2e', borderRadius: 6, borderWidth: 1, borderColor: '#2a2a3e', borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', marginVertical: 3 },
-  emptyTxt: { color: '#555', fontSize: 12, fontWeight: 'bold' },
-  filled: { width: '48%', height: 80, backgroundColor: '#1e1e2e', borderRadius: 6, borderTopWidth: 3, paddingHorizontal: 4, marginVertical: 3, position: 'relative' },
-  removeX: { position: 'absolute', top: 2, right: 4, zIndex: 2 },
-  removeTxt: { color: '#e74c3c', fontSize: 10, fontWeight: 'bold' },
-  cloneBtn: { position: 'absolute', top: 2, left: 4, zIndex: 2, backgroundColor: '#3498db', paddingHorizontal: 4, borderRadius: 3 },
-  cloneTxt: { color: '#fff', fontSize: 8, fontWeight: 'bold' },
-  img: { width: 40, height: 28 },
-  name: { color: '#ddd', fontSize: 8, fontWeight: '600' },
-  price: { color: '#2ecc71', fontSize: 10, fontWeight: 'bold' }
+const card = StyleSheet.create({
+  empty: { minHeight: 178, backgroundColor: C.surfaceAlt, borderRadius: 6, borderWidth: 2, borderColor: C.borderStrong, borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center' },
+  emptyIcon: { color: C.accent, fontSize: 28, fontWeight: '800' },
+  emptyTxt: { color: C.textDim, fontSize: 11, fontWeight: '800', marginTop: 4 },
+  lockedCard: { backgroundColor: C.surfaceSunken, borderColor: C.borderStrong, opacity: 0.75 },
+  lockIcon: { fontSize: 22 },
+  lockedTxt: { color: C.textDim, fontSize: 11, fontWeight: '800', marginTop: 4 },
+  filled: { minHeight: 178, backgroundColor: C.surface, borderRadius: 6, borderWidth: 1, borderColor: C.border, borderTopWidth: 4, padding: 11, position: 'relative' },
+  removeBtn: { position: 'absolute', top: 7, right: 7, width: 22, height: 22, borderRadius: 11, backgroundColor: C.dangerSoft, alignItems: 'center', justifyContent: 'center', zIndex: 2 },
+  removeTxt: { color: C.danger, fontSize: 12, fontWeight: '800' },
+  img: { width: '100%', height: 50, marginTop: 6 },
+  name: { color: C.text, fontSize: 11, fontWeight: '700', marginTop: 8, textAlign: 'center' },
+  price: { color: C.success, fontSize: 12, fontWeight: '800', textAlign: 'center', marginTop: 2 },
+  cloneBtn: { marginTop: 8, backgroundColor: C.accent, paddingVertical: 7, borderRadius: 8, alignItems: 'center' },
+  cloneTxt: { color: C.onAccent, fontSize: 10, fontWeight: '800' }
 });
 
-export default function TradeUpScreen({ inventory, setInventory, balance, setBalance, gameMode, priceMap, allCollections }) {
+// SAĞ PANEL / ALT PANEL İÇERİĞİ (geniş ekranda sticky sidebar, dar ekranda
+// grid'in altında) — TEK bir yerden render edilip iki layout'ta da kullanılır.
+function SummaryContent({ analysis, filledCount, profitAmount, profitPct, t }) {
+  if (!analysis) {
+    return <Text style={ts.emptyHint}>{t('tradeup.emptyHint')}</Text>;
+  }
+  return (
+    <>
+      <View style={ts.statGrid}>
+        <View style={ts.statItem}>
+          <Text style={ts.statLbl}>{t('tradeup.avgFloat')}</Text>
+          <Text style={ts.statVal}>{analysis.avgFloat.toFixed(4)}</Text>
+        </View>
+        <View style={ts.statItem}>
+          <Text style={ts.statLbl}>{t('tradeup.totalCost')}</Text>
+          {/* ⚠️ Bilerek NÖTR renk: bu bir tahsilat değil, girdilerin toplam
+              piyasa değeri. Kırmızı gösterilince gider sanılıyordu. */}
+          <Text style={ts.statVal}>${analysis.totalCost.toFixed(2)}</Text>
+        </View>
+        <View style={ts.statItem}>
+          <Text style={ts.statLbl}>{t('tradeup.expectedValue')}</Text>
+          <Text style={[ts.statVal, { color: C.success }]}>${analysis.ev.toFixed(2)}</Text>
+        </View>
+        <View style={ts.statItem}>
+          <Text style={ts.statLbl}>{t('tradeup.estProfit')}</Text>
+          <Text style={[ts.statVal, { color: profitAmount >= 0 ? C.success : C.danger }]}>{formatSignedMoney(profitAmount)} (%{profitPct.toFixed(0)})</Text>
+        </View>
+      </View>
+
+      {analysis.sourceCollectionNames?.length > 0 && (
+        <Text style={ts.sourceTxt} numberOfLines={2}>{t('tradeup.source', { names: analysis.sourceCollectionNames.join(', ') })}</Text>
+      )}
+
+      {analysis.isKnifeRecipe && (
+        <View style={ts.knifeBanner}>
+          <Text style={ts.knifeBannerTxt}>
+            🔪 <Text style={{ fontWeight: '800' }}>{t('tradeup.knifeRecipe')}</Text> {t('tradeup.knifeRecipeBody')}
+          </Text>
+        </View>
+      )}
+
+      {analysis.outcomes.length === 0 ? (
+        <Text style={[ts.emptyHint, { marginTop: 14 }]}>{t('tradeup.noOutcomes')}</Text>
+      ) : (
+        <>
+          <Text style={ts.outcomesTitle}>{t('tradeup.outcomes', { n: analysis.outcomes.length })}</Text>
+          <View style={ts.outcomesWrap}>
+            {/* Bıçak havuzu 500+ öğe olabildiği için listeyi kırpıyoruz — hepsini
+                basmak paneli kullanılamaz hale getirirdi. EV ve çekiliş yine de
+                TÜM havuz üzerinden hesaplanıyor. */}
+            {analysis.outcomes.slice(0, OUTCOME_RENDER_CAP).map((o, i) => (
+              <View key={i} style={ts.outcomePill}>
+                <Text style={ts.outcomePillTxt} numberOfLines={1}>{o.skin.name}</Text>
+                <Text style={ts.outcomePillPct}>%{o.chance < 0.5 ? o.chance.toFixed(2) : o.chance.toFixed(0)}</Text>
+              </View>
+            ))}
+            {analysis.outcomes.length > OUTCOME_RENDER_CAP && (
+              <View style={[ts.outcomePill, { borderWidth: 1, borderColor: C.borderStrong }]}>
+                <Text style={ts.outcomePillTxt}>{t('tradeup.moreItems', { n: analysis.outcomes.length - OUTCOME_RENDER_CAP })}</Text>
+              </View>
+            )}
+          </View>
+        </>
+      )}
+    </>
+  );
+}
+
+// ============================================================
+// TRADE-UP = ÜCRETSİZ ANALİZ ARACI (bakiyeden BAĞIMSIZ)
+// ============================================================
+// Bu ekran bir "oyun modu" değil, bir kârlılık/olasılık simülatörüdür.
+// Sözleşme imzalamak bakiyeden PARA DÜŞMEZ, envanterden eşya SİLMEZ ve bakiye
+// yetersizliği diye bir ret durumu YOKTUR. Gösterilen para değerleri yalnızca
+// ANALİZ amaçlıdır. (Kasa/Terminal/Armory ekranları bakiyeyi kullanmaya devam
+// eder — ücretsizlik YALNIZCA bu ekrana özgüdür.)
+//
+// ⚠️ BU EKRANA `setBalance` PROP'U GEÇİRMEYİN.
+// Ücretsizlik bir "if" koşuluyla değil, YAPISAL olarak garanti altındadır:
+// bileşenin bakiyeye erişimi yoktur, dolayısıyla yanlışlıkla bile para
+// düşüremez. `gameMode` prop'u da bu yüzden kaldırıldı — hiç kullanılmıyordu
+// ama "burada da mod farkı var" izlenimi veriyordu.
+//
+// ⚠️ "Toplam Maliyet" etiketi "Girdi Değeri" olarak DEĞİŞTİRİLDİ ve kırmızı
+// (tehlike) renginden çıkarıldı: kullanıcılar bu satırı bir TAHSİLAT sanıp
+// "Trade-Up bakiyemden düşüyor" diye bildirdi. Sayı aynı, yalnızca artık bir
+// gider gibi görünmüyor.
+export default function TradeUpScreen({ inventory, setInventory, priceMap, allCollections, history = [], setHistory, pendingItem, onPendingItemHandled }) {
+  const { t, lang } = useI18n();
   const [allSkins, setAllSkins] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [slots, setSlots] = useState(Array(10).fill(null));
+  const [slots, setSlots] = useState(Array(TOTAL_SLOTS).fill(null));
   const [pickerOpen, setPickerOpen] = useState(false);
   const [editingSlot, setEditingSlot] = useState(null);
   const [searchText, setSearchText] = useState('');
-  
+  const [subTab, setSubTab] = useState('contract'); // 'contract' | 'history'
+  const [recentSkinNames, setRecentSkinNames] = useState([]); // en son seçilen eşyalar (arama/kalabalık UX'i için)
+
   const [analysis, setAnalysis] = useState(null);
-  const [wonItem, setWonItem] = useState(null); 
+  const [wonItem, setWonItem] = useState(null);
+  const { toast, showToast } = useToast();
+
+  const { width: winWidth } = useWindowDimensions();
+
+  // STICKY SAĞ PANEL: geniş ekranda (masaüstü) eşya grid'i solda kendi
+  // ScrollView'ında kayarken, istatistik paneli sağda SABİT kalır — kullanıcı
+  // deneme-yanılma yaparken sayfayı aşağı kaydırmaya gerek kalmaz. Dar
+  // ekranda (mobil) sidebar'a yer yok; panel grid'in altına iner.
+  const isWideLayout = winWidth >= 900;
+  const SIDEBAR_WIDTH = 320;
+  const SCROLLBAR_GUTTER = 20;
+  const CONTENT_PADDING = 20; // ScrollView content padding (10 sol + 10 sağ)
+  const GRID_GAP = 8;
+
+  // ÖNEMLİ: Sütun genişliğini SADECE ham pencere genişliğinden hesaplamak
+  // YANLIŞ — dikey tarayıcı kaydırma çubuğu (~15-17px) gerçek içerik alanını
+  // daraltıyor. Ölçüme güvenmek yerine sabit bir pay (SCROLLBAR_GUTTER)
+  // ayırıyoruz — az bir boşluk pahasına HER ZAMAN doğru sığdırıyor.
+  const gridAreaWidth = isWideLayout
+    ? winWidth - SIDEBAR_WIDTH - CONTENT_PADDING - SCROLLBAR_GUTTER
+    : winWidth - CONTENT_PADDING - SCROLLBAR_GUTTER;
+  const columns = gridAreaWidth >= 1150 ? 5 : gridAreaWidth >= 900 ? 4 : gridAreaWidth >= 620 ? 3 : 2;
+  const cardWidth = (gridAreaWidth - GRID_GAP * (columns - 1)) / columns;
 
   // Eşya adı -> ait olduğu koleksiyon(lar) ters-haritası. Gerçek CS2'de trade-up
   // ÇIKTISI, girdi eşyalarının ait olduğu koleksiyondan gelir (rastgele tüm
@@ -113,19 +308,34 @@ export default function TradeUpScreen({ inventory, setInventory, balance, setBal
     return map;
   }, [allCollections]);
 
+  // SARI (ÖZEL) HAVUZ: Covert->Bıçak/Eldiven özel tarifinin çıktı havuzu.
+  // Veritabanındaki TÜM bıçaklar (576) ve eldivenler (94) eşit ihtimalle çıkabilir.
+  const knifePool = useMemo(
+    () => (allSkins || []).filter(s => isKnife(s) || isGloves(s)),
+    [allSkins]
+  );
+
   useEffect(() => {
-    fetch('https://raw.githubusercontent.com/ByMykel/CSGO-API/main/public/api/en/skins.json')
-      .then(r => r.json())
-      .then(data => { setAllSkins(data); setLoading(false); })
-      .catch(() => setLoading(false));
+    let cancelled = false;
+    // Ağ çağrısı src/api.js üzerinden (tek merkez) — hata durumunda [] döner.
+    fetchSkins()
+      .then(data => { if (!cancelled) { setAllSkins(data || []); setLoading(false); } })
+      .catch(() => { if (!cancelled) setLoading(false); });
+    // Bileşen unmount olursa (kullanıcı sekmeyi hızlıca değiştirirse) gecikmiş
+    // fetch cevabı artık mevcut olmayan state'i güncellemeye çalışmasın.
+    return () => { cancelled = true; };
   }, []);
 
   // OTOMATİK HESAPLAMA (Hesapla butonuna gerek yok)
   useEffect(() => {
     const validSlots = slots.filter(Boolean);
     if (validSlots.length === 0) { setAnalysis(null); return; }
-    
-    const targetRarity = NEXT_RARITY_NAME[validSlots[0].skin.rarity?.name];
+
+    const inputRarity = validSlots[0].skin.rarity?.name;
+    // ÖZEL TARİF (Custom Recipe): 5x Covert (Kırmızı) girdi -> Sarı (Bıçak/Eldiven) çıktısı.
+    // Gerçek CS2 hiyerarşisinde Covert'ün üstü yoktur; bu geçiş simülatöre özeldir.
+    const isKnifeRecipe = inputRarity === 'Covert';
+    const targetRarity = isKnifeRecipe ? 'Covert' : NEXT_RARITY_NAME[inputRarity];
     if (!targetRarity) { setAnalysis(null); return; }
 
     const avgFloat = validSlots.reduce((a, e) => a + e.float, 0) / validSlots.length;
@@ -146,19 +356,31 @@ export default function TradeUpScreen({ inventory, setInventory, balance, setBal
       });
     });
 
-    const buildOutcome = (t) => {
+    const buildOutcome = (t, priceRarityOverride) => {
       // Float interpolasyonu: hedef eşyanın KENDİ min/max float aralığı içinde,
       // girdilerin ortalama (0-1) float konumuna karşılık gelen noktayı hesaplar.
       const targetMin = t.min_float ?? 0;
       const targetMax = t.max_float ?? 1;
       const f = parseFloat((targetMin + avgFloat * (targetMax - targetMin)).toFixed(4));
-      return { skin: t, outFloat: f, price: getRealisticPrice(priceMap, t, f, false, targetRarity) };
+      return { skin: t, outFloat: f, price: getRealisticPrice(priceMap, t, f, false, priceRarityOverride ?? targetRarity) };
     };
 
     let possibleOutcomes = [];
     const totalVotes = Object.values(collectionVotes).reduce((a, b) => a + b, 0);
 
-    if (totalVotes > 0) {
+    // ============================================================
+    // ÖZEL TARİF: 5x COVERT (Kırmızı) -> RASTGELE BIÇAK / ELDİVEN
+    // ============================================================
+    // Koleksiyon oylaması burada UYGULANMAZ: bıçaklar hiçbir silah
+    // koleksiyonuna ait değildir, ayrı bir havuzdur. Bu yüzden tüm bıçak
+    // + eldiven veritabanı eşit ihtimalle çıktı havuzunu oluşturur. Fiyatlandırmada
+    // 'Rare Special' kullanıyoruz — bıçak/eldivenler Covert silahlardan çok daha pahalıdır.
+    if (isKnifeRecipe) {
+      if (knifePool.length > 0) {
+        const per = 100 / knifePool.length;
+        knifePool.forEach(k => possibleOutcomes.push({ ...buildOutcome(k, 'Rare Special'), chance: per }));
+      }
+    } else if (totalVotes > 0) {
       Object.keys(collectionVotes).forEach(colId => {
         const col = collectionById[colId];
         const voteShare = collectionVotes[colId] / totalVotes;
@@ -172,8 +394,18 @@ export default function TradeUpScreen({ inventory, setInventory, balance, setBal
 
     // Yedek yol: girdi eşyaların koleksiyonu haritada bulunamazsa (veri eksikse)
     // eski davranışa (genel havuzdan rastgele) düş — site asla boş kalmasın.
-    if (possibleOutcomes.length === 0) {
-      const targets = allSkins.filter(s => s.rarity?.name === targetRarity && isValidTradeUpOutput(s)).slice(0, 10);
+    // ÖNCELİKLENDİRME: API'nin döndürdüğü SIRAYA göre ilk 10'u almak yerine
+    // (bu, tanıdık Covert eşyaların ör. Asiimov neredeyse hiç çıkmamasına
+    // sebep oluyordu — veri eksik değildi, sadece gömülüydü) POPULAR_SKIN_PRIORITY
+    // listesindeki eşyaları öne alıyoruz.
+    if (possibleOutcomes.length === 0 && !isKnifeRecipe) {
+      const candidates = allSkins.filter(s => s.rarity?.name === targetRarity && isValidTradeUpOutput(s));
+      const prioritized = [...candidates].sort((a, b) => {
+        const ai = POPULAR_SKIN_PRIORITY.indexOf(a.name);
+        const bi = POPULAR_SKIN_PRIORITY.indexOf(b.name);
+        return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+      });
+      const targets = prioritized.slice(0, 10);
       if (targets.length > 0) {
         targets.forEach(t => possibleOutcomes.push({ ...buildOutcome(t), chance: 100 / targets.length }));
       }
@@ -186,32 +418,110 @@ export default function TradeUpScreen({ inventory, setInventory, balance, setBal
     }
 
     const ev = possibleOutcomes.reduce((a, o) => a + o.price * (o.chance / 100), 0);
-    const sourceCollectionNames = totalVotes > 0
-      ? Object.keys(collectionVotes).map(id => collectionById[id]?.name).filter(Boolean)
-      : [];
-    setAnalysis({ avgFloat, totalCost, ev, outcomes: possibleOutcomes, sourceCollectionNames });
-  }, [slots, allSkins, priceMap, skinToCollections]);
+    const sourceCollectionNames = isKnifeRecipe
+      ? ['🔪 Bıçak Havuzu (Simülatöre Özel Kural)']
+      : totalVotes > 0
+        ? Object.keys(collectionVotes).map(id => collectionById[id]?.name).filter(Boolean)
+        : [];
+    setAnalysis({ avgFloat, totalCost, ev, outcomes: possibleOutcomes, sourceCollectionNames, isKnifeRecipe });
+  }, [slots, allSkins, priceMap, skinToCollections, knifePool]);
 
   const lockedRarity = slots.find(s => s !== null)?.skin?.rarity?.name || null;
+  const filledCount = slots.filter(Boolean).length;
+
+  // ENVANTERDEN EKLEME: Envanter ekranındaki "İncele" modalından
+  // "Trade-Up'a Ekle" denince App.js bu prop'u doldurur; burada ilk uygun
+  // yuvaya yerleştirip prop'u temizliyoruz.
+  useEffect(() => {
+    if (!pendingItem) return;
+    const done = () => onPendingItemHandled?.();
+
+    if (!isValidTradeUpInput(pendingItem)) {
+      showToast('Bu eşya trade-up girdisi olamaz (bıçak/eldiven/sticker/charm).', 'error');
+      return done();
+    }
+    if (typeof pendingItem.float !== 'number') {
+      showToast('Bu eşyanın float değeri yok, sözleşmeye eklenemez.', 'error');
+      return done();
+    }
+    const r = pendingItem.rarity?.name;
+    if (lockedRarity && r !== lockedRarity) {
+      showToast(`Sözleşme "${lockedRarity}" nadirliğine kilitli — önce seçimi sıfırla.`, 'error');
+      return done();
+    }
+
+    const limit = r === 'Covert' ? KNIFE_RECIPE_SLOTS : TOTAL_SLOTS;
+    let placed = false;
+    setSlots(prev => {
+      const free = prev.findIndex((sl, i) => i < limit && sl === null);
+      if (free === -1) return prev;
+      placed = true;
+      const n = [...prev];
+      n[free] = { skin: pendingItem, float: pendingItem.float, price: pendingItem.price };
+      for (let i = limit; i < n.length; i++) n[i] = null;
+      return n;
+    });
+    setSubTab('contract');
+    setTimeout(() => showToast(placed ? `${pendingItem.name} sözleşmeye eklendi.` : 'Boş yuva kalmadı.', placed ? 'success' : 'error'), 0);
+    done();
+  }, [pendingItem]);
+
+  // AKTİF TARİF: ilk seçilen eşya Covert ise 5'li Bıçak/Eldiven tarifi devrededir.
+  const isKnifeRecipeActive = lockedRarity === 'Covert';
+  // Bu sözleşmede kaç yuva KULLANILABİLİR (gerisi kilitlenir) ve kaç eşya gerekir.
+  const requiredCount = isKnifeRecipeActive ? KNIFE_RECIPE_SLOTS : TOTAL_SLOTS;
+
+  // AKILLI YUVA KİLİTLEME: en az 1 eşya seçilmiş ama henüz 10 dolmamışken,
+  // mevcut kombinasyonun olası HİÇBİR çıktısı yoksa (örn. bu nadirlikte hiçbir
+  // koleksiyonda üst-tier eşya kalmamışsa) kalan boş yuvaları doldurmanın
+  // anlamı kalmaz — kilitli göster ki kullanıcı zaman kaybetmesin.
+  const isDeadEnd = !!lockedRarity && filledCount > 0 && filledCount < 10 && analysis && analysis.outcomes.length === 0;
 
   const handleSelect = (skin) => {
     const def = skin.min_float ? skin.min_float + 0.05 : 0.15;
     // Fiyat SEÇİM ANINDA bir kez hesaplanıp slotta saklanır — render sırasında tekrar
     // tekrar hesaplanmadığı için diğer slotlar etkilenmez (bkz. handleFloatChange notu).
     const price = getRealisticPrice(priceMap, skin, def, false, skin.rarity?.name);
-    const n = [...slots]; n[editingSlot] = { skin, float: def, price };
-    setSlots(n); setPickerOpen(false);
+
+    // Covert seçilirse tarif 5'liye düşer. Kullanıcı boş bir ekranda ÖNCE 8. yuvaya
+    // tıklayıp sonra Covert seçmiş olabilir — bu durumda eşyayı izinli aralığa
+    // (ilk 5 yuva) taşımalı ve aralık dışında kalan her şeyi temizlemeliyiz.
+    // Aksi halde "kilitli" gösterilen bir yuvada eşya durur ve sayım bozulurdu.
+    const limit = skin.rarity?.name === 'Covert' ? KNIFE_RECIPE_SLOTS : TOTAL_SLOTS;
+
+    setSlots(prev => {
+      const n = [...prev];
+      let target = editingSlot;
+      if (target >= limit) {
+        const free = n.findIndex((s, i) => i < limit && s === null);
+        if (free === -1) return prev; // izinli aralıkta boş yer yok
+        target = free;
+      }
+      n[target] = { skin, float: def, price };
+      for (let i = limit; i < n.length; i++) n[i] = null;
+      return n;
+    });
+
+    setRecentSkinNames(prev => [skin.name, ...prev.filter(n => n !== skin.name)].slice(0, 15));
+    setPickerOpen(false);
   };
 
   const cloneSlot = (idx) => {
-    const item = slots[idx]; if (!item) return;
-    const emptyIdx = slots.findIndex(s => s === null);
-    if (emptyIdx !== -1) { 
-      const n = [...slots]; 
+    // STATE YARIŞI DÜZELTMESİ: eskiden dışarıdaki `slots` closure'ından okunuyordu;
+    // art arda hızlı tıklamalarda (React'in state batching'i yüzünden) yanlış/eski
+    // bir kopya alınabiliyordu. Fonksiyonel güncelleme her zaman en güncel state'i kullanır.
+    setSlots(prev => {
+      const item = prev[idx]; if (!item) return prev;
+      // Kilitli yuvalara kopyalama YAPILMAZ — Covert tarifinde yalnızca ilk 5
+      // yuva doldurulabilir.
+      const limit = item.skin?.rarity?.name === 'Covert' ? KNIFE_RECIPE_SLOTS : TOTAL_SLOTS;
+      const emptyIdx = prev.findIndex((s, i) => i < limit && s === null);
+      if (emptyIdx === -1) return prev;
+      const n = [...prev];
       // DİKKAT: Deep clone yapılarak float bug'ı kesin çözüldü!
-      n[emptyIdx] = JSON.parse(JSON.stringify(item)); 
-      setSlots(n); 
-    }
+      n[emptyIdx] = JSON.parse(JSON.stringify(item));
+      return n;
+    });
   };
 
   const handleFloatChange = (idx, val) => {
@@ -227,122 +537,300 @@ export default function TradeUpScreen({ inventory, setInventory, balance, setBal
     });
   };
 
+  const profitAmount = analysis ? analysis.ev - analysis.totalCost : 0;
+  const profitPct = analysis && analysis.totalCost > 0 ? (profitAmount / analysis.totalCost) * 100 : 0;
+
+  // SESSİZ HATA DÜZELTMESİ: `Alert.alert()` react-native-web'de çalışmıyor —
+  // bu yüzden geçersiz bir kombinasyonla "Sözleşmeyi İmzala"ya basıldığında
+  // kullanıcı HİÇBİR tepki almıyordu. Artık her ret nedeni ayrı, net bir Toast
+  // mesajıyla açıklanıyor. Buton da artık SADECE sayıya değil, geçerli bir
+  // analiz sonucu olup olmadığına göre de devre dışı bırakılıyor.
   const executeTradeUp = () => {
-    if (slots.filter(Boolean).length !== 10 || !analysis || analysis.outcomes.length === 0) {
-      Alert.alert("Hata", "Lütfen aynı nadirlikte 10 adet geçerli eşya ekleyin.");
+    if (filledCount !== requiredCount) {
+      showToast('Sözleşme için tam 10 eşya eklemelisin.', 'error');
       return;
     }
-    if (gameMode === 'wallet' && balance < analysis.totalCost) {
-      Alert.alert("Yetersiz Bakiye", `Bu sözleşme için $${analysis.totalCost.toFixed(2)} gerekiyor, cüzdanında $${balance.toFixed(2)} var.`);
+    if (!analysis || analysis.outcomes.length === 0) {
+      showToast('Seçilen eşyaların bir üst nadirlik derecesi bulunmuyor — farklı eşyalar dene.', 'error');
       return;
     }
-    if (gameMode === 'wallet') setBalance(prev => prev - analysis.totalCost);
-    
+    // NOT: Bakiye kontrolü/düşümü BİLEREK YOK — bkz. dosya başındaki açıklama.
+
     const roll = Math.random() * 100; let cum = 0; let winner = analysis.outcomes[0];
     for (let o of analysis.outcomes) { cum += o.chance; if (roll <= cum) { winner = o; break; } }
-    
-    setWonItem({ ...winner.skin, float: winner.outFloat, price: winner.price, displayColor: winner.skin.rarity?.color, wear: getWearFromFloat(winner.outFloat), uid: Date.now().toString(), source: '🔄 Trade-Up' });
-    setSlots(Array(10).fill(null));
+
+    // Bıçaklar CS2'de altın/sarı kenarlıkla gösterilir — nadirlik rengi (Covert
+    // kırmızısı) yerine bunu kullanıp özel ödül hissini güçlendiriyoruz.
+    const wonIsKnife = isKnife(winner.skin);
+    const winColor = wonIsKnife ? RARITY.gold : winner.skin.rarity?.color;
+
+    setWonItem({ ...winner.skin, float: winner.outFloat, price: winner.price, displayColor: winColor, isKnifeWin: wonIsKnife, wear: getWearFromFloat(winner.outFloat), pattern: generatePattern(), acquiredAt: Date.now(), uid: Date.now().toString(), source: wonIsKnife ? '🔪 Trade-Up (Bıçak)' : '🔄 Trade-Up' });
+
+    // GEÇMİŞ: kullanılan 10 girdiyi (skin+float+fiyat) ve sonucu kaydet — kullanıcı
+    // "Geçmiş" sekmesinden tıklayınca aynı kombinasyon slotlara geri yüklenebilsin.
+    const historyEntry = {
+      id: Date.now().toString() + Math.random().toString(36).slice(2),
+      timestamp: Date.now(),
+      slots: JSON.parse(JSON.stringify(slots.filter(Boolean))),
+      totalCost: analysis.totalCost,
+      inputRarity: slots.find(s => s)?.skin?.rarity?.name || null,
+      resultName: winner.skin.name,
+      resultImage: winner.skin.image,
+      resultColor: winColor,
+      resultPrice: winner.price
+    };
+    setHistory?.(prev => [historyEntry, ...prev].slice(0, 15));
+
+    setSlots(Array(TOTAL_SLOTS).fill(null));
   };
 
-  const sellResult = () => {
-    if (gameMode === 'wallet') setBalance(prev => prev + wonItem.price);
-    setWonItem(null);
+  // GEÇMİŞTEN YÜKLE: seçilen geçmiş kombinasyonu slotlara geri koyar, kullanıcı
+  // aynı sözleşmeyi tekrar imzalayabilir hale gelir.
+  const loadHistoryEntry = (entry) => {
+    const restored = Array(TOTAL_SLOTS).fill(null);
+    entry.slots.forEach((s, i) => { if (i < 10) restored[i] = s; });
+    setSlots(restored);
+    setSubTab('contract');
   };
+
+  // Trade-Up ücretsiz bir analiz aracı olduğu için sonucu "satmak" da bakiyeye
+  // para EKLEMEZ; sadece sonucu kapatır (envantere eklemek isteyen ekler).
+  const discardResult = () => setWonItem(null);
+
+  const startNewContract = () => setWonItem(null); // slotlar zaten executeTradeUp'ta sıfırlandı
 
   if (loading) return <View style={{flex: 1, justifyContent: 'center', alignItems: 'center'}}><ActivityIndicator color="#f39c12" /></View>;
 
-  return (
-    <SafeAreaView style={ts.container}>
-      <View style={ts.headerRow}>
-        <Text style={ts.title}>Takas Sözleşmesi</Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          {gameMode === 'wallet' ? (
-            <Text style={ts.balanceTxt}>💰 ${balance.toFixed(2)}</Text>
-          ) : (
-            <Text style={ts.unlimitedTxt}>♾️ Sınırsız</Text>
-          )}
-          <TouchableOpacity style={ts.clearBtn} onPress={() => setSlots(Array(10).fill(null))}><Text style={ts.clearTxt}>🗑 Hepsini Sıfırla</Text></TouchableOpacity>
-        </View>
-      </View>
+  // EŞYA SEÇİM ARAMASI: ilk açılışta yüzlerce eşyayı BİRDEN listelemek yerine,
+  // arama boşken sadece SON KULLANILAN eşyaları gösteriyoruz — kalabalığı
+  // ortadan kaldırır, seçim pratik kalır.
+  const searchActive = searchText.trim() !== '';
+  const pickerPool = allSkins.filter(s => isValidTradeUpInput(s) && (!lockedRarity || s.rarity?.name === lockedRarity));
+  const pickerData = searchActive
+    ? pickerPool.filter(s => s.name.toLowerCase().includes(searchText.trim().toLowerCase())).slice(0, 100)
+    : pickerPool
+        .filter(s => recentSkinNames.includes(s.name))
+        .sort((a, b) => recentSkinNames.indexOf(a.name) - recentSkinNames.indexOf(b.name));
 
-      <View style={ts.mainLayout}>
-        {/* SOL: DİKEY 10 SLOT (Scroll gerekmez, Grid yapı) */}
-        <View style={ts.slotsColumn}>
-          <View style={ts.grid}>
-            {slots.map((entry, idx) => <CompactSlot key={idx} index={idx} entry={entry} onPress={() => { setEditingSlot(idx); setSearchText(''); setPickerOpen(true); }} onRemove={(i) => { const n = [...slots]; n[i] = null; setSlots(n); }} onClone={cloneSlot} onFloatChange={handleFloatChange} />)}
-          </View>
-        </View>
+  // AÇIKLAYICI BOŞ DURUM: arama sonucu boşsa, kullanıcı Kırmızı (Covert) bir
+  // eşya (ör. Asiimov) aradığı için mi boş kaldığını göremiyordu — veri
+  // eksikmiş gibi görünüyordu. Aslında bu eşyalar VAR ama trade-up'ın GİRDİSİ
+  // olamıyorlar (gerçek CS2 kuralı: Covert zaten trade-up'ın EN ÜST SONUCUDUR,
+  // girdi olarak kullanılamaz). Bunu arama sonucunda açıkça göstererek
+  // "eşya sistemde yok" yanılgısını ortadan kaldırıyoruz.
+  const excludedSearchMatches = searchActive && pickerData.length === 0
+    ? allSkins.filter(s => s.name.toLowerCase().includes(searchText.trim().toLowerCase()) && !isValidTradeUpInput(s)).slice(0, 6)
+    : [];
 
-        {/* SAĞ: CANLI HESAPLAMA PANELİ */}
-        <View style={ts.analysisColumn}>
-          <Text style={ts.analTitle}>Canlı Çıktılar</Text>
-          {analysis ? (
-            <View style={{flex: 1}}>
-               <Text style={ts.analSummary}>Maliyet: <Text style={{color:'#e74c3c'}}>${analysis.totalCost.toFixed(2)}</Text></Text>
-               <Text style={ts.analSummary}>Beklenen: <Text style={{color:'#2ecc71'}}>${analysis.ev.toFixed(2)}</Text></Text>
-               {analysis.sourceCollectionNames?.length > 0 && (
-                 <Text style={[ts.analSummary, { color: '#3498db', fontSize: 9 }]} numberOfLines={2}>
-                   📦 Kaynak: {analysis.sourceCollectionNames.join(', ')}
-                 </Text>
-               )}
-               <View style={{height: 1, backgroundColor: '#333', marginVertical: 8}} />
-               <FlatList data={analysis.outcomes} keyExtractor={(_, i) => i.toString()} renderItem={({item}) => (
-                 <View style={ts.outRow}>
-                   <Text style={{color: '#fff', fontSize: 9, flex: 1}} numberOfLines={1}>{item.skin.name}</Text>
-                   <Text style={{color: '#f1c40f', fontSize: 10, fontWeight: 'bold', width: 30}}>%{(item.chance).toFixed(0)}</Text>
-                 </View>
-               )}/>
-            </View>
-          ) : (
-            <Text style={{color: '#777', fontSize: 11, textAlign: 'center', marginTop: 30}}>Sonuçları görmek için sözleşmeye eşya ekleyin.</Text>
-          )}
-        </View>
-      </View>
-
-      <View style={ts.footer}>
-        <TouchableOpacity style={[ts.tradeBtn, slots.filter(Boolean).length !== 10 && ts.tradeBtnDisabled]} onPress={executeTradeUp} disabled={slots.filter(Boolean).length !== 10}>
-          <Text style={ts.tradeBtnTxt}>SÖZLEŞMEYİ İMZALA ({slots.filter(Boolean).length}/10)</Text>
+  // ============================================================
+  // GİRDİ PANELİ — reset butonu ARTIK BURADA (grid'in sağ üst köşesi)
+  // ============================================================
+  // Eskiden "Seçimi Sıfırla" sayfanın genel başlık çubuğundaydı; hangi alanı
+  // sıfırladığı belirsizdi. Artık doğrudan eşyaların eklendiği kutucuğun
+  // başlığında duruyor — etki alanı görsel olarak açık.
+  const gridElement = (
+    <View style={ts.gridPanel}>
+      <View style={ts.gridPanelHeader}>
+        <Text style={ts.gridPanelTitle}>{t('tradeup.inputs')} ({filledCount}/{requiredCount})</Text>
+        <TouchableOpacity style={ts.clearBtn} onPress={() => setSlots(Array(TOTAL_SLOTS).fill(null))}>
+          <Text style={ts.clearTxt}>{t('tradeup.reset')}</Text>
         </TouchableOpacity>
       </View>
+      <View style={[ts.grid, { gap: GRID_GAP }]}>
+      {slots.map((entry, idx) => (
+        <TradeCard
+          key={idx}
+          index={idx}
+          entry={entry}
+          cardWidth={cardWidth}
+          // YUVA KİLİTLEME: (a) Covert tarifi aktifse 5. yuvadan sonrası kilitli,
+          // (b) mevcut kombinasyonun hiç geçerli çıktısı yoksa kalan yuvalar kilitli.
+          locked={!entry && (idx >= requiredCount || isDeadEnd)}
+          onPress={() => { setEditingSlot(idx); setSearchText(''); setPickerOpen(true); }}
+          onLockedPress={() => showToast(
+            idx >= requiredCount
+              ? t('tradeup.lockedCovert', { n: KNIFE_RECIPE_SLOTS })
+              : t('tradeup.lockedDeadEnd'),
+            'warning'
+          )}
+          onRemove={(i) => setSlots(prev => { const n = [...prev]; n[i] = null; return n; })}
+          onClone={cloneSlot}
+          onFloatChange={handleFloatChange}
+          t={t}
+        />
+      ))}
+      </View>
+    </View>
+  );
+
+  const summaryElement = <SummaryContent analysis={analysis} filledCount={filledCount} profitAmount={profitAmount} profitPct={profitPct} t={t} />;
+
+  return (
+    <SafeAreaView style={ts.container}>
+      <ToastBanner toast={toast} />
+
+      {/* BAŞLIK: Buradaki eski "🧪 Ücretsiz Analiz Modu" etiketi KALDIRILDI —
+          kullanıcıya hiçbir şey anlatmıyordu. Yerini, sağ paneldeki asıl
+          işlevi adlandıran "Olası İhtimaller & Karlılık Oranı" başlığı aldı.
+          Sıfırlama butonu da buradan çıkıp girdi kutucuğunun başlığına taşındı. */}
+      <View style={ts.headerRow}>
+        <Text style={ts.title}>{t('tradeup.title')}</Text>
+        {/* Ücretsizliği görünür kıl — kullanıcı "acaba para gidiyor mu?" diye
+            tereddüt etmesin. */}
+        <View style={ts.freeBadge}>
+          <Text style={ts.freeBadgeTxt}>{t('tradeup.freeBadge')}</Text>
+        </View>
+      </View>
+
+      <View style={ts.subTabRow}>
+        <TouchableOpacity style={[ts.subTabBtn, subTab === 'contract' && ts.subTabBtnActive]} onPress={() => setSubTab('contract')}>
+          <Text style={[ts.subTabTxt, subTab === 'contract' && ts.subTabTxtActive]}>{t('tradeup.tabContract')}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[ts.subTabBtn, subTab === 'history' && ts.subTabBtnActive]} onPress={() => setSubTab('history')}>
+          <Text style={[ts.subTabTxt, subTab === 'history' && ts.subTabTxtActive]}>{t('tradeup.tabHistory', { n: history.length })}</Text>
+        </TouchableOpacity>
+      </View>
+
+      {subTab === 'contract' ? (
+        <>
+          {isWideLayout ? (
+            // GENİŞ EKRAN: sol tarafta kayan grid, sağda SABİT (sticky) özet paneli.
+            <View style={{ flex: 1, flexDirection: 'row' }}>
+              <ScrollView style={{ flex: 1 }} contentContainerStyle={ts.scrollContent}>
+                {gridElement}
+              </ScrollView>
+              <View style={ts.sidebar}>
+                <ScrollView contentContainerStyle={ts.sidebarScroll}>
+                  {/* İşlevi net belirten başlık (eski "Ücretsiz Analiz Modu" yerine) */}
+                  <Text style={ts.summaryTitle}>{t('tradeup.outcomesHeader')}</Text>
+                  <Text style={ts.summarySub}>{t('tradeup.summary', { done: filledCount, total: requiredCount })}</Text>
+                  {summaryElement}
+                </ScrollView>
+              </View>
+            </View>
+          ) : (
+            // DAR EKRAN: grid ve özet tek scroll içinde alt alta.
+            <ScrollView style={{ flex: 1 }} contentContainerStyle={ts.scrollContent}>
+              {gridElement}
+              <View style={ts.summaryPanel}>
+                <Text style={ts.summaryTitle}>{t('tradeup.outcomesHeader')}</Text>
+                <Text style={ts.summarySub}>{t('tradeup.summary', { done: filledCount, total: requiredCount })}</Text>
+                {summaryElement}
+              </View>
+            </ScrollView>
+          )}
+
+          <View style={ts.footer}>
+            <TouchableOpacity
+              style={[ts.tradeBtn, (filledCount !== requiredCount || !analysis || analysis.outcomes.length === 0) && ts.tradeBtnDisabled]}
+              onPress={executeTradeUp}
+              disabled={filledCount !== requiredCount || !analysis || analysis.outcomes.length === 0}
+            >
+              <Text style={ts.tradeBtnTxt}>{t('tradeup.sign', { done: filledCount, total: requiredCount })}</Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      ) : (
+        <View style={{ flex: 1 }}>
+          {history.length > 0 && (
+            <TouchableOpacity style={ts.clearHistoryBtn} onPress={() => setHistory?.([])}>
+              <Text style={ts.clearTxt}>{t('tradeup.clearHistory')}</Text>
+            </TouchableOpacity>
+          )}
+          <FlatList
+            data={history}
+            keyExtractor={item => item.id}
+            contentContainerStyle={{ padding: 10 }}
+            ListEmptyComponent={<Text style={{ color: C.textDim, textAlign: 'center', marginTop: 40 }}>{t('tradeup.historyEmpty')}</Text>}
+            renderItem={({ item }) => (
+              <TouchableOpacity style={ts.historyCard} onPress={() => loadHistoryEntry(item)}>
+                <Image source={{ uri: item.resultImage }} style={ts.historyImg} resizeMode="contain" />
+                <View style={{ flex: 1, marginLeft: 10 }}>
+                  <Text style={[ts.historyName, { color: item.resultColor }]} numberOfLines={1}>{item.resultName}</Text>
+                  <Text style={ts.historyMeta}>{item.inputRarity || '—'} → {t('tradeup.totalCost')} ${item.totalCost.toFixed(2)}</Text>
+                  {/* Tarih biçimi de dile uyar (tr-TR / en-GB) */}
+                  <Text style={ts.historyMeta}>{new Date(item.timestamp).toLocaleString(lang === 'tr' ? 'tr-TR' : 'en-GB')}</Text>
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={ts.historyPrice}>${item.resultPrice.toFixed(2)}</Text>
+                  <Text style={ts.historyReload}>↻</Text>
+                </View>
+              </TouchableOpacity>
+            )}
+          />
+        </View>
+      )}
 
       {/* SONUÇ EKRANI (CS2 Tarzı Ortada) */}
       {wonItem && (
         <View style={ts.resultOverlay}>
           <View style={[ts.resultBox, { borderColor: wonItem.displayColor }]}>
-            <Text style={{color: '#2ecc71', fontSize: 22, fontWeight: 'bold'}}>Sözleşme Başarılı!</Text>
+            <Text style={{color: wonItem.isKnifeWin ? C.gold : C.success, fontSize: 22, fontWeight: '800'}}>
+              {wonItem.isKnifeWin ? t('tradeup.knifeWin') : t('tradeup.contractSuccess')}
+            </Text>
             <Image source={{ uri: wonItem.image }} style={{width: 200, height: 150, marginVertical: 15}} resizeMode="contain" />
             <Text style={{color: wonItem.displayColor, fontSize: 18, fontWeight: 'bold', textAlign: 'center'}}>{wonItem.name}</Text>
-            <Text style={{color: '#fff', fontSize: 14, marginVertical: 8}}>Float: {wonItem.float.toFixed(4)} ({wonItem.wear})</Text>
+            <Text style={{color: C.text, fontSize: 14, marginVertical: 8}}>{t('tradeup.avgFloat')}: {wonItem.float.toFixed(4)} ({wonItem.wear})</Text>
             <View style={{flexDirection: 'row', gap: 10, marginTop: 15}}>
-              <TouchableOpacity style={{backgroundColor: '#3498db', padding: 12, borderRadius: 8}} onPress={() => { setInventory(p => [...p, wonItem]); setWonItem(null); }}><Text style={{color: '#fff', fontWeight: 'bold'}}>Envantere Ekle</Text></TouchableOpacity>
-              <TouchableOpacity style={{backgroundColor: '#2ecc71', padding: 12, borderRadius: 8}} onPress={sellResult}><Text style={{color: '#fff', fontWeight: 'bold'}}>Sat (${wonItem.price.toFixed(2)})</Text></TouchableOpacity>
+              <TouchableOpacity style={{backgroundColor: C.accent, padding: 12, borderRadius: 10}} onPress={() => { setInventory(p => [...p, wonItem]); setWonItem(null); }}><Text style={{color: C.onAccent, fontWeight: '800'}}>{t('common.keep')}</Text></TouchableOpacity>
+              <TouchableOpacity style={{backgroundColor: C.success, padding: 12, borderRadius: 10}} onPress={discardResult}><Text style={{color: C.onAccent, fontWeight: '800'}}>{t('tradeup.closeResult')}</Text></TouchableOpacity>
             </View>
+            <TouchableOpacity style={{marginTop: 14}} onPress={startNewContract}>
+              <Text style={{color: C.textDim, fontSize: 12, textDecorationLine: 'underline'}}>{t('tradeup.newContract')}</Text>
+            </TouchableOpacity>
           </View>
         </View>
       )}
 
       {/* GEÇERLİ EŞYA SEÇİCİ */}
       <Modal visible={pickerOpen} animationType="slide">
-        <SafeAreaView style={{ flex: 1, backgroundColor: '#0f0f17' }}>
-          <View style={{ padding: 15, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 1, borderColor: '#333' }}>
-            <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold' }}>Geçerli Eşya Seç</Text>
-            <TouchableOpacity onPress={() => setPickerOpen(false)}><Text style={{ color: '#e74c3c' }}>✕ Kapat</Text></TouchableOpacity>
+        <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }}>
+          <View style={{ padding: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: C.surface, ...shadow.bar }}>
+            <Text style={{ color: C.text, fontSize: 16, fontWeight: '800' }}>{t('tradeup.pickerTitle')}</Text>
+            <TouchableOpacity onPress={() => setPickerOpen(false)}><Text style={{ color: C.danger, fontWeight: '800' }}>{t('contents.close')}</Text></TouchableOpacity>
           </View>
           <TextInput
             style={ts.pickerSearch}
-            placeholder="Eşya Ara..."
-            placeholderTextColor="#7f8c8d"
+            placeholder={t('tradeup.pickerSearch')}
+            placeholderTextColor={C.textFaint}
             value={searchText}
             onChangeText={setSearchText}
+            autoFocus
           />
-          <FlatList data={allSkins.filter(s => isValidTradeUpInput(s) && (!lockedRarity || s.rarity?.name === lockedRarity) && (searchText.trim() === '' || s.name.toLowerCase().includes(searchText.trim().toLowerCase()))).slice(0, 100)} keyExtractor={i => i.id} numColumns={3} renderItem={({ item }) => (
-            <TouchableOpacity style={ts.pickerCard} onPress={() => handleSelect(item)}>
-              <Image source={{ uri: item.image }} style={{ width: 60, height: 45 }} resizeMode="contain" />
-              <Text style={{ color: '#ddd', fontSize: 9, textAlign: 'center' }}>{item.name}</Text>
-              <Text style={{ color: item.rarity?.color, fontSize: 8 }}>{RARITY_LABELS[item.rarity?.name]}</Text>
-            </TouchableOpacity>
-          )} />
+          {!searchActive && (
+            <Text style={ts.pickerHint}>
+              {pickerData.length > 0 ? t('tradeup.recent') : t('tradeup.recentHint')}
+            </Text>
+          )}
+          {excludedSearchMatches.length > 0 && (
+            <View style={ts.excludedBanner}>
+              <Text style={ts.excludedBannerTxt}>
+                {t('tradeup.excluded', { q: searchText, n: excludedSearchMatches.length })}
+              </Text>
+              <View style={ts.excludedGrid}>
+                {excludedSearchMatches.map(item => (
+                  <View key={item.id} style={ts.excludedCard}>
+                    <Text style={ts.excludedLock}>🔒</Text>
+                    <Image source={{ uri: item.image }} style={{ width: 44, height: 33, opacity: 0.5 }} resizeMode="contain" />
+                    <Text style={ts.excludedName} numberOfLines={2}>{item.name}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+          <FlatList
+            data={pickerData}
+            keyExtractor={i => i.id}
+            numColumns={3}
+            ListEmptyComponent={searchActive && excludedSearchMatches.length === 0 ? <Text style={ts.pickerEmpty}>{t('tradeup.pickerEmpty')}</Text> : null}
+            renderItem={({ item }) => (
+              <TouchableOpacity style={ts.pickerCard} onPress={() => handleSelect(item)}>
+                <Image source={{ uri: item.image }} style={{ width: 60, height: 45 }} resizeMode="contain" />
+                <Text style={{ color: C.textSoft, fontSize: 9, textAlign: 'center', fontWeight: '600' }}>{item.name}</Text>
+                <Text style={{ color: item.rarity?.color, fontSize: 8 }}>{RARITY_LABELS[item.rarity?.name]}</Text>
+              </TouchableOpacity>
+            )}
+          />
         </SafeAreaView>
       </Modal>
     </SafeAreaView>
@@ -350,26 +838,68 @@ export default function TradeUpScreen({ inventory, setInventory, balance, setBal
 }
 
 const ts = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f0f17' },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 10, borderBottomWidth: 1, borderBottomColor: '#222' },
-  title: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
-  clearBtn: { backgroundColor: '#e74c3c', paddingHorizontal: 8, paddingVertical: 6, borderRadius: 6 },
-  clearTxt: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
-  balanceTxt: { color: '#2ecc71', fontSize: 13, fontWeight: 'bold' },
-  unlimitedTxt: { color: '#3498db', fontSize: 13, fontWeight: 'bold' },
-  pickerSearch: { backgroundColor: '#1a1a24', color: '#fff', margin: 10, padding: 10, borderRadius: 8, borderWidth: 1, borderColor: '#2a2a35' },
-  mainLayout: { flex: 1, flexDirection: 'row', padding: 5 },
-  slotsColumn: { flex: 0.65, paddingRight: 5 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  analysisColumn: { flex: 0.35, backgroundColor: '#1a1a24', borderRadius: 8, padding: 8, borderWidth: 1, borderColor: '#2a2a35' },
-  analTitle: { color: '#f39c12', fontSize: 13, fontWeight: 'bold', textAlign: 'center', marginBottom: 10 },
-  analSummary: { color: '#ccc', fontSize: 11, fontWeight: '600', marginBottom: 4 },
-  outRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
-  footer: { padding: 10, borderTopWidth: 1, borderTopColor: '#222', paddingBottom: 20 },
-  tradeBtn: { backgroundColor: '#f39c12', padding: 15, borderRadius: 10, alignItems: 'center' },
-  tradeBtnDisabled: { backgroundColor: '#333' },
-  tradeBtnTxt: { color: '#fff', fontSize: 16, fontWeight: 'bold', letterSpacing: 1 },
-  pickerCard: { flex: 1, backgroundColor: '#1e1e2e', margin: 4, padding: 8, borderRadius: 8, alignItems: 'center', maxWidth: '31%' },
-  resultOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center', zIndex: 100 },
-  resultBox: { backgroundColor: '#1a1a24', padding: 25, borderRadius: 15, borderWidth: 3, alignItems: 'center', width: '90%' }
+  container: { flex: 1, backgroundColor: C.bg },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 },
+  title: { color: C.text, fontSize: 17, fontWeight: '800' },
+  freeBadge: { backgroundColor: C.successSoft, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 6 },
+  freeBadgeTxt: { color: C.success, fontSize: 11, fontWeight: '800' },
+  clearBtn: { backgroundColor: C.dangerSoft, borderWidth: 1, borderColor: '#f3cfcf', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 6 },
+  clearTxt: { color: C.danger, fontSize: 11, fontWeight: '800' },
+  unlimitedTxt: { color: C.accentDeep, fontSize: 13, fontWeight: '800' },
+  pickerSearch: { backgroundColor: C.surface, color: C.text, margin: 14, padding: 14, borderRadius: 999, fontSize: 14, outlineStyle: 'none', ...shadow.card },
+  pickerHint: { color: C.textDim, fontSize: 11, textAlign: 'center', marginBottom: 10 },
+  pickerEmpty: { color: C.textDim, fontSize: 12, textAlign: 'center', marginTop: 30 },
+  excludedBanner: { margin: 14, padding: 14, backgroundColor: C.dangerSoft, borderLeftWidth: 4, borderLeftColor: C.danger, borderRadius: 6 },
+  excludedBannerTxt: { color: '#a5453f', fontSize: 11, lineHeight: 17, fontWeight: '600' },
+  excludedGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
+  excludedCard: { width: 72, alignItems: 'center', backgroundColor: C.surface, borderRadius: 10, padding: 7 },
+  excludedLock: { fontSize: 12, marginBottom: 2 },
+  excludedName: { color: C.textDim, fontSize: 8, textAlign: 'center', marginTop: 2 },
+  scrollContent: { padding: 14, paddingBottom: 26 },
+
+  // GİRDİ PANELİ — belirgin, keskin hatlı kutucuk
+  gridPanel: { backgroundColor: C.surface, borderRadius: 8, borderWidth: 1, borderColor: C.borderStrong, padding: 14 },
+  gridPanelHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingBottom: 12, marginBottom: 14, borderBottomWidth: 1, borderBottomColor: C.border, gap: 10
+  },
+  gridPanelTitle: { color: C.text, fontSize: 13, fontWeight: '800', letterSpacing: 0.3, flexShrink: 1 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap' },
+  sidebar: { width: 330, backgroundColor: C.surfaceAlt, borderLeftWidth: 1, borderLeftColor: C.borderStrong },
+  sidebarScroll: { padding: 16 },
+  summaryPanel: { backgroundColor: C.surface, borderRadius: 8, borderWidth: 1, borderColor: C.borderStrong, padding: 16, marginTop: 14 },
+  summaryTitle: { color: C.text, fontSize: 14, fontWeight: '800', letterSpacing: 0.2 },
+  summarySub: { color: C.textDim, fontSize: 11, fontWeight: '700', marginTop: 3, marginBottom: 14 },
+  statGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
+  statItem: { minWidth: 110 },
+  statLbl: { color: C.textDim, fontSize: 10, fontWeight: '800' },
+  statVal: { color: C.text, fontSize: 14, fontWeight: '800', marginTop: 3 },
+  sourceTxt: { color: C.accentDeep, fontSize: 10, marginTop: 12, fontWeight: '600' },
+  emptyHint: { color: C.textDim, fontSize: 12, textAlign: 'center', marginTop: 10, lineHeight: 19 },
+  outcomesTitle: { color: C.textSoft, fontSize: 11, fontWeight: '800', marginTop: 16, marginBottom: 8 },
+  outcomesWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  outcomePill: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.surfaceAlt, borderWidth: 1, borderColor: C.border, borderRadius: 6, paddingHorizontal: 11, paddingVertical: 7, gap: 6, maxWidth: '100%' },
+  outcomePillTxt: { color: C.textSoft, fontSize: 10, flexShrink: 1, fontWeight: '600' },
+  outcomePillPct: { color: C.accentDeep, fontSize: 10, fontWeight: '800' },
+  knifeBanner: { backgroundColor: '#fdf6dd', borderLeftWidth: 4, borderLeftColor: C.gold, borderRadius: 6, padding: 12, marginTop: 14 },
+  knifeBannerTxt: { color: '#8a6d08', fontSize: 10, lineHeight: 16, fontWeight: '600' },
+  footer: { padding: 14, paddingBottom: 22, backgroundColor: C.surface, ...shadow.bar },
+  tradeBtn: { backgroundColor: C.accent, padding: 16, borderRadius: 8, alignItems: 'center' },
+  tradeBtnDisabled: { backgroundColor: C.borderStrong },
+  tradeBtnTxt: { color: C.onAccent, fontSize: 16, fontWeight: '800', letterSpacing: 0.6 },
+  pickerCard: { flex: 1, backgroundColor: C.surface, margin: 5, padding: 9, borderRadius: 8, borderWidth: 1, borderColor: C.border, alignItems: 'center', maxWidth: '31%' },
+  resultOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(38, 48, 61, 0.55)', justifyContent: 'center', alignItems: 'center', zIndex: 100 },
+  resultBox: { backgroundColor: C.surface, padding: 28, borderRadius: 10, borderWidth: 3, alignItems: 'center', width: '90%', maxWidth: 420, ...shadow.modal },
+  subTabRow: { flexDirection: 'row', paddingHorizontal: 14, paddingTop: 8, gap: 8 },
+  subTabBtn: { paddingVertical: 9, paddingHorizontal: 16, borderRadius: 6, backgroundColor: C.surface, borderWidth: 1, borderColor: C.borderStrong },
+  subTabBtnActive: { backgroundColor: C.accent },
+  subTabTxt: { color: C.textSoft, fontSize: 12, fontWeight: '800' },
+  subTabTxtActive: { color: C.onAccent },
+  clearHistoryBtn: { backgroundColor: C.dangerSoft, margin: 14, marginBottom: 0, padding: 12, borderRadius: 12, alignItems: 'center' },
+  historyCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.surface, borderRadius: 8, borderWidth: 1, borderColor: C.border, padding: 12, marginBottom: 10 },
+  historyImg: { width: 58, height: 44 },
+  historyName: { fontSize: 13, fontWeight: '800' },
+  historyMeta: { color: C.textDim, fontSize: 10, marginTop: 2 },
+  historyPrice: { color: C.success, fontSize: 13, fontWeight: '800' },
+  historyReload: { color: C.accentDeep, fontSize: 9, marginTop: 4, fontWeight: '800' }
 });

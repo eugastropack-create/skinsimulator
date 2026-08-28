@@ -1,0 +1,954 @@
+# GACAS — CS2 Simülatör Proje Dokümantasyonu
+
+> **GACAS** = **G**enel **A**rayüz, **C**ekiliş **A**lgoritmaları ve **S**imülasyon
+> Bu dosya projenin mimarisini, veri akışını ve tüm şans mekaniklerini tanımlar.
+>
+> ⚠️ **DEĞİŞMEZ KURAL:** Projeye eklenen her yeni özellik veya güncellemede
+> `gacas.md`, `agents.md` ve `cloud.md` dosyaları **aynı çıktıda** güncellenir.
+
+---
+
+## 1. Proje Özeti
+
+**CS2 Simülatör**, Counter-Strike 2'nin ekonomi ve şans mekaniklerini (kasa açma,
+Armory/Cephanelik, Trade-Up sözleşmeleri) **gerçek para harcamadan** test etmeye
+yarayan bir React Native (Expo) uygulamasıdır. Web, iOS ve Android'de aynı kod
+tabanıyla çalışır; birincil geliştirme/test hedefi **web**dir (`npm run web`).
+
+**Temel felsefe:** Oranlar ve mekanikler mümkün olduğunca **gerçek CS2 ile birebir**
+olmalıdır. Simülatöre özel bir sapma varsa (ör. Covert→Bıçak tarifi) kodda ve bu
+dokümanda **açıkça** belirtilir.
+
+---
+
+## 2. Teknoloji Yığını
+
+| Katman | Teknoloji |
+|---|---|
+| Framework | React Native `0.86.2` + Expo `~57.0.16` |
+| Web hedefi | `react-native-web` `^0.21.2` |
+| UI | Yalnızca React Native primitifleri (`View`, `Text`, `FlatList`, `Modal`, `Animated`) |
+| Ek bileşen | `@react-native-community/slider` (float ayarı) |
+| State | Yalnızca React hook'ları (`useState`/`useEffect`/`useMemo`) — harici store YOK |
+| Kalıcılık | **Yok** — tüm state oturum içidir (sayfa yenilenince sıfırlanır) |
+
+> **Not:** Expo sürümü hızlı değişiyor. Kod yazmadan önce
+> <https://docs.expo.dev/versions/v57.0.0/> adresindeki sürüme özel dokümanlar okunmalıdır.
+
+---
+
+## 3. Dosya Yapısı ve Sorumluluklar
+
+```
+cskasa/
+├── App.js                    # Kök bileşen: sekmeler, global state, veri yükleme
+├── index.js                  # Expo giriş noktası
+├── gacas.md / agents.md / cloud.md   # Proje dokümantasyonu (bu üçlü)
+└── src/
+    ├── theme.js              # ⭐ AÇIK TEMA tasarım sistemi (renk/gölge/geçiş/nadirlik ışığı)
+    │                         #   (logo: assets/logo-skinsimulator.png — saydam PNG)
+    ├── i18n.js               # ⭐ ÇOKLU DİL (EN varsayılan / TR) — tek sözlük + context
+    ├── BlogScreen.js         # ⭐ Rehber/Blog — SEMANTİK HTML (AdSense içerik gereksinimi)
+    ├── content/
+    │   └── guide.js          # ⭐ Rehber metinleri (EN + TR, uzun biçim)
+    ├── api.js                # ByMykel CSGO-API çağrıları (+ crates.json önbelleği)
+    ├── prices.js             # Fiyatlandırma, EV/ROI hesapları, kararlı sıralama değeri
+    ├── utils.js              # Float üretimi, aşınma eşlemesi, mock fiyat, formatlama
+    ├── armoryData.js         # Aktif Armory koleksiyon isimleri (rotasyon filtresi)
+    ├── CaseOpening.js        # Kasa VE Souvenir açma ekranı (çark + sekme + nadirlik ışığı)
+    ├── TerminalOpening.js    # ⭐ Armory terminali (5-6 TEKLİF KARTI + CRT — ÇARK YOK)
+    ├── CapsuleOpening.js     # ⭐ Sticker kapsülü (titreme/yırtılma/patlama — ÇARK YOK)
+    ├── ArmoryOpening.js      # Armory ekranı (koleksiyon/charm/Limited Edition)
+    ├── TradeUpScreen.js      # Trade-Up sözleşme ekranı (10 slot, analiz, geçmiş)
+    └── components/
+        ├── HoverCard.js      # ⭐ Hover'da 3B yükselen kart (tüm liste kartları)
+        ├── LanguageSwitcher.js # ⭐ Globe ikonlu EN/TR değiştirici
+        ├── Disclaimer.js     # ⭐ Sorumluluk reddi (footer, EN/TR)
+        ├── Toast.js          # Bildirim sistemi + useToast hook
+        ├── ConfirmModal.js   # Onay diyaloğu (Alert.alert web'de çalışmadığı için)
+        ├── ContentsModal.js  # İçerik+oran önizlemesi (satır içi panel + modal)
+        ├── ItemInspectModal.js # Envanter eşya inceleme (float/pattern/aksiyonlar)
+        └── SellConfirmModal.js # Satış onayı + Sınırsız Mod yönlendirmesi
+```
+
+### Ağ Katmanı Kuralı
+**Tüm** ağ çağrıları `src/api.js` üzerinden yapılır. Bileşenlerin içinde doğrudan
+`fetch('https://raw.githubusercontent.com/...')` yazılmaz — böylece uç noktalar,
+hata yönetimi ve yedekleme davranışı tek merkezde kalır.
+
+| Helper | Kullanan | Kaynak |
+|---|---|---|
+| `fetchCrates()` | `App.js` | `crates.json` (`type === 'Case'`) |
+| `fetchTerminals()` | `App.js` | `crates.json` (**dinamik tespit**, aşağıya bak) |
+| `fetchSouvenirPackages()` | `App.js` | `crates.json` (`type === 'Souvenir'`) |
+| `fetchStickerCapsules()` | `App.js` | `crates.json` (`type === 'Sticker Capsule'`) |
+| `fetchCollections()` | `App.js` | `collections.json` |
+| `fetchKeychains()` | `App.js` | `keychains.json` |
+| `fetchSkins()` | `src/TradeUpScreen.js` | `skins.json` |
+
+#### ⚠️ crates.json Önbelleği (performans — kritik)
+Kasa, Terminal, Souvenir ve Sticker listelerinin **hepsi** aynı ~8.3 MB'lık
+`crates.json` dosyasından gelir. Her kategori için ayrı `fetch` yapmak açılışta
+aynı dosyayı **4 kez** indirmek demekti (~33 MB gereksiz trafik). `api.js` artık
+dosyayı modül seviyesinde tek bir promise'te önbelleğe alır; paralel çağrılar
+**aynı** promise'i paylaşır. Başarısız denemeler önbellekte tutulmaz (tekrar
+denenebilsin diye).
+
+#### ⚠️ Terminal Tespiti — HARDCODED İSİM LİSTESİ YOK
+Terminaller ByMykel verisinde henüz kendi `type`'ına sahip değil (`type: null`).
+İki sinyalden **biri** yeterli sayılır:
+1. Adında `Terminal` geçmesi (ör. *Sealed Dead Hand Terminal*)
+2. `model_player` alanının Valve'in terminal modeli `ad_laptop`'u işaret etmesi
+
+Sonuç: Valve yeni bir terminal eklediğinde (ör. **Nemesis Terminal**) kodda
+tek satır değişiklik yapmadan listede belirir.
+> Doğrulandı (28 Ağu 2026): API'de şu an **2** terminal var — *Sealed Genesis
+> Terminal* ve *Sealed Dead Hand Terminal*. Nemesis henüz API'ye eklenmemiş.
+
+> `fetchLivePrices()` bir istisnadır: fiyat normalizasyon mantığıyla birlikte
+> `src/prices.js` içinde durur (veri kaynağı değil, fiyat motorunun parçasıdır).
+
+---
+
+## 4. Veri Kaynakları
+
+| Kaynak | URL | Kullanım |
+|---|---|---|
+| Kasalar | `ByMykel/CSGO-API .../crates.json` | `type === "Case"` filtresiyle |
+| Koleksiyonlar | `.../collections.json` | Armory + Trade-Up çıktı havuzu |
+| Charm'lar | `.../keychains.json` | 78 charm, 4 kapsül koleksiyonu |
+| Skinler | `.../skins.json` | Trade-Up girdi/çıktı havuzu + bıçak/eldiven (2126 öğe) |
+| Sticker | `.../crates.json` (`type='Sticker Capsule'`) | 100 sticker kapsülü |
+| **Souvenir** | `.../crates.json` (`type='Souvenir'`) | **150 hatıra paketi** |
+| **Terminal** | `.../crates.json` (dinamik tespit) | **Armory terminalleri** |
+| Canlı fiyat | `prices.csgotrader.app/latest/prices_v6.json` | Steam piyasa fiyatları |
+
+> `Souvenir Highlight` (14 adet) **bilerek** dışarıda bırakıldı: skin değil, maç
+> highlight'larına ait koleksiyon parçaları — açılış mekaniğine uymuyorlar.
+
+### Fiyat Yedekleme (Fallback) Zinciri
+1. **Canlı fiyat** — `priceMap[market_hash_name]` bulunursa kullanılır.
+2. **Mock fiyat** — `generateMockPrice(rarity, float, isStatTrak)` ile üretilir.
+
+#### Kutunun KENDİ fiyatı (`getContainerPrice`)
+`crates.json`'da kutuların fiyat alanı **yoktur** (doğrulandı: hiçbir kayıtta
+`price` yok). Ancak kutuların `market_hash_name`'i vardır (*"Chroma Case"*,
+*"Sticker Capsule"*) ve bu isimler canlı fiyat tablosunda geçer — yani kasa,
+kapsül, souvenir ve terminal fiyatları da **dinamik**tir. Canlı veri yoksa türe
+göre gerçekçi bir tabana düşülür (kasa `$0.50`, sticker `$1.00`, terminal
+`$2.00`, souvenir `$2.50`).
+
+#### ⚠️ Simüle fiyatlamada eşyaya özgü deterministik çarpan
+Mock fiyatlamada bir kademedeki **tüm** eşyalar aynı tabana sahipti (her
+Mil-Spec `$1.50`). Bunun iki görünür sonucu vardı:
+- "En değerliden en değersize" sıralama **kademe içinde anlamsızdı** (hepsi eşit),
+- kart köşesindeki fiyat aralığı **her kasada birebir aynı** çıkıyordu
+  (`$1.50 – $1980.00`), yani hiçbir bilgi vermiyordu.
+
+`getStableSortValue`, canlı fiyat yokken eşyanın **adından** türetilen
+`0.55–1.90` bandında **deterministik** bir çarpan uygular (FNV-1a hash).
+Deterministik olması kritik: `Math.random()` kullanılsaydı liste her render'da
+yeniden sıralanıp zıplardı.
+
+#### Souvenir market adı öneki
+Souvenir paketlerinden çıkan eşyalar piyasada **ayrı** bir isimle listelenir:
+`Souvenir AWP | Dragon Lore (Factory New)`. Bu önek olmadan souvenir eşyaları
+için normal skinin fiyatı bulunur ve değer ciddi biçimde yanlış hesaplanır.
+`buildMarketHashName(item, wear, isStatTrak, isSouvenir)` bunu üretir; souvenir
+varyantı piyasada listelenmemişse normal varyanta düşer. **Souvenir'de StatTrak
+yoktur** — iki önek asla birlikte kullanılmaz.
+
+> Canlı fiyat kaynağı tarayıcıda **CORS** ile engellenir. Bu **beklenen** bir durumdur;
+> uygulama otomatik olarak simüle fiyatlandırmaya düşer ve header'da
+> `🟡 Simüle Fiyatlar` rozeti gösterilir. Konsoldaki CORS hatası bir bug değildir.
+
+---
+
+## 5. Şans Mekanikleri (Kritik Bölüm)
+
+### 5.1 Kasa Açma Oranları (gerçek CS2 ile birebir)
+
+> ⚠️ **VERİ TUZAĞI — bıçaklar `contains` içinde DEĞİL:** ByMykel verisinde kasanın
+> normal skinleri `contains`, bıçak/eldivenleri ise ayrı **`contains_rare`**
+> alanındadır. Üstelik `contains_rare` öğelerinin `rarity.color`'ı `#ffd700`
+> DEĞİL, `#eb4b4b`'dir. Altın kademeyi `contains` içinde `#ffd700` diye aramak
+> hiçbir zaman eşleşmez → "eşleşme yoksa tüm listeye düş" yedeği devreye girer ve
+> **kasadan asla bıçak çıkmaz** (EV de sistematik düşük hesaplanır).
+> Doğru kullanım: `poolForRarity()` (CaseOpening) ve `contains_rare` dalları
+> (`prices.js`, `ContentsModal.js`).
+
+| Nadirlik | Renk | Oran |
+|---|---|---|
+| Mil-Spec | `#4b69ff` | %79.92 |
+| Restricted | `#8847ff` | %15.98 |
+| Classified | `#d32ce6` | %3.20 |
+| Covert | `#eb4b4b` | %0.64 |
+| Rare Special (Bıçak/Eldiven) | `#ffd700` | %0.26 |
+
+StatTrak™ ihtimali: **%10** (her açılışta bağımsız).
+
+### 5.2 Armory Koleksiyon Oranları
+Consumer %79.92 · Industrial %15.98 · Mil-Spec %3.20 · Restricted %0.64 ·
+Classified %0.20 · Covert %0.06 — Maliyet: **4 yıldız** (≈$1.60).
+
+### 5.3 Kapsül Oranları (Charm **ve** Sticker — ortak tablo)
+High Grade %80.13 · Remarkable %16.02 · Exotic %3.21 · Extraordinary %0.64
+
+| Kapsül | Maliyet | Fiyat tablosu |
+|---|---|---|
+| Charm (Tılsım) | **3 yıldız** (≈$1.20) | HG $0.45 · R $1.50 · E $6.00 · X $18.00 |
+| Sticker | **2 yıldız** (≈$0.80) | HG $0.12 · R $0.35 · E $1.20 · X $4.50 |
+
+Charm ve sticker kapsülleri veride **birebir aynı 4 kademeyi** kullanır, bu yüzden
+tek oran tablosu (`CHARM_RARITY_ODDS`) ikisine de hizmet eder. Fiyat tabloları
+ise ayrıdır — sticker'lar gerçek piyasada charm'lardan çok daha ucuzdur.
+
+> ⚠️ **BİLİNÇLİ SAPMA:** Gerçek CS2'de sticker kapsülleri Armory'den değil,
+> mağazadan (~$1.00) satın alınır. Ayrı bir ekonomi kurmamak için bu simülatörde
+> Armory sekmesine 2 yıldız karşılığında eklenmiştir.
+
+### 5.4 Limited Edition Item (Armory Özel Eşyası)
+- **Eşya:** `Desert Eagle | Heat Treated` (Classified, `#d32ce6`)
+- **Maliyet:** **25 yıldız** (≈$10.00)
+- **Mekanik:** Kademeli nadirlik çekilişi **YOK**. Her basımda **aynı eşya** çıkar;
+  yalnızca **float** ve **StatTrak** şansa bağlıdır. Yani şans **fiyatı** etkiler, **eşyayı** değil.
+- Veri, gerçek `collections.json` içindeki **"Limited Edition Item"** koleksiyonundan okunur.
+
+### 5.5 Float (Aşınma) Üretimi — ⚠️ Kritik Düzeltme
+Aşınma kademelerinin float aralıkları **eşit genişlikte değildir**:
+
+| Kademe | Float Aralığı | Aralık Genişliği | Gerçek CS2 Oranı |
+|---|---|---|---|
+| Factory New | 0.00 – 0.07 | %7 | **%3** |
+| Minimal Wear | 0.07 – 0.15 | %8 | **%24** |
+| Field-Tested | 0.15 – 0.38 | %23 | **%33** |
+| Well-Worn | 0.38 – 0.45 | %7 | **%24** |
+| Battle-Scarred | 0.45 – 1.00 | **%55** | **%16** |
+
+**Eski (hatalı) yöntem:** `min + Math.random() * (max - min)` → düzgün dağılım →
+Battle-Scarred **%55** çıkıyordu ("hep Battle-Scarred" bug'ı).
+
+**Doğru yöntem (`generateBaseFloat`):** Önce **ağırlıklı** olarak kademe seçilir
+(3/24/33/24/16), sonra o kademenin kendi aralığında düzgün dağılımlı taban float
+üretilir, en sonda eşyanın kendi `min_float`–`max_float` aralığına ölçeklenir.
+
+Doğrulanan sonuç (200.000 örnek, 0.00–1.00 skin):
+`FN %3.0 · MW %24.0 · FT %33.2 · WW %23.9 · BS %15.9` ✅
+
+### 5.6 Trade-Up Sözleşmesi
+
+> 💡 **Trade-Up BAKİYEDEN BAĞIMSIZDIR.** Bu ekran bir oyun modu değil, bir
+> kârlılık/olasılık **analiz aracıdır**: sözleşme imzalamak para düşmez, sonucu
+> kapatmak para eklemez, "yetersiz bakiye" reddi yoktur. Gösterilen
+> Maliyet/EV/Kâr sayıları yalnızca ANALİZ amaçlıdır. (Kasa ve Armory ekranları
+> bakiyeyi normal şekilde kullanmaya devam eder.)
+
+**Standart akış (gerçek CS2 kuralları):**
+1. Tam **10** adet **aynı nadirlikte** eşya gerekir.
+2. Çıktı nadirliği bir üst kademedir:
+   `Consumer → Industrial → Mil-Spec → Restricted → Classified → Covert`
+3. **Çıktı havuzu, girdilerin ait olduğu koleksiyon(lar)dan** belirlenir. Her girdi
+   kendi koleksiyonuna "oy" verir; havuz bu oylarla ağırlıklandırılır.
+4. Çıktı float'ı: `hedefMin + ortalamaFloat × (hedefMax − hedefMin)`
+
+**🔪 SİMÜLATÖRE ÖZEL TARİF — 5x Covert → Sarı (Bıçak/Eldiven):**
+- Gerçek CS2'de Covert eşyalar trade-up **girdisi olamaz** (hiyerarşinin en üstüdür).
+- Bu simülatörde sınır **bilerek esnetilmiştir**: **5 adet** Covert birleştirilirse
+  çıktı, **tüm bıçak (576) + eldiven (94) havuzundan = 670 öğeden** eşit ihtimalle
+  rastgele bir Sarı eşyadır.
+- **Yuva kilitleme:** İlk yuvaya Covert eklendiği **an** tarif otomatik algılanır;
+  10 yuvanın **kalan 5'i 🔒 ile kilitlenir**, tıklanamaz ve doldurulamaz hale gelir.
+  Sayaç `x/5`'e döner. `Kopyala` da limiti aşamaz.
+- Koleksiyon oylaması bu tarifte **uygulanmaz** (bıçaklar koleksiyonlara ait değildir).
+- Bıçak/eldivenler `'Rare Special'` fiyat kademesiyle değerlenir ve **altın**
+  (`#ffd700`) renkle gösterilir.
+- Bıçak/eldivenin **kendisi** hâlâ girdi olamaz (sonsuz döngüyü önlemek için).
+- Diğer tüm kademelerin standart **10'lu** akışı **değiştirilmemiştir**.
+
+| Sabit | Değer | Anlamı |
+|---|---|---|
+| `TOTAL_SLOTS` | 10 | Standart tarif yuva sayısı |
+| `KNIFE_RECIPE_SLOTS` | 5 | Covert tarifi yuva sayısı (gerisi kilitlenir) |
+
+---
+
+### 5.7 Souvenir (Hatıra) Paketi Oranları
+
+Souvenir paketleri normal kasalarla **aynı kademe merdivenini** kullanır, ancak
+içerdikleri kademe **sayısı** pakete göre değişir (bazı harita koleksiyonlarında
+yalnızca 3 kademe var). Bu yüzden oranları sabit bir tabloya gömmek **yanlış**
+olurdu — `getSouvenirTiers(pkg)` paketin **içinde gerçekten bulunan** kademeleri
+tespit edip standart merdiveni (`79.92 / 15.98 / 3.20 / 0.64 / 0.26`) onlara
+uygular ve toplam %100'e **yeniden normalize** edilir.
+
+> ⚠️ **Bilinçli yaklaşım:** Valve'in tam iç algoritması açıklanmadığı için bu,
+> veriye dayalı en dürüst yaklaşımdır.
+
+Souvenir açılışı kasa çarkını **yeniden kullanır** (`CaseOpening mode="souvenir"`).
+Farklar: anahtar yok (maliyet = paketin piyasa fiyatı) ve **StatTrak yok**.
+
+### 5.8 Terminal Mekaniği — TEKLİF SEÇİMİ (Genesis / Dead Hand / …)
+
+> ⚠️ **BU BİR KASA DEĞİLDİR.** Terminal önceki sürümde klasik kasa gibi
+> çalışıyordu (tek eşya düşürüp bitiyordu) — bu **yanlıştı** ve düzeltildi.
+
+**Gerçek CS2 Armory mekaniği:** Terminal çalıştırıldığında kullanıcıya birden
+fazla **TEKLİF (offer)** sunulur. Kullanıcı teklifler arasında gezinir, birini
+**kredi** karşılığında satın alır ya da hepsini geçer. Her oturumda **yalnızca
+bir** eşya alınabilir; satın alma yapıldığında oturum kapanır.
+
+**Akış (ADIM ADIM — teklifler AYNI ANDA gösterilmez):**
+
+| Aşama | Ne olur |
+|---|---|
+| `idle` | Terminal bekliyor (CRT'de `> TERMINAL READY`) |
+| `scanning` | CRT/glitch tarama — 26 kare, kübik yavaşlama. **Görsel gecikme; sonucu ETKİLEMEZ** |
+| `offers` | Teklifler **TEK TEK**: `1/5 → 2/5 → … → 5/5` (+ **%5 ihtimalle 6. BONUS slot** → `1/6 … 6/6`) |
+| `claimed` | Alınan eşya teslim edildi, oturum kapandı |
+
+#### ⚠️ Adım adım akış kuralları
+- Kullanıcı aynı anda **yalnızca BİR** teklif görür.
+- **[✓ Eşyayı Al]** → kredi düşer, eşya envantere girer, **oturum biter**.
+- **[Pas Geç →]** → bir sonraki teklife geçer. **GERİ DÖNÜŞ YOKTUR.**
+- **SON seçenekte `Pas Geç` DEVRE DIŞIDIR** — kullanıcı almak zorundadır.
+  (Buton hem `disabled` hem de `nextOffer()` içinde ikinci bir kalkanla korunur.)
+- İlerleme göstergesi: `Seçenek 2 / 5` + nokta şeridi (geçilmiş / aktif / kalan).
+- Geçişler **fade + slide**: çıkış 150 ms (yukarı sol), giriş 240 ms (aşağıdan).
+  `Animated` değil **state + CSS transition** — donmuş rAF ortamında bile kart
+  görünür kalır ve index **her hâlükârda ilerler**.
+
+#### ⚠️ Teklif havuzu neden BAŞTAN üretilir?
+Teklifler tarama biterken **toplu** üretilir, kullanıcıya tek tek gösterilse de.
+"Her Pas Geç'te yeni zar at" yaklaşımı, kullanıcının pas geçme kararının sonraki
+teklifi **etkilediği** izlenimini verir ve oturumun beklenen değerini
+belirsizleştirir. Havuz baştan sabitlenince oturum adil ve denetlenebilir olur —
+kasa çarkında kazananın dönüş başlamadan belirlenmesiyle **aynı ilke**.
+
+**Teklif kartı içeriği** (brief'te tanımlandığı gibi):
+görsel · ad · dış görünüş rozeti (FN/MW/FT/WW/BS) · **spesifik float (5 hane,
+ör. `0.16736`)** · **pattern index (`#590`)** · **kredi fiyatı** · $ piyasa değeri.
+
+#### ⚠️ PARA BİRİMİ: DOLAR ($) — kredi/yıldız KULLANILMAZ
+Terminal **yalnızca dolar** ile çalışır. İçerideki her fiyat eşyanın gerçek
+piyasa değeridir; ayrı bir "kredi etiketi" yoktur. Bu, cüzdan ile terminal
+arasındaki dönüşüm kafa karışıklığını tamamen ortadan kaldırır.
+*(Armory sekmesi kredi kullanmaya devam eder — o ayrı bir ekonomidir.)*
+
+Tarama **ücretsizdir**; ödeme yalnızca **Eşyayı Al** anında yapılır.
+*(Doğrulandı: cüzdan $150.00 → $147.75, eşya $2.25.)*
+
+#### ⚠️ TEKLİFLER ARASI GEÇİŞ ANINDADIR — animasyon YOK
+Önceki sürümde fade+slide geçişi vardı; hızlı gezinen kullanıcı için bu her
+tıklamada ~400 ms bekleme demekti ve kart yüksekliği değişirken düzen kayması
+hissettiriyordu. Artık `nextOffer()` yalnızca index'i artırır; React tek
+render'da yeni teklifi basar. Kart yüksekliği `cardStage.minHeight` ile
+sabitlendiği için sayfa **zıplamaz**.
+*(Ölçüldü: adım başına 9–13 ms — tek makro-görev içinde DOM güncelleniyor.)*
+
+#### Adım sayacı
+Ekranın **içinde**, mint (`C.crtText`) renkte ve **monospace** basılan büyük bir
+sayaç: `OFFER` / `1` / `/5` + nokta şeridi. Monospace seçilmesinin pratik bir
+sebebi var — 1'den 5'e giderken rakam genişliği değişmediği için sayaç **yerinde
+sabit** kalır, kaymaz.
+
+#### ⚠️ GÖRSEL SÜREKLİLİK — cihaz HİÇBİR AŞAMADA sökülmez
+Önceki sürümde giriş animasyonu koyu bir CRT ekranıydı, ardından gelen eşya
+kartı ise **beyaz, yuvarlak köşeli, açık temaya ait ayrı bir bileşendi**. İki
+ekran arka arkaya yüklenmiş **iki farklı uygulama** gibi duruyordu.
+
+Artık `deviceShell` **tüm aşamalarda** (idle · scanning · offers · claimed)
+ekranda kalır; yalnızca ekranın **içeriği** değişir. Teklif paneli ekranın
+görsel dilini birebir kullanır:
+
+| Öğe | Değer |
+|---|---|
+| ekran zemini | `C.crtBg` (#0d1b26) |
+| panel zemini | `C.crtBgDeep` (#08141d) |
+| panel kenarı | eşyanın **nadirlik rengi** |
+| etiketler | `C.crtDim` monospace |
+| değerler | `C.crtText` mint monospace |
+| butonlar | kasanın içinde; "Al" = mint kenarlı koyu buton |
+
+Tarama çizgileri panelin **üstünden de** geçer (aynı cam yüzey hissi).
+
+> **Doğrulama:** ekran zemini `rgb(13,27,38)`, panel zemini `rgb(8,20,29)`,
+> panel kenarı `rgb(75,105,255)` (eşyanın Mil-Spec rengi), sayaç
+> `rgb(95,240,196)` 34 px monospace.
+
+> ⚠️ Teklif panelini tekrar beyaz/açık temaya çevirmeyin — bütünlük bilinçli.
+
+#### Veri şeması
+Terminaller ByMykel verisinde normal bir kasayla **birebir aynı yapıdadır**, bu
+yüzden **oran tablosu paylaşılır** (`prices.CASE_RARITY_ODDS`).
+
+| Terminal | contains | contains_rare |
+|---|---|---|
+| Sealed Genesis Terminal | 17 silah (Mil-Spec 7 / Restricted 5 / Classified 3 / Covert 2) | — |
+| Sealed Dead Hand Terminal | aynı dağılım | 22 Extraordinary eldiven |
+
+---
+
+## 6. Uygulama Mimarisi
+
+### 6.1 State Sahipliği
+Tüm paylaşılan state **`App.js`**'te tutulur ve prop olarak aktarılır:
+
+| State | Açıklama |
+|---|---|
+| `balance` | Cüzdan bakiyesi (başlangıç `$150.00`) |
+| `stars` | Armory kredisi (Pass: $16 → 40 yıldız) |
+| `inventory` | Kazanılan eşyalar |
+| `crates` / `collections` | EV/ROI ile zenginleştirilmiş kataloglar |
+| `priceMap` | Canlı fiyat haritası (veya `null`) |
+| `caseOpenCounts` | "En Popüler" sıralaması için oturum sayacı |
+| `tradeUpHistory` | Son 15 trade-up (tekrar yüklenebilir) |
+| `gameMode` | `'wallet'` (bakiye düşer) / `'unlimited'` (düşmez) |
+
+### 6.2 Sekmeler
+
+Ana navigasyon **sırası kullanıcı brief'inde sabitlenmiştir** — değiştirmeyin:
+
+`Trade Up` · `Cases` · `Terminals` · `Armory` · `Souvenirs` · `Stickers`
+
+**Envanter bilerek bu menüde değildir**: menü sırası birebir korunsun diye üst
+yardımcı çubukta ayrı bir buton olarak durur (`🎒 Envanter (n)`).
+**Rehber/Blog** de aynı sebeple üst çubukta, envanterin hemen yanındadır
+(`📖 Rehber`).
+
+| Sekme | Veri | Açılış ekranı |
+|---|---|---|
+| Cases | 42 kasa | `CaseOpening` (çark) |
+| Terminals | Armory terminalleri | `TerminalOpening` (**teklif seçimi** — CRT + 5/6 kart) |
+| Armory | Limited Edition + 3 koleksiyon + 4 charm kapsülü | `ArmoryOpening` |
+| Souvenirs | 150 hatıra paketi | `CaseOpening mode="souvenir"` |
+| Stickers | 100 sticker kapsülü | `CapsuleOpening` (yırtılma) |
+
+> **Sticker kapsülleri Armory'den çıkarıldı**: artık kendi sekmelerinde ve
+> kapsül yırtılma animasyonuyla açılıyorlar. Armory yalnızca gerçek Armory
+> kataloğunu (koleksiyonlar + charm + Limited Edition) gösteriyor — bu, gerçek
+> oyundaki dağılıma da daha yakın.
+
+### 6.2.1 Ana Sayfa Hiyerarşisi (yukarıdan aşağıya)
+1. **Üst yardımcı çubuk** — bakiye · yıldız · Armory Pass · Envanter · mod · sıfırla
+2. **Logo** — üst-orta, `Skin`+`Simulator` (vurgu rengi ikinci kelimede)
+3. **Canlı arama** — `Search Cases or Items`
+4. **Reklam alanı** — *rezerve boşluk* (banner eklendiğinde menü kaymasın diye)
+5. **Ana navigasyon** — yatay hap (pill) şeridi
+6. **İçerik**
+
+**Kompakt kabuk:** Bir kutu açıldığında logo ve reklam boşluğu gizlenir, arama +
+menü kalır — böylece çark/terminal ekranı sayfanın üstüne yerleşir.
+
+> ⚠️ **Kabuk SABİTTİR, dış `ScrollView` YOKTUR.** Açılış ekranlarının ve
+> `TradeUpScreen`'in kendi `ScrollView`'leri var; bunları bir dış `ScrollView`
+> içine koymak iç içe dikey kaydırma (scroll-in-scroll) üretir ve sayfa
+> "yapışır". Kaydırma yalnızca içerik alanındadır.
+
+### 6.2.14 Logo Görseli (`assets/logo-skinsimulator.png`)
+
+Metin logo (`Skin` + `Simulator`) yerini **saydam zeminli görsel logoya** bıraktı
+(hem ana kabukta hem daralmış mini çubukta aynı dosya kullanılır).
+
+#### Arka plan nasıl kaldırıldı
+Kaynak görselin arka planı düz renk **değildi** (fırçalanmış metal + gradyan +
+vinyet), bu yüzden basit renk anahtarı (color key) işe yaramazdı. Ancak arka
+plan tamamen **gri** (chroma ≈ 0), yazı ise doygun yeşil/mavi. Maske bu yüzden
+**renklilik** üzerinden kuruldu:
+
+```
+chroma = max(R,G,B) − min(R,G,B)
+alpha  = clamp((chroma − 10) / (30 − 10), 0, 1)
+```
+
+> **Ölçüm:** Görüntünün %93,4'ü `chroma < 30` (arka plan). Yazı kutusundaki
+> **parlak (specular) piksellerin %0'ı** `chroma < 15`, yalnızca %0,5'i
+> `chroma < 20` — yani harf içi parlamalar **tintli**, gri değil. Bu yüzden düz
+> chroma eşiği harflerin içini delmiyor.
+>
+> Sonuç: %53,9 tam saydam · %39,5 tam opak · %6,5 kısmi (kenar yumuşatma).
+
+#### ⚠️ Flood-fill BİLEREK kullanılmadı
+"Dışarıdan ulaşılamayan her şey yazıdır" yaklaşımı denendi ve **yanlış**:
+`o`, `a`, `e` harflerinin **içi** de dışarıdan ulaşılamayan bir arka plan
+bölgesidir; flood-fill bunları opak yapıp harflerin gözlerini gri doldurur.
+Düz chroma eşiği bu boşlukları doğru şekilde saydam bırakır.
+
+#### ⚠️ Pillow tuzağı (gelecekte flood-fill gerekirse)
+`ImageDraw.floodfill`, `Image.fromarray` ile üretilmiş bir görüntüde
+**sessizce hiçbir şey yapmıyor** (tampon paylaşımı). `Image.new` ile üretilende
+çalışıyor. Önce `.copy()` alın.
+
+#### Ölçekleme
+Görsel çok geniş bir şerittir (1100×112, oran **9.82**). Yükseklik daima
+genişlikten türetilir; ikisini birden sabitlemek görseli ezer. Ana kabukta
+genişlik `min(440, ekran × 0.78)`, mini çubukta 170 px.
+
+### 6.2.15 Kaydırmaya Bağlı (Scroll-Linked) Üst Menü
+
+**SORUN:** Tam boy kabuk (büyük logo + arama + reklam alanı + menü) ~300 px yer
+kaplıyordu. İlk çözüm tek eşikte AÇ/KAPA yapıyordu; geçiş **ani ve sert**
+hissediliyordu.
+
+**ÇÖZÜM:** Animasyon artık doğrudan **kaydırma derinliğine** bağlı. Tek bir
+ilerleme değeri her şeyi sürer:
+
+```
+p = clamp(scrollY / 150, 0, 1)
+  opacity = 1 − p
+  scale   = 1 − p × 0.16          (üstten küçülür: transformOrigin 'top center')
+  height  = doğalYükseklik × (1 − p)
+  mini    = 44px × p              (mini çubuk ters yönde belirir)
+```
+
+Kullanıcı kaydırmayı bırakınca animasyon da durur — "organik" his buradan gelir.
+
+> **Ölçüm (28 Ağu 2026):** liste alanı **476 px → 788 px** (+312 px).
+>
+> | scrollY | p | opacity | scale | kabuk yük. |
+> |---|---|---|---|---|
+> | 0 | 0.00 | 1.00 | 1.000 | 301 px |
+> | 30 | 0.20 | 0.80 | 0.968 | 233 px |
+> | 60 | 0.40 | 0.60 | 0.936 | 169 px |
+> | 90 | 0.60 | 0.40 | 0.904 | 109 px |
+> | 120 | 0.80 | 0.20 | 0.872 | 52 px |
+> | 149 | 0.99 | 0.01 | 0.842 | 3 px |
+
+#### Easing — "premium" his nereden geliyor
+Ham `p` doğrusaldır ve doğrusal hareket mekanik hissettirir. Üç ayrı eğri var:
+
+| Ne | Eğri | Neden |
+|---|---|---|
+| yükseklik + ölçek | `smoothstep(p) = p²(3−2p)` | başta ve sonda yavaş, ortada hızlı — organik |
+| opaklık | `smoothstep(min(1, p/0.72))` | yazı, kutu kapanmadan **önce** silinir; "ezilen metin" görünmez |
+| mini marka | `smoothstep(clamp((p−0.35)/0.65))` | önce büyük başlık çekilir, **sonra** küçük marka gelir — üst üste binmez |
+
+> **Ölçüm (28 Ağu 2026):** başlık 376 → 360 → 304 → 177 → 59 → 7 → 0 px;
+> opaklık p=0.74'te 0'a ulaşıyor; mini çubuk 0 → 23 → 38 → 45 → 46 px.
+> Liste alanı **429 → 759 px**.
+
+#### ⚠️ Scroll'a `transition` UYGULAMAYIN
+Geçiş süresi eklemek animasyonu kaydırmanın **gerisinde** bırakır ve
+"lastikli/gecikmeli" bir his yaratır. Yumuşaklık **easing'den** gelir,
+gecikmeden değil.
+
+#### ⚠️ React state DEĞİL, doğrudan DOM yazımı
+Önceki sürüm her scroll olayında `setState` çağırıyordu — kaydırma boyunca
+saniyede ~60 React render'ı, gözle görülür takılma. Artık scroll olayında **hiç
+render yapılmıyor**; değerler tek bir `paintHeader(p)` fonksiyonunda hesaplanıp
+doğrudan DOM düğümlerine yazılıyor.
+
+#### ⚠️ `requestAnimationFrame` ile toplama DENENDİ ve GERİ ALINDI
+Scroll olaylarını rAF'a kuyruklamak akıllıca görünüyor ama rAF, composite
+edilmeyen sekmelerde **tamamen donuyor** (bu projede ölçüldü: 0 kare/sn) ve o
+durumda başlık **yarıda kilitli** kalıyordu. Üstelik tarayıcılar scroll olayını
+zaten kare başına en fazla bir kez üretir — rAF ek akıcılık getirmiyor, sadece
+kırılganlık ekliyordu. Boyama artık **senkron**. (Altın Kural 9'un aynı ruhu.)
+
+#### ⚠️ EN ÜSTTE (p = 0) HİÇBİR STİL YAZILMAZ — kırpılma hatasının kökü
+Önceki sürüm `p = 0` iken bile `height` + `overflow: hidden` uyguluyordu.
+Ölçülen yükseklik tam sayıya yuvarlandığı için içerik 1-2 px kırpılıyor, ayrıca
+kutunun **dışına taşan her şey** (logo gölgesi, açılan **arama sonuç listesi**)
+kesiliyordu — *"en üstte logolar kırpık görünüyor"* şikâyetinin sebebi buydu.
+Artık `p <= 0.002` dalında tüm inline stiller **temizleniyor**: düzen tamamen
+doğal. `s.shell` stilinde de kalıcı `overflow` **tanımlı değildir**.
+
+#### ⚠️ Yardımcı çubuk + kabuk TEK sarmalayıcıda
+İkisi ayrı ayrı animasyonlanıyordu; her biri kendi yüksekliğini küçültünce
+toplam kayma iki kat hızlı oluyor ve sıçrama yapıyordu. Artık tek sarmalayıcı
+(`headerRef`) ölçülüp tek bir değer kümesiyle sürülüyor.
+
+### 6.2.2 Canlı Arama (Live Search)
+Kullanıcı `Glove` yazdığında, adında "Glove" geçen bir kutu olmasa bile
+**içinde** eldiven bulunan kutular da çıkar. Her kutu, içeriğiyle birlikte tek
+bir aranabilir metne ("haystack") düzleştirilir.
+
+- **Ad eşleşmeleri** içerik eşleşmelerinden **önce** sıralanır.
+- İçerik eşleşmesinde satırın altında `içinde: ★ Driver Gloves | …` yazar.
+- Sonuç satırına tıklanınca **doğru sekmeye geçilir ve kutu açılır**.
+- En fazla 8 sonuç gösterilir.
+
+> ⚠️ **Performans:** Düzleştirme ~20.000 eşya adını birleştirir. `useMemo`
+> sayesinde veri yüklendiğinde **yalnızca bir kez** yapılır — her tuş vuruşunda
+> değil. Aksi halde yazarken arayüz gözle görülür şekilde takılırdı.
+
+> ⚠️ `onBlur` **gecikmelidir** (180 ms): sonuç satırına tıklandığında blur önce
+> ateşlenip listeyi kaldırırsa tıklama tamamen kaybolur.
+
+### 6.2.24 Rehber / Blog Ekranı — SEMANTİK HTML (`src/BlogScreen.js`)
+
+**AMAÇ:** Google AdSense'in içerik gereksinimlerini karşılamak — yüksek
+metin/HTML oranı, özgün ve gerçekten bilgilendirici içerik, semantik yapı.
+
+Metinler `src/content/guide.js` içinde **EN + TR** olarak durur (arayüz
+etiketlerinden çok farklı bir cins oldukları için `i18n.js`'e karıştırılmadı).
+Altı bölüm: **Hakkında · Özellik Rehberi · Eşyaları Anlamak · Trade-Up ·
+Gizlilik Politikası · İletişim**.
+
+#### ⚠️ react-native-web ile GERÇEK semantik etiket üretme
+`role` prop'u DOM etiketine çevrilir (`propsToAccessibilityComponent`).
+Doğrulanmış eşlemeler:
+
+| `role` | HTML |
+|---|---|
+| `main` | `<main>` |
+| `article` | `<article>` |
+| `region` | `<section>` |
+| `heading` + `aria-level={n}` | `<h1>`…`<h6>` |
+| `paragraph` | `<p>` |
+| `list` / `listitem` | `<ul>` / `<li>` |
+| `navigation` | `<nav>` |
+| `contentinfo` | `<footer>` |
+
+> ⚠️ Bu rol adlarını "daha okunur" diye değiştirmeyin — `role="section"` diye
+> bir eşleme **yoktur**, sessizce `<div>` üretir ve semantik kaybolur.
+
+> **Doğrulama (28 Ağu 2026):** DOM'da `<main> ×1`, `<article> ×1`, `<nav> ×1`,
+> `<footer> ×1`, tek `<h1>`, bölüm başına `<h2>`, 2–7 `<h3>` ve 5–10 `<p>`
+> üretiliyor; bölüm başına 1.800–3.650 karakter metin.
+
+#### Alt bilgi bağlantıları
+`Gizlilik Politikası` · `İletişim` · `Hakkında` — hem rehber ekranının kendi
+`<footer>`'ında hem de ana sayfanın altında. Dil değişince bunlar da çevrilir.
+
+> ⚠️ `content/guide.js` içindeki oranlar §5 ile **birebir aynı** olmalıdır;
+> biri değişirse diğeri de güncellenmelidir.
+
+### 6.2.25 Çoklu Dil Desteği (`src/i18n.js`)
+
+**Varsayılan dil İNGİLİZCE'dir** (`DEFAULT_LANG = 'en'`); Türkçe ikinci dildir.
+
+- **TEK SÖZLÜK KAYNAĞI.** Arayüzde görünen hiçbir metin bileşenlere gömülmez;
+  hepsi `t('anahtar')` ile `DICT`ten gelir.
+- Değiştirici: üst yardımcı çubuktaki **🌐 globe** butonu
+  (`components/LanguageSwitcher.js`). Seçim **anında** uygulanır — i18n bir React
+  context'i olduğu için ağaç normal şekilde yeniden render olur, **sayfa
+  yenilenmez**.
+- `t('key', { n: 5 })` ile `{n}` yer tutucuları doldurulur.
+- **Eksik anahtar davranışı:** seçili dil → İngilizce → *anahtarın kendisi*.
+  Anahtara düşmek **bilinçlidir**: eksik çeviri sessizce boş bir arayüz üretmek
+  yerine gözle görülür bir iz bırakır.
+- Tarih biçimleri de dile uyar (`tr-TR` / `en-GB`).
+
+> ⚠️ **Kod içi yorumlar Türkçe kalır** (proje kuralı); sözlüğe yalnızca
+> KULLANICIYA GÖRÜNEN metinler girer.
+
+> ⚠️ **Tuzak:** `NAV_TABS.map(t => …)` gibi bir döngü değişkeni `t` çeviri
+> fonksiyonunu **gölgeler** ve menü etiketleri sessizce çevrilemez hâle gelir.
+> Döngü değişkeni bu yüzden `item` olarak adlandırıldı.
+
+### 6.2.26 Sorumluluk Reddi (`components/Disclaimer.js`)
+
+Sayfa altında, **dikkat çekmeyen ama okunabilir** bir footer. Uyarı sarısı/
+kırmızısı yoktur; düşük kontrastlı ama okunaklı gri-mavi metin kullanılır.
+
+Üç madde **yasal bilgilendirmedir, hiçbiri kaldırılmamalıdır**:
+1. Bu uygulama sadece **eğlence amaçlı bir simülatördür**.
+2. Kazanılan sanal eşyalar **gerçek oyunlara (Steam, CS2) aktarılamaz/takas edilemez**.
+3. Sitede **gerçek para yatırma/çekme veya kumar mekanizması yoktur**.
+
+Ayrıca Valve ile bağlantısı olmadığını belirten bir satır bulunur.
+
+> Bir açılış ekranı aktifken (`compact`) metin **tek satıra** iner — dikey alan
+> kazanmak için.
+
+#### Kompakt + kapatılabilir
+Kutu küçük punto (9–10.5 px) ve dar padding ile minimalist tutulur; üç madde tek
+paragrafta birleştirilmiştir (içerik aynen korunur, yalnızca dikey yer kaplaması
+azalır). Sağ üst köşede bir **✕** butonu vardır.
+
+#### ⚠️ `localStorage` — Altın Kural 6'ya ONAYLI İSTİSNA
+Kapatma durumu `skinsim.disclaimerDismissed` anahtarıyla saklanır, böylece sayfa
+yenilense de uyarı tekrar çıkmaz. Bu, projedeki **tek** kalıcı veridir —
+bakiye/envanter/kredi hâlâ yalnızca oturum içidir.
+
+Üç kırılganlık noktası da ele alınmıştır:
+1. **Native'de `localStorage` yoktur** → `Platform.OS !== 'web'` kontrolü
+2. **Gizli sekmede erişim hata fırlatabilir** → `try/catch`
+3. **Depolama kapalı/dolu ise yazma patlar** → `try/catch`
+
+Hata hâlinde davranış "kapatılmamış say"dır: en kötü ihtimalle uyarı tekrar
+görünür — yasal metnin sessizce kaybolmasındansa çok daha iyi. Ayrıca `storage`
+olayı dinlenir, böylece başka bir sekmede kapatıldığında burada da kapanır.
+
+### 6.2.3 Tasarım Sistemi — AÇIK TEMA (`src/theme.js`)
+
+**TEK RENK KAYNAĞI.** Hiçbir bileşen kendi içinde ham renk kodu tanımlamaz;
+`theme.js`'teki `C` tokenlarını kullanır.
+
+| Token | Değer | Kullanım |
+|---|---|---|
+| `C.bg` | `#f4f7fb` | sayfa zemini (buzul grisi) |
+| `C.bgAlt` | `#eaf1f8` | çark zemini, ikincil alanlar |
+| `C.surface` | `#ffffff` | kart / panel |
+| `C.text` | `#26303d` | ana metin (koyu gri, saf siyah **değil**) |
+| `C.textDim` | `#7b8798` | ikincil metin |
+| `C.accent` / `C.accentDeep` | `#38a3f1` / `#1b7fd1` | açık mavi vurgu |
+| `C.success` / `C.danger` | `#0f9d63` / `#e05252` | kâr / zarar |
+| `C.crt*` | koyu lacivert + `#5ff0c4` | terminal ekranı |
+
+- **Kaba çerçeve yok:** kartlar kenarlık yerine **yumuşak gölge** ile ayrışır.
+  Gölge rengi siyah değil **mavi-gri** (`#8ba3bf`) — açık zeminde siyah gölge
+  kirli/gri görünür.
+- **Kumarhane havası kaldırıldı:** koyu zemin + neon turuncu paleti tamamen gitti.
+
+> ⚠️ **NADİRLİK RENKLERİ (`RARITY`) İSTİSNADIR.** Bunlar Valve'in resmi CS2
+> renkleridir (mavi/mor/pembe/kırmızı/altın) ve tema değişse bile **sabit**
+> kalmalıdır — kullanıcılar bu renkleri oyundan tanıyor.
+
+#### Hover'da 3B yükselen kart (`components/HoverCard.js`)
+Tüm liste kartları bunu kullanır: hover'da `translateY(-6px)` + daha derin gölge.
+
+> **Neden `Animated` değil:** Hover *sürekli* bir etkileşim; her mouse
+> hareketinde bir Animated döngüsü başlatıp yarıda kesmek hem pahalı hem
+> titrek. Web'de gerçek CSS transition (`theme.webTransition`) kullanılıyor —
+> react-native-web `transitionProperty/Duration/TimingFunction` stil
+> anahtarlarını gerçek CSS'e çevirir. JS thread'ini meşgul etmez ve donmuş
+> `requestAnimationFrame` sorununa yakalanmaz.
+>
+> ⚠️ `onMouseEnter/Leave` **native'de yoktur** — orada kart daima dinlenme
+> hâlinde kalır (kasıtlı: dokunmatikte hover diye bir şey yok).
+
+#### Nadirlik Işığı (Rarity Glow) — CS2 orijinal drop efekti
+`theme.rarityGlowStyle(hex)` — eşya kutusunun **alt ~%10-15'lik** kısmından
+yukarı doğru **sönümlenerek** çıkan, nadirlik rengindeki ışık. Web'de gerçek
+`linear-gradient`, native'de düz yarı saydam renge düşer.
+
+Uygulandığı yerler: kasa çarkındaki **her** şerit öğesi (dönerken renkler akıp
+gider), kazanılan eşya kartı, çoklu açılış kartları, terminal ve kapsül
+sonuçları, envanter inceleme modalı.
+
+### 6.3 Önemli UI Bileşenleri
+- **Satış akışı:** TÜM satışlar (hover hızlı satış, inceleme modalı, toplu satış)
+  tek bir `requestSell` → `SellConfirmModal` → `finalizeSell` yolundan geçer.
+  - **Cüzdan Modu:** basit onay (Evet / Hayır).
+  - **Sınırsız Mod:** akıllı yönlendirme — *Cüzdan Moduna Geç ve Sat* (modu
+    değiştirir + gerçek bakiyeye yazar) / *Sınırsız Modda Sat* (mod aynı kalır,
+    **sanal kazanca** yazar) / *İptal*. Böylece kullanıcı sandbox'ta farkında
+    olmadan değer kaybetmez.
+  - `sandboxEarnings` ayrı tutulur ve Sınırsız rozeti altında gösterilir.
+- **Envanter:** 5 sıralama modu (En Yeni / Pahalı→Ucuz / Ucuz→Pahalı / En İyi
+  Float / En Kötü Float), çoklu seçim + canlı toplamlı toplu satış, ve eşyaya
+  tıklayınca açılan **inceleme modalı** (büyük görsel, tam float, pattern seed,
+  aşınma bandı şeridi, Sat / Trade-Up'a Ekle).
+  Float'ı olmayan eşyalar (charm/sticker) float sıralamasında sona atılır.
+- **Rulet:** Kazanan **index 40**'ta durur. Merkez hizalaması
+  `centerOfRouletteItem(n) = ITEM_MARGIN + n × ITEM_PITCH + ITEM_WIDTH/2`
+  formülüyle yapılır. `ITEM_PITCH = 104px` (100px genişlik + 2×2px margin) —
+  margin'i saymamak geçmişte **desync bug'ına** yol açmıştı.
+
+  **Gösterge:** Çerçeve/kutu YOK. Konteynerin **tam üst-ortasından** aşağı bakan
+  tek bir üçgen ok (`WinnerPointer`, border hilesiyle çizilir; `size` = yarım
+  genişlik olduğu için `marginLeft: -size` ile ortalanır). Kazanan eşya kutunun
+  içine girmez, doğrudan okun altında durur. Tekli ve 5x mini çarkların hepsinde
+  aynı bileşen kullanılır (doğrulandı: 5/5 mini çarkta sapma 0.33px).
+
+  **Hizalamanın iki kuralı** (ikisi de bug kaynağıydı, bkz. §7):
+  1. Kaydırma hesabında **konteyner genişliği** kullanılır (`onLayout` ile ölçülür),
+     pencere genişliği DEĞİL. Fark `content` padding'i + kaydırma çubuğudur
+     (ölçüldü: pencere 979px → konteyner 923px, yani **28px** merkez kayması).
+  2. **Rastgele jitter YOK.** Gösterge çerçevesi tam `ITEM_WIDTH` genişliğinde
+     olduğu için en ufak sapma bile çerçevenin item'ı tam kaplamamasına yol açar.
+
+  **Kuyruk (trailing) kuralı:** Kazanan şeridin SONU olamaz — durduğunda sağında
+  da item akmaya devam etmeli. Şerit uzunluğu ekran genişliğine göre hesaplanır:
+  `WINNER_INDEX + 1 + ceil((konteynerGenişliği/2) / ITEM_PITCH) + 3`.
+  Aynı kural 5x mini çarklar için de geçerlidir (eskiden kazanan son öğeydi ve
+  sağ taraf boşluğa kesiliyordu).
+
+  **Sekme (Bounce) — "taş gibi donma" düzeltmesi:** Çark eskiden tek bir
+  `Animated.timing` bitip **anında** duruyordu; fiziksel olarak inandırıcı
+  değildi. Artık hareket iki aşamalı:
+  1. `timing` → hedefin **biraz ötesine** git (`SPIN_OVERSHOOT = 26px`)
+  2. `spring` → hedefe geri otur (düşük `friction`, hedef etrafında 1-2 kez
+     hafifçe ileri-geri salınır — elastic ease-out)
+
+  > ⚠️ Sekme miktarı bilinçli olarak **küçük** (item genişliğinin ~1/4'ü). Daha
+  > büyük bir değer, göstergenin komşu eşyayı işaret ettiği izlenimi yaratır ve
+  > "kazanan yanlış gösteriliyor" şikâyetine yol açar.
+
+  Mini (5x) çarklar da aynı şekilde seker (`MINI_SPIN_OVERSHOOT = 16px`).
+
+- **⚠️ Animasyon Bekçisi (Watchdog) — "eşyam hiç gelmedi" koruması:**
+  Kazanılan eşyanın ekrana gelmesi Animated'in **tamamlanma callback'ine**
+  bağlıydı. Ancak `requestAnimationFrame` composite edilmeyen bir sekmede
+  **tamamen donabiliyor** (ölçüldü: **saniyede 0 kare**). Bu durumda Animated hiç
+  ilerlemez, callback **hiç ateşlenmez** ve kullanıcı parasını ödediği hâlde
+  sonsuza kadar dönen (aslında hiç dönmeyen) bir çarka bakar.
+
+  Sonuç zaten çark başlamadan **önce** belirlenmiş durumda; animasyon sadece
+  görsel bir gecikme. Bu yüzden beklenen süreden ~1.2 sn sonra devreye giren bir
+  bekçi zamanlayıcı sonucu kendisi açıklıyor. `settledRef` sayesinde Animated
+  callback'i ile bekçi yarışsa bile sonuç **yalnızca bir kez** işlenir (çifte
+  ödül / çifte sayaç imkânsız). Kazanılan eşya kartının `opacity`/`scale`
+  değerleri de önce güvenli son değerlerine set edilir — animasyon hiç oynamasa
+  bile kart görünür kalır.
+
+  > Terminal ve Kapsül ekranlarında bu koruma **doğuştan** var: aşama geçişleri
+  > zaten `setTimeout` ile sürülüyor, `Animated` callback'iyle değil.
+- **Çoklu açılış:** 5x → eş zamanlı 5 bağımsız rulet (`Animated.parallel`);
+  10x/25x → sıralı belirme (160ms aralıklarla) + **"Hemen Göster"** atlama butonu.
+- **İçerik Önizleme (`components/ContentsModal.js`):** Tek dosya, üç ihraç:
+  - `ContentsList` — nadirliğe göre gruplu eşya listesi (foto + isim + oran % + fiyat)
+  - `InlineContentsPanel` — **açma ekranlarında "Aç" butonunun altında** duran,
+    katlanabilir ve varsayılan **açık** panel. Kasa, Armory koleksiyonu, charm,
+    sticker ve özel eşya dahil **istisnasız hepsinde** çalışır.
+  - `ContentsModal` — liste kartlarındaki 🔍 ikonunun açtığı tam ekran sürüm.
+
+  Oran tabloları tek yerde durduğu için satır içi panel ile modal **asla ayrışamaz**.
+- **Terminal açılışı (`TerminalOpening.js`) — ÇARK YOK:**
+  Gerçek CS2'de terminaller bir kasa gibi açılmaz: ekranı olan fiziksel bir
+  cihazdır, eşyayı *tarar* ve dispenser gibi **teslim eder**. Üç aşama:
+  1. **TARAMA** — CRT ekranda hızla değişen gerçek eşya adları + sahte modül
+     kodları; metin RGB ayrışmasıyla (kırmızı/camgöbeği kopyalar kaydırılmış)
+     titrer (glitch). Ekran koyu kalır (beyaz bir "terminal" inandırıcı olmazdı).
+  2. **YAVAŞLAMA** — kareler arası gecikme kübik olarak artar
+     (`45ms → 300ms`, 34 kare ≈ 3.4 sn) → gerilim eğrisi. *(Doğrulandı: ilerleme
+     %18 → 35 → 47 → 56 → 65 → 71, artışlar küçülüyor.)*
+  3. **DISPENSE** — beyaz flaş + eşyanın nadirlik ışığıyla belirmesi.
+
+  > ⚠️ Flaş **iki aşamalı** sürülür: önce geçişsiz (`0ms`) tam parlaklık, sonra
+  > uzun geçişle sönüm. Tek bir boolean kullanılsaydı CSS transition parlamayı da
+  > yavaşlatır ve "flaş" hissi kaybolurdu.
+  >
+  > ⚠️ Flaş `Animated` **değil**, state + CSS transition ile sürülür: donmuş bir
+  > ortamda Animated tabanlı bir flaş ekranı **beyaz kilitli** bırakabilirdi.
+
+- **Sticker kapsülü açılışı (`CapsuleOpening.js`) — ÇARK YOK:**
+  Kapsül titrer → ortasından **yırtılır** → iki yarısı savrularak çıkartmayı
+  ortaya çıkarır.
+  - Yarılar tek bir görselden üretilir: iki `overflow: hidden` pencere, içindeki
+    tam boy görsel `left` ile kaydırılır → gerçek bir "ikiye ayrılma".
+  - Yırtık çizgisi 45° döndürülmüş küçük karelerden zikzak olarak çizilir
+    (RN'de SVG olmadan zikzak üretmenin en sağlam yolu).
+  - Aşama geçişleri `setTimeout` ile sürülür, `Animated` callback'iyle **değil**
+    — animasyon hiç oynamasa bile çıkartma **mutlaka** ortaya çıkar.
+
+- **Kart fiyat aralığı:** Souvenir/Sticker dahil tüm kutu kartlarının **sağ üst
+  köşesinde yeşil** bir aralık gösterilir (`getContainerValueRange`): bu kutudan
+  çıkabilecek **en ucuz → en değerli** ödül.
+
+- **⚠️ Trade-Up ÜCRETSİZDİR — yapısal garanti:**
+  Bu ekran bakiyeden **para düşmez**, envanterden **eşya silmez** ve bakiye
+  yetersizliği diye bir ret durumu **yoktur**. Ücretsizlik bir `if` koşuluyla
+  değil, **yapısal** olarak garantidir: `TradeUpScreen`'e `setBalance` prop'u
+  hiç geçirilmez, dolayısıyla bileşenin bakiyeye erişimi **yoktur**.
+  Kullanılmayan `gameMode` prop'u da kaldırıldı — "burada da mod farkı var"
+  izlenimi veriyordu.
+
+  > **Kullanıcı geri bildirimi (28 Ağu 2026):** "Trade-Up bakiyemden düşüyor."
+  > İnceleme sonucu **düşmüyordu**; sorun etiketlemeydi. `Toplam Maliyet`
+  > satırı **kırmızı (tehlike) renginde** gösteriliyordu ve bir tahsilat gibi
+  > okunuyordu. Etiket **"Girdi Değeri"** olarak değiştirildi, rengi nötrlendi
+  > ve başlığa görünür bir **"Ücretsiz simülatör — bakiyenizden düşülmez"**
+  > rozeti eklendi. Sayı aynı; artık gider gibi görünmüyor.
+
+- **Trade-Up arayüzü (yeniden düzenlendi):**
+  - Sağ üstteki belirsiz **"🧪 Ücretsiz Analiz Modu"** etiketi **kaldırıldı** —
+    kullanıcıya hiçbir şey anlatmıyordu. Yerini, sağ panelin asıl işlevini
+    adlandıran **"Olası İhtimaller & Karlılık Oranı"** başlığı aldı.
+  - **Sıfırlama butonu** genel başlık çubuğundan alınıp doğrudan **eşyaların
+    eklendiği kutucuğun sağ üst köşesine** taşındı (`Sözleşme Girdileri (n/10)`
+    başlığının yanına). Böylece butonun neyi sıfırladığı görsel olarak açık.
+  - **Keskin hatlar:** paneller `borderRadius: 8` + görünür 1px kenarlık ile
+    modüler kutucuklara dönüştü (önceki yumuşak/gölgeli 14–22px yuvarlaklık
+    yerine). Girdi kartları, çıktı pill'leri, geçmiş kartları ve seçici kartları
+    aynı dile uyduruldu.
+
+- **Trade-Up sağ paneli:** Geniş ekranda (≥900px) sticky sidebar, dar ekranda alta iner.
+
+---
+
+## 7. Platforma Özgü Tuzaklar (Öğrenilmiş Dersler)
+
+| Sorun | Çözüm |
+|---|---|
+| `Alert.alert()` react-native-web'de **hiçbir şey göstermez** | `components/Toast.js` + `components/ConfirmModal.js` kullan |
+| `useNativeDriver: true` web'de desteklenmez, animasyonu bozabilir | `Platform.OS !== 'web'` ile koşullu kullan |
+| Toast'ta `Animated` bazı ortamlarda donuyor | Toast bilerek **animasyonsuz** — kritik mesaj kaçmasın |
+| Kaydırma çubuğu grid genişliğini bozuyor | Sabit `SCROLLBAR_GUTTER = 20px` payı ayır |
+| `${n>=0?'+':''}$${n}` → `$-2.42` (yanlış) | `formatSignedMoney()` kullan → `-$2.42` |
+| `setTimeout`/`Animated` unmount sonrası state güncelliyor | `useRef` ile takip et, cleanup'ta temizle |
+| **`requestAnimationFrame` donunca `Animated` HİÇ ilerlemez** (ölçüldü: 0 kare/sn) | Sonucu Animated callback'ine bağlama — **bekçi zamanlayıcı** + `settledRef` kullan |
+| Arka plan sekmesinde `setTimeout` **≥1 sn'ye kısılır** | Zincirleme `setTimeout` ile sürülen animasyonlar (tarama) test ortamında çok yavaşlar — **uygulama bug'ı değildir** |
+| `setState(prev => …)` güncelleyicisinin İÇİNDE yan etki | Güncelleyici **saf** olmalı; StrictMode onu iki kez çalıştırır → çift toast/çift faz geçişi. Yeni değeri dışarıda hesapla |
+| Döngü değişkeni `t` çeviri fonksiyonunu gölgeliyor | Döngüde `item` kullan — aksi halde metinler sessizce çevrilmez |
+| Nadirlikle bıçak ayırt etmeye çalışma | Bıçaklar da `rarity.name === 'Covert'`! `category.name === 'Knives'` kullan |
+| Aynı 8 MB `crates.json`'ı her kategori için ayrı çekmek | `api.js` modül seviyesinde **önbellekler** — 4 çağrı = 1 indirme |
+| Mock fiyatta kademe içi sıralama anlamsız kalıyor | İsimden türeyen **deterministik** çarpan (asla `Math.random()`) |
+| Souvenir eşyasına normal skin fiyatı bulmak | Market adına **`Souvenir `** öneki ekle (StatTrak ile birlikte kullanılmaz) |
+| İç içe `ScrollView` (kabuk + ekran) sayfayı "yapıştırıyor" | Kabuk **sabit**; kaydırma yalnızca içerik alanında |
+| Arama `onBlur`'u tıklamayı yutuyor | `onBlur`'u ~180 ms **geciktir** |
+| `FlatList numColumns` değişince grid bozuluyor | `key={numCols}` ile listeyi yeniden monte et |
+
+---
+
+## 8. Çalıştırma
+
+```bash
+npm install
+npm run web      # tarayıcıda (birincil geliştirme hedefi)
+npm run android  # Android
+npm run ios      # iOS
+```
+
+---
+
+## 9. Değişiklik Günlüğü
+
+| Tarih | Değişiklik |
+|---|---|
+| 2026-08-26 | Charm havuzu, ROI simülasyonu, kasa sıralama, trade-up geçmişi eklendi |
+| 2026-08-26 | Rulet desync (ITEM_PITCH), 5x senkronizasyon, unboxing FX düzeltildi |
+| 2026-08-26 | `Alert.alert` kök nedeni bulundu → Toast/ConfirmModal sistemi kuruldu |
+| 2026-08-26 | Sıralı belirme + "Hemen Göster", ContentsModal, çoklu charm açma eklendi |
+| **2026-08-26** | **Float ağırlıklı dağılıma geçirildi (BS %55 → %16)** |
+| **2026-08-26** | **AK-47 Vulcan kaldırıldı → Limited Edition Item (Desert Eagle \| Heat Treated, 25⭐)** |
+| **2026-08-26** | **Covert → Bıçak özel trade-up tarifi eklendi** |
+| **2026-08-26** | **gacas.md / agents.md / cloud.md dokümantasyonu oluşturuldu** |
+| **2026-08-26** | **Ölü kod temizliği:** `TradeUp.js` + `TradeUpAnalyzer.js` silindi, `utils.js: getExpectedPrice` kaldırıldı |
+| **2026-08-26** | **Ağ katmanı merkezileştirildi:** inline `fetch`'ler `api.js` helper'larına taşındı (`fetchCollections`, `fetchSkins`) |
+| **2026-08-26** | **Satır içi içerik önizlemesi:** `InlineContentsPanel` — kasa/Armory açma ekranlarında "Aç" butonu altında oran+fiyat listesi |
+| **2026-08-26** | **Sticker kapsülleri eklendi** (100 adet, charm ile ortak kapsül mekaniği, 2⭐) |
+| **2026-08-26** | **Covert tarifi 10 → 5 eşyaya düşürüldü; kalan 5 yuva 🔒 kilitleniyor; ödül havuzuna eldivenler eklendi (670 öğe)** |
+| **2026-08-28** | **🎨 AÇIK TEMA'ya geçildi** — `src/theme.js` tasarım sistemi (buzul grisi zemin, açık mavi vurgu, yumuşak gölge, çerçevesiz kart); tüm ekranlar ve modallar yeniden renklendirildi |
+| **2026-08-28** | **Yeni ana sayfa hiyerarşisi** — üst-orta logo *Skin Simulator*, canlı arama, rezerve reklam alanı, yatay menü (`Trade Up · Cases · Terminals · Armory · Souvenirs · Stickers`) |
+| **2026-08-28** | **Canlı arama (live search)** — kutu adı **ve içeriği** üzerinde arama; `içinde: …` etiketi; sonuca tıklayınca doğru sekme + kutu açılır |
+| **2026-08-28** | **🖥️ Terminals sekmesi eklendi** — `TerminalOpening.js`: CRT ekran, glitch metin akışı, kübik yavaşlama, beyaz flaş + "DISPENSED". Terminal tespiti **dinamik** (Nemesis eklenince kendiliğinden çıkar) |
+| **2026-08-28** | **🏆 Souvenirs sekmesi eklendi** (150 paket) — kademe oranları paketin içeriğinden **dinamik** üretilir; StatTrak yok; market adına `Souvenir ` öneki |
+| **2026-08-28** | **🏷️ Stickers kendi sekmesine taşındı** — `CapsuleOpening.js`: titreme → yırtılma (zikzak) → iki yarının savrulması. Armory artık yalnızca gerçek Armory kataloğu |
+| **2026-08-28** | **Çarka sekme (bounce) efekti** — hedefin ötesine geçip yaylanarak oturuyor; "taş gibi donma" giderildi |
+| **2026-08-28** | **Nadirlik ışığı (rarity glow)** — kartın alt %10-15'inden yukarı sönümlenen CS2 drop efekti; çark şeridi dahil her sonuç yüzeyinde |
+| **2026-08-28** | **⚠️ Animasyon bekçisi** — rAF donduğunda (0 kare/sn) eşya artık **mutlaka** açıklanıyor; `settledRef` ile çifte ödül engellendi |
+| **2026-08-28** | **Hover'da 3B yükselen kart** (`HoverCard.js`, CSS transition — Animated değil) |
+| **2026-08-28** | **Performans:** `crates.json` (~8.3 MB) modül seviyesinde önbelleğe alındı — 4 kategori tek indirmeyle |
+| **2026-08-28** | **Kutu fiyatları dinamikleşti** (`getContainerPrice`) + mock fiyatlamaya isim tabanlı deterministik çarpan (kademe içi sıralama ve kart fiyat aralığı artık anlamlı) |
+| **2026-08-28** | **Responsive grid** (1→4 kolon) ve kompakt kabuk (kutu açıkken logo/reklam alanı gizlenir) |
+| **2026-08-28** | **🖥️ TERMİNAL YENİDEN YAPILANDIRILDI** — kasa mantığı kaldırıldı; **5 teklif kartı** (+%5 ihtimalle 6.), float/pattern/kredi fiyatı, gezinme + **Geç/Satın Al**. Kredi yalnızca satın almada düşer |
+| **2026-08-28** | **🌐 Çoklu dil desteği (i18n)** — varsayılan **EN**, globe ikonuyla anlık EN/TR geçişi; tüm metinler tek sözlükte |
+| **2026-08-28** | **⚖️ Sorumluluk reddi (Disclaimer)** footer'ı eklendi (EN/TR, açılış ekranlarında tek satıra iner) |
+| **2026-08-28** | **Trade-Up arayüzü:** "Ücretsiz Analiz Modu" kaldırıldı → **"Olası İhtimaller & Karlılık Oranı"**; sıfırlama butonu **girdi kutucuğunun sağ üst köşesine** taşındı; keskin hatlı modüler kutular |
+| **2026-08-28** | **Bug:** `skipOffer` içindeki yan etkiler `setState` güncelleyicisinden çıkarıldı (StrictMode'da çift tetikleniyordu) |
+| **2026-08-28** | **Daralan üst menü** — kaydırınca kabuk tek satıra iner; sticky eleman küçük `skinsimulator` yazısı. Histerezis (72/24 px) ile titreme önlendi. **+317 px liste alanı** |
+| **2026-08-28** | **Disclaimer:** kompaktlaştırıldı, **✕ kapatma** eklendi, `localStorage` ile kalıcı hâle getirildi (Altın Kural 6'ya onaylı istisna) |
+| **2026-08-28** | **Terminal ADIM ADIM akışa geçirildi:** 1/5 → 5/5 tek tek, geri dönüş yok, **son seçenekte Pas Geç devre dışı**, tam float + pattern + $ değer gösterimi |
+| **2026-08-28** | **Üst menü kaydırmaya bağlı (scroll-linked) animasyona geçirildi** — oransal opacity/scale/height; histerezis kaldırıldı. **Bug:** `onLayout` hiç ateşlenmiyordu, yükseklik ölçümü DOM `offsetHeight`'a taşındı |
+| **2026-08-28** | **Terminal para birimi kredi → DOLAR**; teklifler arası geçiş **anında** (animasyon kaldırıldı, 9–13 ms); büyük monospace **adım sayacı** eklendi |
+| **2026-08-28** | **📖 Rehber/Blog ekranı** — `BlogScreen.js` + `content/guide.js`; gerçek semantik HTML (`main/article/h1-h3/p/ul/nav/footer`), 6 bölüm, **EN + TR** tam çeviri |
+| **2026-08-28** | **Alt bilgi bağlantıları** (Gizlilik Politikası / İletişim / Hakkında) — AdSense incelemesi için |
+| **2026-08-28** | **Metin logo → saydam PNG görsel logo**; arka plan renklilik (chroma) maskesiyle kaldırıldı, harf içi boşluklar saydam korundu |
+| **2026-08-28** | **Başlık animasyonu yeniden yazıldı:** DOM sürücülü (React render yok), smoothstep easing, opaklık/mini marka kademeli. **Bug:** p=0'da uygulanan `height`+`overflow` logoyu ve arama listesini kırpıyordu → en üstte artık hiç stil yazılmıyor |
+| **2026-08-28** | **Bug:** rAF ile scroll toplama geri alındı — donmuş sekmede başlık yarıda kilitleniyordu; boyama senkron yapıldı |
+| **2026-08-28** | **Terminal görsel bütünlüğü:** cihaz tüm aşamalarda ekranda kalıyor; eşya paneli beyaz karttan CRT diline (koyu zemin, mint monospace, nadirlik kenarı) taşındı |
+| **2026-08-28** | **Trade-Up:** ücretsizlik yapısal hâle getirildi (`gameMode` prop'u kaldırıldı), `Toplam Maliyet` → **`Girdi Değeri`** (nötr renk) + "ücretsiz simülatör" rozeti |
+| **2026-08-27** | **Çark hizalama düzeltildi:** konteyner genişliği `onLayout` ile ölçülüyor + jitter kaldırıldı → sapma **27.5px → 0px** |
+| **2026-08-27** | **Kuyruk (trailing) düzeltmesi:** hem tekli hem 5x çarkta kazananın sağında dolgu item'ları akıyor |
+| **2026-08-27** | **İçerik önizlemesi en değerliden en değersize sıralandı** (Sarı → Kırmızı → Pembe → Mor → Koyu Mavi → Açık Mavi) |
+| **2026-08-27** | **BUG: `contains_rare` keşfedildi** — bıçaklar kasadan hiç çıkmıyordu, EV'ye de katılmıyordu; çekiliş/EV/simülasyon/önizleme düzeltildi |
+| **2026-08-27** | **Envanter geliştirildi:** 5 sıralama modu, çoklu seçim + toplu satış, eşya inceleme modalı (pattern seed dahil) |
+| **2026-08-27** | **Trade-Up bakiyeden ayrıldı** — ücretsiz analiz aracı oldu |
+| **2026-08-27** | **ROI Simülasyonu kaldırıldı** (UI + `prices.js` motoru) |
+| **2026-08-27** | **İçerik önizlemesi:** "Tüm Eşyalar" galerisi kaldırıldı; bıçaklar en üstte 10 gösterilip "Daha Fazla Bıçak Göster" ile açılıyor |
+| **2026-08-27** | **Çark temposu yavaşlatıldı** (7200ms tekli / 4200ms mini) + yavaşlama eğrisi eklendi |
+| **2026-08-27** | **Çark göstergesi kutudan OK'a çevrildi** (CS tarzı, üst-orta) + tempo 8600/5200ms'ye çıkarıldı |
+| **2026-08-27** | **Envanterde hover ile hızlı satış** + onay modalı eklendi |
+| **2026-08-27** | **Sınırsız Mod satış yönlendirmesi** — 3 seçenekli modal ve ayrı `sandboxEarnings` sanal bakiyesi |

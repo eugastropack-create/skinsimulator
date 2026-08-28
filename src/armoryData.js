@@ -27,6 +27,14 @@ export const ACTIVE_ARMORY_COLLECTION_NAMES = [
   'arabesque'
 ];
 
+// CHARM (NAZARLIK) HAVUZU: ByMykel'in keychains.json'ı zaten yalnızca güncel/
+// aktif charm kapsüllerini içeriyor (Missing Link, Missing Link Community,
+// Small Arms, Dr Boom — toplam 78 charm, 4 kapsül). Bu yüzden weapon
+// koleksiyonlarındaki gibi isim filtrelemeye gerek yok; App.js hepsini
+// olduğu gibi Armory'ye ekliyor (bkz. src/prices.js calculateCharmStats).
+// Kapsül fiyatı gerçek oyunla birebir: 3 yıldız ≈ $1.20 (weapon koleksiyonu
+// 4 yıldız ≈ $1.60'tan farklı — Valve charm kapsüllerini daha ucuza satıyor).
+
 // NOT: Fever Case de aktif bir Armory ödülü ama mekaniği FARKLI — koleksiyon
 // gibi doğrudan bir silah skini vermiyor, KAPALI BİR KASA veriyor (gerçek
 // oyunda bu kasa daha sonra normal şekilde anahtarla açılıyor). Mevcut
