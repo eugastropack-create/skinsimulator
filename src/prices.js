@@ -3,16 +3,39 @@ import { getWearFromFloat, generateMockPrice, generateFloat } from './utils';
 // ============================================================
 // CANLI FİYAT KAYNAĞI
 // ============================================================
-// Ücretsiz, API anahtarı gerektirmeyen topluluk kaynağı (Steam Market
-// verilerini agregatlıyor). Bu kaynağa ulaşılamazsa (ağ hatası, CORS,
-// format değişikliği vb.) uygulama OTOMATİK olarak simüle edilmiş
-// fiyatlandırmaya (generateMockPrice) geri döner — site asla kırılmaz.
+// Kaynak: ByMykel/counter-strike-price-tracker — Steam Community Market'ten
+// toplanan gerçek satış fiyatları.
 //
-// NOT: Bu kaynağın şu an canlı olup olmadığını sizin tarafınızda test
-// etmeniz gerekiyor (npm run web sonrası tarayıcı konsolunu kontrol edin).
-// Eğer çalışmazsa LIVE_PRICE_URL'i başka bir ücretsiz kaynakla
-// değiştirmek tek satırlık bir değişiklik.
-const LIVE_PRICE_URL = 'https://prices.csgotrader.app/latest/prices_v6.json';
+// ⚠️ NEDEN BU KAYNAK (eski kaynak ÖLDÜ):
+// Önceki adres `prices.csgotrader.app/latest/prices_v6.json` idi. O uç nokta
+// artık JSON DÖNDÜRMÜYOR — 301 ile bir HTML sayfasına yönleniyor
+// (doğrulandı: 28 Ağu 2026). Yani sorun sanıldığı gibi yalnızca CORS değildi,
+// adresin kendisi taşınmıştı; hangi sunucuda yayınlanırsa yayınlansın çalışmazdı.
+//
+// Yeni kaynağın üç kritik avantajı var:
+//   1. CORS AÇIK — `Access-Control-Allow-Origin: *` (doğrulandı). Tarayıcıdan
+//      doğrudan çekilebiliyor; proxy/Worker GEREKMİYOR.
+//   2. İSİMLER BİREBİR UYUYOR — oyun verisiyle (ByMykel/CSGO-API) aynı
+//      geliştiriciden geldiği için anahtarlar tam olarak bizim aradığımız
+//      `market_hash_name` biçiminde: "AK-47 | Redline (Field-Tested)",
+//      "StatTrak™ ...", "Souvenir ...", "Chroma Case", "Sealed Genesis Terminal".
+//      Eski kaynakta isim eşleştirme için ek dönüşüm gerekiyordu.
+//   3. Boyut 1.6 MB (kasa verisinin ~beşte biri).
+//
+// ⚠️ TAZELİK SINIRI — DÜRÜST BEKLENTİ:
+// Bu bir CANLI TİCKER DEĞİLDİR. Toplayıcı Steam'in hız sınırları yüzünden
+// 34.500 eşyayı sayfa sayfa geziyor ve haftada bir tam tur atıyor
+// (workflow 4 saatte bir tetikleniyor ama betik o hafta zaten güncellendiyse
+// atlıyor). Pratikte veri birkaç günlük ile birkaç haftalık arasında olabilir.
+// Gerçek piyasa fiyatlarıdır ama ANLIK değildir.
+const LIVE_PRICE_URL =
+  'https://raw.githubusercontent.com/ByMykel/counter-strike-price-tracker/main/static/latest.json';
+
+// ⚠️ BİRİM: Kaynak fiyatları CENT olarak verir (toplayıcı betikte doğrudan
+// Steam'in `sell_price` alanını yazıyor; ör. 4210 = $42.10). Uygulamanın her
+// yeri DOLAR beklediği için burada 100'e bölüyoruz. Bu bölmeyi kaldırmak tüm
+// fiyatları 100 KAT şişirir.
+const CENTS_TO_USD = 100;
 
 export const fetchLivePrices = async () => {
   try {
@@ -20,26 +43,33 @@ export const fetchLivePrices = async () => {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const raw = await res.json();
 
-    const normalized = {};
-    Object.keys(raw).forEach(key => {
-      const entry = raw[key];
-      let price = null;
-      if (typeof entry === 'number') price = entry;
-      else if (entry?.steam?.last_24h != null) price = entry.steam.last_24h;
-      else if (entry?.steam?.last_7d != null) price = entry.steam.last_7d;
-      else if (typeof entry?.steam === 'number') price = entry.steam;
-      else if (entry?.steam_price != null) price = entry.steam_price;
-      else if (entry?.price != null) price = entry.price;
+    // Dosya yapısı: { metadata: {...}, prices: { "<market_hash_name>": <cent> } }
+    // Yapı ileride düzleşirse diye her iki biçimi de kabul ediyoruz.
+    const table = raw?.prices && typeof raw.prices === 'object' ? raw.prices : raw;
 
-      if (typeof price === 'number' && price > 0) normalized[key] = price;
+    const normalized = {};
+    Object.keys(table).forEach(key => {
+      const cents = table[key];
+      // Bazı anahtarlar iç isimlerdir (#CSGO_crate_...) — onları da alıyoruz,
+      // zararsızlar: uygulama yalnızca market_hash_name ile sorgu yapıyor.
+      if (typeof cents === 'number' && cents > 0) {
+        normalized[key] = cents / CENTS_TO_USD;
+      }
     });
 
     if (Object.keys(normalized).length === 0) throw new Error('Beklenmeyen veri formatı (0 eşya bulundu)');
-    console.log(`✅ Canlı fiyat verisi yüklendi: ${Object.keys(normalized).length} eşya`);
+
+    const updatedAt = raw?.metadata?.updated_at;
+    console.log(
+      `✅ Canlı fiyat verisi yüklendi: ${Object.keys(normalized).length} eşya` +
+      (updatedAt ? ` (kaynak güncelleme: ${new Date(updatedAt).toLocaleDateString()})` : '')
+    );
     return normalized;
   } catch (e) {
+    // Kaynak erişilemezse uygulama KIRILMAZ; her yerde simüle fiyata düşer ve
+    // logonun altında "🟡 Simüle fiyatlar" rozeti görünür.
     console.log('⚠️ Canlı fiyat verisi çekilemedi, simüle fiyatlandırmaya geçildi:', e.message);
-    return null; // null = "canlı veri yok, her yerde mock'a düş"
+    return null;
   }
 };
 
@@ -52,24 +82,58 @@ export const fetchLivePrices = async () => {
 // Souvenir'de StatTrak YOKTUR; iki önek aynı anda kullanılamaz.
 export const buildMarketHashName = (item, wear, isStatTrak = false, isSouvenir = false) => {
   if (!item?.name) return null;
-  const hasWear = item.min_float !== undefined && item.min_float !== null;
-  const prefix = isSouvenir ? 'Souvenir ' : isStatTrak ? 'StatTrak™ ' : '';
-  return hasWear && wear ? `${prefix}${item.name} (${wear})` : `${prefix}${item.name}`;
+  const prefix = isSouvenir ? 'Souvenir ' : isStatTrak ? 'StatTrak\u2122 ' : '';
+  return wear ? `${prefix}${item.name} (${wear})` : `${prefix}${item.name}`;
+};
+
+// ============================================================
+// CANLI FİYAT ARAMA — birden fazla isim biçimini dener
+// ============================================================
+// ⚠️ BU FONKSİYONUN VAR OLMA SEBEBİ (sessiz bir hataydı):
+// `buildMarketHashName` eskiden aşınma ekini `item.min_float` alanının VARLIĞINA
+// bakarak koyuyordu. Ama kasa/koleksiyon İÇERİĞİNDEKİ eşyalarda bu alan YOKTUR
+// — `crates.json` yalnızca `id, name, rarity, paint_index, image` taşır
+// (doğrulandı). Sonuç: aşınma eki hiç eklenmiyor, "AK-47 | Redline" gibi ÇIPLAK
+// bir isim üretiliyordu. Canlı fiyat tablosunda ise anahtarlar SADECE aşınma
+// ekiyle bulunur ("AK-47 | Redline (Field-Tested)" ✓ / "AK-47 | Redline" ✗).
+//
+// Yani rozet "🟢 Canlı Fiyatlar" derken EV, ROI ve düşen eşya fiyatları
+// SESSİZCE mock değerlerden geliyordu. Hata görünmüyordu çünkü mock her zaman
+// makul bir sayı üretir.
+//
+// Çözüm: tahmin etmeyi bırakıp SIRAYLA denemek. İlk tutan kazanır:
+//   1. `market_hash_name`     → kutular (kasa/kapsül/terminal) bu alanı taşır
+//   2. önek + ad + (aşınma)   → normal silah skinleri
+//   3. önek + ad              → aşınması OLMAYAN eşyalar (sticker, charm, agent)
+// Hiçbiri tutmazsa `null` döner ve çağıran mock'a düşer.
+const lookupLivePrice = (priceMap, item, wear, isStatTrak, isSouvenir) => {
+  if (!priceMap || !item) return null;
+
+  const tryKey = (k) => {
+    if (!k) return null;
+    const v = priceMap[k];
+    return (typeof v === 'number' && v > 0) ? v : null;
+  };
+
+  return (
+    tryKey(item.market_hash_name) ??
+    tryKey(buildMarketHashName(item, wear, isStatTrak, isSouvenir)) ??
+    tryKey(buildMarketHashName(item, null, isStatTrak, isSouvenir))
+  );
 };
 
 // Ana fiyat çözümleyici: önce canlı fiyata bakar, bulamazsa simülasyona düşer
 export const getRealisticPrice = (priceMap, item, floatVal, isStatTrak, rarityNameFallback, isSouvenir = false) => {
   const wear = getWearFromFloat(floatVal);
   if (priceMap) {
-    const hashName = buildMarketHashName(item, wear, isStatTrak, isSouvenir);
-    let live = hashName ? priceMap[hashName] : null;
-    // Souvenir varyantı piyasada listelenmemiş olabilir (ender eşyalar) —
-    // bu durumda normal varyanta düş, hiç fiyatsız kalmaktan iyidir.
-    if (isSouvenir && !(typeof live === 'number' && live > 0)) {
-      const plain = buildMarketHashName(item, wear, false, false);
-      live = plain ? priceMap[plain] : null;
+    let live = lookupLivePrice(priceMap, item, wear, isStatTrak, isSouvenir);
+
+    // Souvenir/StatTrak varyantı piyasada listelenmemiş olabilir (ender eşyalar);
+    // o durumda normal varyanta düş — hiç fiyatsız kalmaktan iyidir.
+    if (live == null && (isSouvenir || isStatTrak)) {
+      live = lookupLivePrice(priceMap, item, wear, false, false);
     }
-    if (typeof live === 'number' && live > 0) return parseFloat(live.toFixed(2));
+    if (live != null) return parseFloat(live.toFixed(2));
   }
   const mock = generateMockPrice(rarityNameFallback ?? item?.rarity?.name, floatVal, isStatTrak);
   // Simüle fiyatlamada souvenir primi: gerçek piyasada souvenir varyantları
@@ -413,10 +477,12 @@ const deterministicItemFactor = (name = '') => {
 
 // Sıralama için kullanılacak deterministik değer.
 export const getStableSortValue = (priceMap, item, rarityFallback) => {
-  if (priceMap && item?.market_hash_name) {
-    const live = priceMap[item.market_hash_name];
-    if (typeof live === 'number' && live > 0) return live;
-  }
+  // Sıralama/aralık için de CANLI fiyat kullanılır. Referans aşınma olarak
+  // Field-Tested alınır: en yaygın band olduğu için hemen her eşyada listeleme
+  // bulunur ve kademe içi sıralamaya tutarlı bir taban verir.
+  // (Burada rastgelelik YOK — fonksiyonun deterministik olması şart.)
+  const live = lookupLivePrice(priceMap, item, 'Field-Tested', false, false);
+  if (live != null) return live;
   const isKnifeOrGlove = item?.category?.name === 'Knives' || item?.category?.name === 'Gloves' || /^★/.test(item?.name || '');
   const base = MOCK_BASE_BY_RARITY(rarityFallback ?? item?.rarity?.name);
   // Bıçak/eldivenlerde tip×kaplama tablosu zaten ayrıştırıcı bir değer

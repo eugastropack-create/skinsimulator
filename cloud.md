@@ -85,37 +85,50 @@ Bu yüzden **hardcoded isim listesi yok**; iki sinyalden biri yeterli:
 **Hata davranışı:** Her helper `try/catch` ile sarılıdır; hata durumunda **boş dizi**
 döner ve uygulama çökmez (ekranlar boş görünür ama çalışmaya devam eder).
 
-### 2.2 CSGOTrader Fiyat Verisi
-`https://prices.csgotrader.app/latest/prices_v6.json` — `src/prices.js` → `fetchLivePrices()`
+### 2.2 Fiyat Verisi — ByMykel/counter-strike-price-tracker
 
-> ### ⚠️ CORS — Bilinmesi Gereken En Önemli Nokta
-> Bu servis `Access-Control-Allow-Origin` başlığı **göndermez**. Bu yüzden
-> **tarayıcıda çalışırken istek her zaman engellenir** ve konsolda şu görünür:
-> ```
-> Access to fetch at 'https://prices.csgotrader.app/...' has been blocked by CORS policy
-> ```
-> **Bu bir bug DEĞİLDİR ve düzeltilmesi gerekmez.** Uygulama bunu bekler:
-> `fetchLivePrices()` `null` döner → tüm ekranlar `generateMockPrice()` ile
-> simüle fiyatlandırmaya düşer → header'da `🟡 Simüle Fiyatlar` rozeti görünür.
->
-> Canlı fiyat **gerçekten** isteniyorsa seçenekler:
-> 1. **Native'de çalıştır** (iOS/Android) — CORS yalnızca tarayıcı kısıtıdır, orada çalışır.
-> 2. **CORS proxy** kullan (üçüncü tarafa güven gerektirir).
-> 3. **Kendi proxy'ni yaz** — bu, projeye ilk backend'i eklemek demektir (§5).
->
-> `src/prices.js` içindeki `LIVE_PRICE_URL` **tek satırlık** bir değişikliktir.
+```
+https://raw.githubusercontent.com/ByMykel/counter-strike-price-tracker/main/static/latest.json
+```
 
-#### Fiyat tablosunun kapsamı
-Canlı fiyat haritası yalnızca **skinleri** değil, **kutuların kendisini** de
-kapsar: `crates.json`'da kutuların `price` alanı **yoktur**, ama
-`market_hash_name`'leri (*"Chroma Case"*, *"Sticker Capsule"*) fiyat tablosunda
-geçer. Bu yüzden kasa/kapsül/souvenir/terminal fiyatları da **dinamiktir**
-(`prices.getContainerPrice`). Canlı veri yoksa türe göre gerçekçi bir tabana
-düşülür: kasa `$0.50` · sticker `$1.00` · terminal `$2.00` · souvenir `$2.50`.
+`src/prices.js` → `fetchLivePrices()` · **1.6 MB** · 34.500 eşya
 
-Souvenir eşyaları piyasada **ayrı** isimle listelenir
-(`Souvenir AWP | Dragon Lore (Factory New)`), bu yüzden fiyat araması `Souvenir `
-önekiyle yapılır; bulunamazsa normal varyanta düşer.
+#### ⚠️ ESKİ KAYNAK ÖLDÜ (28 Ağu 2026)
+Önceki adres `prices.csgotrader.app/latest/prices_v6.json` idi ve uzun süre
+"CORS engelliyor" diye biliniyordu. Doğrulama sonucu asıl sebep bu değildi:
+
+```
+status=301  redirect=https://csgotrader.app/prices/   (JSON değil, HTML)
+```
+
+Uç nokta **taşınmıştı**. Yani hangi sunucuda yayınlanırsa yayınlansın —
+localhost, Cloudflare, herhangi bir yer — çalışması mümkün değildi. Bir CORS
+proxy'si de bu sorunu çözmezdi.
+
+#### Yeni kaynağın avantajları
+| Özellik | Değer |
+|---|---|
+| CORS | `Access-Control-Allow-Origin: *` — **proxy/Worker GEREKMİYOR** |
+| İsim biçimi | Oyun verisiyle **aynı geliştirici** → anahtarlar birebir `market_hash_name` |
+| Kapsam | 34.500 eşya · 17.626 aşınmalı anahtar · 3.370 ★ (bıçak/eldiven) |
+| Boyut | 1.6 MB (kasa verisinin ~beşte biri) |
+
+Kapsam kasaları, kapsülleri, terminalleri, `StatTrak™` ve `Souvenir`
+varyantlarını içerir.
+
+#### ⚠️ BİRİM: CENT
+Kaynak, Steam'in `sell_price` alanını **cent** olarak yazar (toplayıcı betikte
+değişkenin adı bile `cents`). Ör. `4210` = **$42.10**. `prices.js` içindeki
+`/100` bölmesini kaldırmak tüm fiyatları **100 kat** şişirir.
+
+#### ⚠️ TAZELİK: CANLI DEĞİL, HAFTALIK
+Bu bir anlık ticker **değildir**. Toplayıcı, Steam'in hız sınırları yüzünden
+34.500 eşyayı sayfa sayfa geziyor; workflow 4 saatte bir tetiklense de betik o
+hafta zaten güncellenmişse **atlıyor**. Pratikte veri birkaç günlük ile birkaç
+haftalık arasında olabilir. Gerçek piyasa fiyatlarıdır ama **anlık değildir**.
+
+Kaynak erişilemezse uygulama kırılmaz: her yerde simüle fiyata düşer ve logonun
+altında `🟡 Simüle fiyatlar` rozeti görünür.
 
 ---
 
@@ -144,7 +157,7 @@ sticker listelerinin **hepsi** buradan gelir, tek indirmeyle — bkz. §2.1).
 ### Beklenen (Zararsız) Uyarılar
 | Uyarı | Durum |
 |---|---|
-| `CORS ... prices.csgotrader.app` | ✅ Tasarım gereği |
+| ~~`CORS ... prices.csgotrader.app`~~ | ❌ ARTIK GÖRÜNMEMELİ — kaynak değişti (§2.2). Görüyorsanız eski sürümdesiniz |
 | `"shadow*" style props are deprecated` | ✅ RN-web sürüm uyarısı |
 | `props.pointerEvents is deprecated` | ✅ RN-web sürüm uyarısı |
 | `useNativeDriver ... native animated module is missing` | ✅ Web'de normal |
@@ -279,4 +292,5 @@ Site, reklam ağı incelemesinden geçebilmesi için şunlarla donatıldı:
 | **2026-08-28** | **Dış servis değişikliği YOK:** i18n, terminal teklif mekaniği ve disclaimer tamamen istemci tarafıdır (yeni uç nokta/anahtar gerekmez) |
 | **2026-08-28** | **Yasal bilgilendirme bölümü (§5.5)** eklendi — gerçek para akışı bulunmadığı belgelendi |
 | **2026-08-28** | **§5.6 Tarayıcı depolaması** eklendi — tek kalıcı anahtar (`skinsim.disclaimerDismissed`); sunucuya veri gitmiyor |
+| **2026-08-28** | **Fiyat kaynağı değişti** — `prices.csgotrader.app` ölü (301→HTML); yerine ByMykel price-tracker. CORS açık, proxy gerekmiyor; birim **cent**, tazelik haftalık |
 | **2026-08-28** | **§5.7 AdSense hazırlığı** — semantik rehber içeriği (EN+TR), Gizlilik/İletişim bölümleri, alt bilgi bağlantıları. Reklam script'i henüz eklenmedi |

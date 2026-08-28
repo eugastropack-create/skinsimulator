@@ -121,7 +121,7 @@ tek satır değişiklik yapmadan listede belirir.
 | Sticker | `.../crates.json` (`type='Sticker Capsule'`) | 100 sticker kapsülü |
 | **Souvenir** | `.../crates.json` (`type='Souvenir'`) | **150 hatıra paketi** |
 | **Terminal** | `.../crates.json` (dinamik tespit) | **Armory terminalleri** |
-| Canlı fiyat | `prices.csgotrader.app/latest/prices_v6.json` | Steam piyasa fiyatları |
+| Canlı fiyat | `ByMykel/counter-strike-price-tracker .../static/latest.json` | Steam piyasa fiyatları (**cent**, haftalık) |
 
 > `Souvenir Highlight` (14 adet) **bilerek** dışarıda bırakıldı: skin değil, maç
 > highlight'larına ait koleksiyon parçaları — açılış mekaniğine uymuyorlar.
@@ -129,6 +129,32 @@ tek satır değişiklik yapmadan listede belirir.
 ### Fiyat Yedekleme (Fallback) Zinciri
 1. **Canlı fiyat** — `priceMap[market_hash_name]` bulunursa kullanılır.
 2. **Mock fiyat** — `generateMockPrice(rarity, float, isStatTrak)` ile üretilir.
+
+#### ⚠️ İSİM EŞLEŞTİRME — sessiz mock'a düşme hatası (28 Ağu 2026)
+Canlı fiyat tablosunda anahtarlar **yalnızca aşınma ekiyle** bulunur:
+`"AK-47 | Redline (Field-Tested)"` ✓ · `"AK-47 | Redline"` ✗ (doğrulandı).
+
+`buildMarketHashName` ise aşınma ekini `item.min_float` alanının **varlığına**
+bakarak koyuyordu. Ama kasa/koleksiyon **içeriğindeki** eşyalarda bu alan
+**yoktur** — `crates.json` yalnızca `id, name, rarity, paint_index, image`
+taşır. Sonuç: çıplak isim üretiliyor, tabloda bulunamıyor ve **sessizce** mock
+fiyata düşülüyordu.
+
+Bu hata görünmüyordu çünkü mock her zaman makul bir sayı üretir. Rozet
+`🟢 Canlı Fiyatlar` derken **EV, ROI ve düşen eşya fiyatları hâlâ simüleydi**.
+
+**Çözüm** — tahmin etmeyi bırakıp sırayla denemek (`lookupLivePrice`):
+1. `market_hash_name` → kutular (kasa/kapsül/terminal) bu alanı taşır
+2. önek + ad + `(aşınma)` → normal silah skinleri
+3. önek + ad → aşınması olmayan eşyalar (sticker, charm, agent)
+
+> **Ölçüm (düzeltme sonrası):** Recoil Case içeriği **17/17**, nadir kademe
+> **24/24**; Fracture Case 48/52; Kilowatt Case 12/13 eşleşiyor.
+> Düzeltme öncesi bu oran **0/17** idi.
+>
+> **Etkisi:** Recoil Case ROI **%138 → %42.9**. Yani mock fiyatlar ROI'yi
+> %100'ün üstüne şişirerek simülatörün asıl anlattığı şeyi — kasa açmanın
+> ortalamada zarar ettirdiğini — TERSİNE çeviriyordu.
 
 #### Kutunun KENDİ fiyatı (`getContainerPrice`)
 `crates.json`'da kutuların fiyat alanı **yoktur** (doğrulandı: hiçbir kayıtta
@@ -158,9 +184,11 @@ için normal skinin fiyatı bulunur ve değer ciddi biçimde yanlış hesaplanı
 varyantı piyasada listelenmemişse normal varyanta düşer. **Souvenir'de StatTrak
 yoktur** — iki önek asla birlikte kullanılmaz.
 
-> Canlı fiyat kaynağı tarayıcıda **CORS** ile engellenir. Bu **beklenen** bir durumdur;
-> uygulama otomatik olarak simüle fiyatlandırmaya düşer ve header'da
-> `🟡 Simüle Fiyatlar` rozeti gösterilir. Konsoldaki CORS hatası bir bug değildir.
+> **GÜNCELLEME (28 Ağu 2026):** Eski kaynak (`prices.csgotrader.app`) artık JSON
+> döndürmüyor — 301 ile HTML sayfasına yönleniyor. Uzun süre "CORS engelliyor"
+> sanılan sorunun asıl sebebi buydu; uç nokta taşınmıştı. Yeni kaynak
+> (ByMykel price-tracker) **CORS açık** yayınlıyor, dolayısıyla tarayıcıdan
+> doğrudan çekiliyor ve **proxy/Worker gerekmiyor**. Fiyatlar artık canlı.
 
 ---
 
@@ -939,6 +967,8 @@ npm run ios      # iOS
 | **2026-08-28** | **Başlık animasyonu yeniden yazıldı:** DOM sürücülü (React render yok), smoothstep easing, opaklık/mini marka kademeli. **Bug:** p=0'da uygulanan `height`+`overflow` logoyu ve arama listesini kırpıyordu → en üstte artık hiç stil yazılmıyor |
 | **2026-08-28** | **Bug:** rAF ile scroll toplama geri alındı — donmuş sekmede başlık yarıda kilitleniyordu; boyama senkron yapıldı |
 | **2026-08-28** | **Terminal görsel bütünlüğü:** cihaz tüm aşamalarda ekranda kalıyor; eşya paneli beyaz karttan CRT diline (koyu zemin, mint monospace, nadirlik kenarı) taşındı |
+| **2026-08-28** | **Fiyatlar canlıya bağlandı:** ölü kaynak (301→HTML) yerine ByMykel price-tracker; CORS açık, cent→dolar dönüşümü |
+| **2026-08-28** | **Bug (kritik):** `min_float` yokluğu yüzünden eşya isimleri aşınma eki almıyor, tüm eşya fiyatları sessizce mock'a düşüyordu. `lookupLivePrice` ile giderildi — eşleşme 0/17 → 17/17, ROI %138 → %42.9 (gerçekçi) |
 | **2026-08-28** | **Trade-Up:** ücretsizlik yapısal hâle getirildi (`gameMode` prop'u kaldırıldı), `Toplam Maliyet` → **`Girdi Değeri`** (nötr renk) + "ücretsiz simülatör" rozeti |
 | **2026-08-27** | **Çark hizalama düzeltildi:** konteyner genişliği `onLayout` ile ölçülüyor + jitter kaldırıldı → sapma **27.5px → 0px** |
 | **2026-08-27** | **Kuyruk (trailing) düzeltmesi:** hem tekli hem 5x çarkta kazananın sağında dolgu item'ları akıyor |

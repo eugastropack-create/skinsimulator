@@ -189,6 +189,8 @@ Bu durumda:
 | Aynı `crates.json` 4 kez iniyor | `api.js` modül seviyesinde önbellekler |
 | Mock fiyatta kademe içi sıralama anlamsız | İsimden türeyen deterministik çarpan (asla `Math.random()`) |
 | Souvenir'e normal skin fiyatı buluyor | Market adına `Souvenir ` öneki ekle |
+| **Canlı fiyat bulunamıyor ama hata yok** | Tablo anahtarları aşınma EKLİDİR (`... (Field-Tested)`). Kasa içeriğinde `min_float` YOK — isim üretimini bu alana bağlama, `lookupLivePrice` gibi SIRAYLA dene |
+| Fiyat kaynağının birimi | ByMykel tablosu **CENT** verir — `/100` bölmesini kaldırma |
 
 ---
 
@@ -239,4 +241,5 @@ Bu durumda:
 | **2026-08-28** | **Başlık animasyonu DOM sürücülü + easing'li**; p=0 kırpma hatası giderildi; rAF geri alındı |
 | **2026-08-28** | **Terminal görsel bütünlüğü** (cihaz hiç sökülmez, panel CRT dilinde) |
 | **2026-08-28** | **Trade-Up ücretsizliği yapısal hâle getirildi** + etiket/renk düzeltmesi |
+| **2026-08-28** | **Fiyat kaynağı ByMykel price-tracker'a taşındı** (eskisi ölmüştü); isim eşleştirme hatası giderildi — EV/ROI artık gerçekten canlı |
 | **2026-08-28** | **Saydam logo görseli** metin logonun yerini aldı (chroma maskesi; flood-fill bilerek kullanılmadı) |
