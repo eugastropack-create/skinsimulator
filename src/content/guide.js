@@ -16,13 +16,17 @@
 //   { type: 'h3', text }      -> <h3>
 //   { type: 'ul', items: [] } -> <ul><li>…</li></ul>
 
+// ⚠️ EMOJİ KALDIRILDI: bölüm simgeleri artık `src/components/Icons.js`
+// içindeki monokrom çizgi ikonlarına işaret eden ANAHTARLARdir (bkz.
+// BlogScreen.js → SECTION_ICONS). Emoji her platformda farklı çizildiği ve
+// renklendirilemediği için arayüzün geri kalanıyla uyuşmuyordu.
 export const GUIDE_SECTIONS = [
-  { id: 'about',    icon: '👋' },
-  { id: 'features', icon: '🎮' },
-  { id: 'items',    icon: '💎' },
-  { id: 'tradeup',  icon: '🔄' },
-  { id: 'privacy',  icon: '🔒' },
-  { id: 'contact',  icon: '✉️' }
+  { id: 'about',    icon: 'book' },
+  { id: 'features', icon: 'list' },
+  { id: 'items',    icon: 'gem' },
+  { id: 'tradeup',  icon: 'refresh' },
+  { id: 'privacy',  icon: 'lock' },
+  { id: 'contact',  icon: 'globe' }
 ];
 
 export const GUIDE = {
@@ -91,16 +95,19 @@ export const GUIDE = {
           'item, a terminal scans and then presents you with a sequence of offers, one at ' +
           'a time. For each offer you either claim it — paying its price in dollars and ' +
           'ending the session — or skip to the next one. Skipped offers cannot be ' +
-          'recovered, and the final offer cannot be skipped, so the last decision is ' +
-          'always claim or nothing. Occasionally a rare bonus slot appears, giving you one ' +
-          'extra offer to choose from.' },
+          'recovered. On the final offer you can either claim it or close the terminal ' +
+          'without buying anything — you are never forced to take an item, and running the ' +
+          'terminal again costs nothing. Roughly 5% of sessions unlock a rare bonus slot, ' +
+          'giving you a sixth offer to choose from.' },
         { type: 'h3', text: 'Armory' },
         { type: 'p', text:
           'The Armory tab spends credits (stars) rather than dollars. Credits come from ' +
           'the Armory Pass, which converts $16.00 into 40 credits. Here you can draw from ' +
           'active weapon collections, open charm capsules, or mint the guaranteed Limited ' +
-          'Edition Item. Collection draws use a much flatter curve than cases, with ' +
-          'Covert items appearing only 0.06% of the time.' },
+          'Edition Item. Collection draws use the same 1-in-5 rarity ladder as cases, but ' +
+          'applied only to the tiers a collection actually contains. Most Armory collections ' +
+          'start at Industrial Grade, so the odds work out to roughly Industrial 80.03%, ' +
+          'Mil-Spec 16.01%, Restricted 3.20%, Classified 0.64% and Covert 0.13%.' },
         { type: 'h3', text: 'Souvenirs' },
         { type: 'p', text:
           'Souvenir packages come from real tournament drops. They contain no knives and ' +
@@ -368,16 +375,21 @@ export const GUIDE = {
           'yerine terminal önce tarama yapar, sonra size teklifleri tek tek sunar. Her ' +
           'teklif için ya onu alırsınız — dolar cinsinden fiyatını ödeyip oturumu ' +
           'bitirirsiniz — ya da bir sonrakine geçersiniz. Pas geçilen tekliflere geri ' +
-          'dönülemez ve son teklif pas geçilemez; yani son karar her zaman "al ya da ' +
-          'hiçbir şey"dir. Ara sıra nadir bir bonus slot açılır ve size fazladan bir ' +
-          'teklif hakkı verir.' },
+          'dönülemez. Son teklifte ise ister alırsınız, ister hiçbir şey ödemeden ' +
+          'terminali kapatırsınız — eşya almaya ASLA zorlanmazsınız ve terminali tekrar ' +
+          'çalıştırmak ücretsizdir. Oturumların yaklaşık %5’inde nadir bir bonus slot ' +
+          'açılır ve altıncı bir teklif sunulur.' },
         { type: 'h3', text: 'Armory (Cephanelik)' },
         { type: 'p', text:
           'Armory sekmesi dolar yerine kredi (yıldız) harcar. Krediler, 16,00 $’ı 40 ' +
           'krediye çeviren Armory Pass’ten gelir. Burada aktif silah koleksiyonlarından ' +
           'çekiliş yapabilir, charm kapsülleri açabilir veya garantili Limited Edition ' +
           'eşyayı basabilirsiniz. Koleksiyon çekilişleri kasalardan çok daha yatık bir ' +
-          'eğri kullanır; Covert eşyalar yalnızca %0,06 oranında çıkar.' },
+          'eğriyi kullanır: kasalarla aynı "her kademe bir öncekinin 1/5’i" merdiveni, ' +
+          'ama yalnızca koleksiyonda GERÇEKTEN bulunan kademelere uygulanır. Armory ' +
+          'koleksiyonlarının çoğu Industrial Grade ile başladığı için oranlar şöyle çıkar: ' +
+          'Industrial %80,03 · Mil-Spec %16,01 · Restricted %3,20 · Classified %0,64 · ' +
+          'Covert %0,13.' },
         { type: 'h3', text: 'Hatıra (Souvenir) Paketleri' },
         { type: 'p', text:
           'Hatıra paketleri gerçek turnuva düşüşlerinden gelir. İçlerinde bıçak ve ' +

@@ -1,8 +1,9 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { StyleSheet, Text, View, Image, TouchableOpacity, SafeAreaView, ScrollView } from 'react-native';
 import { formatSignedMoney } from './utils';
-import { getStickerPrice, getContainerPrice, CHARM_RARITY_ODDS } from './prices';
+import { getStickerPrice, getContainerPrice, getCapsuleTiers, rollTier } from './prices';
 import { InlineContentsPanel } from './components/ContentsModal';
+import BatchResultPanel from './components/BatchResultPanel';
 import { useI18n } from './i18n';
 import { C, shadow, rarityGlowStyle, webTransition, hexToRgba } from './theme';
 
@@ -118,20 +119,23 @@ export default function CapsuleOpening({ capsule, onBack, balance, setBalance, s
     return () => { isMountedRef.current = false; clearAllTimers(); };
   }, []);
 
-  const COST = getContainerPrice(priceMap, capsule, 'sticker');
+  // ⚠️ Kartın hesapladığı maliyetle AYNI olmalı (bkz. CaseOpening'deki not).
+  const COST = capsule.cost ?? getContainerPrice(priceMap, capsule, 'sticker');
 
-  // Sticker kapsülü, charm kapsülüyle AYNI 4 kademeli oran tablosunu kullanır
+  // Sticker kapsülü, charm kapsülüyle AYNI 4 kademeli merdiveni kullanır
   // (High Grade / Remarkable / Exotic / Extraordinary) — bkz. prices.js.
+  //
+  // ⚠️ 29 AĞU 2026: Oranlar artık SABİT DEĞİL, kapsülün İÇERİĞİNDEN türetiliyor.
+  // Eskiden 4 kademenin biri kapsülde yoksa o dilim "tüm havuzdan rastgele seç"
+  // yedeğine düşüyor ve nadir çıkartmaları olması gerekenden çok daha sık
+  // veriyordu (Armory'deki %1000 ROI bug'ının küçük ölçekli hâli).
+  const TIERS = useMemo(() => getCapsuleTiers(capsule), [capsule]);
+
   const rollOne = () => {
-    const roll = Math.random() * 100;
-    let cumulative = 0;
-    let selected = CHARM_RARITY_ODDS[0];
-    for (let i = 0; i < CHARM_RARITY_ODDS.length; i++) {
-      cumulative += CHARM_RARITY_ODDS[i].chance;
-      if (roll <= cumulative) { selected = CHARM_RARITY_ODDS[i]; break; }
-    }
-    let pool = (capsule.contains || []).filter(i => i.rarity?.name === selected.name);
-    if (pool.length === 0) pool = capsule.contains || [];
+    const selected = rollTier(TIERS);
+    if (!selected) return null;
+    const pool = (capsule.contains || []).filter(i => i.rarity?.name === selected.name);
+    if (pool.length === 0) return null;
     const item = pool[Math.floor(Math.random() * pool.length)];
     // Sticker'ların float/wear/pattern'i YOKTUR — sabit kozmetik eşyalardır.
     return {
@@ -140,7 +144,7 @@ export default function CapsuleOpening({ capsule, onBack, balance, setBalance, s
       uid: Date.now().toString() + Math.random().toString(36).slice(2),
       price: getStickerPrice(priceMap, item),
       isSticker: true,
-      source: '🏷️ Sticker',
+      source: 'STICKER',
       acquiredAt: Date.now()
     };
   };
@@ -165,7 +169,8 @@ export default function CapsuleOpening({ capsule, onBack, balance, setBalance, s
     setWonItem(null); setBatch(null);
 
     // Sonuç ÖNCE belirlenir; animasyon yalnızca görsel gecikmedir.
-    const results = Array.from({ length: count }, () => rollOne());
+    const results = Array.from({ length: count }, () => rollOne()).filter(Boolean);
+    if (results.length === 0) { setErrorMsg(t('common.contentsUnreadable')); return; }
     const totalWon = results.reduce((a, r) => a + r.price, 0);
     onOpen?.(capsule.id, count);
 
@@ -202,10 +207,38 @@ export default function CapsuleOpening({ capsule, onBack, balance, setBalance, s
     reset();
   };
   const keepAllBatch = () => { setInventory(prev => [...prev, ...batch.items]); reset(); };
+
+  // ⚠️ KALAN eşyaların toplamı — kullanıcı aradan tek tek satmış olabilir.
   const sellAllBatch = () => {
-    if (gameMode === 'wallet') setBalance(prev => prev + batch.totalWon);
+    const remaining = batch.items.reduce((a, it) => a + (it.price || 0), 0);
+    if (gameMode === 'wallet') setBalance(prev => prev + remaining);
     reset();
   };
+
+  const sellOneFromBatch = (item) => {
+    if (gameMode === 'wallet') setBalance(prev => prev + (item.price || 0));
+    setBatch(prev => {
+      if (!prev) return prev;
+      const items = prev.items.filter(i => i.uid !== item.uid);
+      if (items.length === 0) { reset(); return null; }
+      return { ...prev, items };
+    });
+  };
+
+  const keepSelectedFromBatch = (selectedItems) => {
+    const uids = selectedItems.map(i => i.uid);
+    setInventory(prev => [...prev, ...selectedItems]);
+    setBatch(prev => {
+      if (!prev) return prev;
+      const items = prev.items.filter(i => !uids.includes(i.uid));
+      if (items.length === 0) { reset(); return null; }
+      return { ...prev, items };
+    });
+  };
+
+  // TEKRARDAN AÇ: aynı kapsülü AYNI adetle yeniden açar.
+  // ⚠️ Panel ÖNCEDEN KAPATILMAZ (bkz. CaseOpening'deki aynı not).
+  const reopenBatch = () => { open(batch?.count || 1); };
 
   const netProfit = sessionWon - sessionSpent;
   const batchNetProfit = batch ? batch.totalWon - batch.spending : 0;
@@ -238,7 +271,14 @@ export default function CapsuleOpening({ capsule, onBack, balance, setBalance, s
             <View style={[cap.capsuleWrap, { transform: [{ translateX: shakeOffset }] }]}>
               <CapsuleHalf uri={capsule.image} side="left" burst={burst} />
               <CapsuleHalf uri={capsule.image} side="right" burst={burst} />
-              <TearLine visible={phase === 'tearing' || burst} />
+              {/* ⚠️ BUG DÜZELTMESİ (29 AĞu 2026): Yırtık çizgisi PATLAMA
+                  anında GİZLENİR. Eskiden koşul `phase === 'tearing' || burst`
+                  idi; kapsülün iki yarısı savrulup kaybolduktan sonra bu 11
+                  adet 8x8 beyaz kare EKRANIN ORTASINDA ÖYLECE KALIYORDU —
+                  kullanıcının "animasyonun ortasında anlamsız dörtgenler
+                  beliriyor" dediği şey buydu. Artık yalnızca YIRTILMA
+                  aşamasında görünüyor ve patlamayla birlikte solüyor. */}
+              <TearLine visible={phase === 'tearing'} />
             </View>
 
             {/* Patlama parlaması — yarılar savrulurken ortadan yayılan ışık.
@@ -275,26 +315,19 @@ export default function CapsuleOpening({ capsule, onBack, balance, setBalance, s
         )}
 
         {phase === 'done' && batch && (
-          <View style={styles.batchContainer}>
-            <View style={styles.batchGrid}>
-              {batch.items.map(it => (
-                <View key={it.uid} style={[styles.batchCard, { borderBottomColor: it.displayColor }]}>
-                  <View pointerEvents="none" style={rarityGlowStyle(it.displayColor, { height: '46%', strength: 0.55 })} />
-                  <Image source={{ uri: it.image }} style={styles.batchImg} resizeMode="contain" />
-                  <Text style={styles.batchPrice}>${it.price.toFixed(2)}</Text>
-                </View>
-              ))}
-            </View>
-            <View style={styles.batchSummary}>
-              <View style={styles.statBox}><Text style={styles.statLbl}>{t('common.spent')}</Text><Text style={[styles.statVal, { color: C.danger }]}>-${batch.spending.toFixed(2)}</Text></View>
-              <View style={styles.statBox}><Text style={styles.statLbl}>{t('common.won')}</Text><Text style={[styles.statVal, { color: C.success }]}>+${batch.totalWon.toFixed(2)}</Text></View>
-              <View style={styles.statBox}><Text style={styles.statLbl}>{t('common.profit')}</Text><Text style={[styles.statVal, { color: batchNetProfit >= 0 ? C.success : C.danger }]}>{formatSignedMoney(batchNetProfit)}</Text></View>
-            </View>
-            <View style={styles.actionRow}>
-              <TouchableOpacity style={styles.keepBtn} onPress={keepAllBatch}><Text style={styles.btnTxt}>{t('common.keepAll')}</Text></TouchableOpacity>
-              <TouchableOpacity style={styles.sellBtn} onPress={sellAllBatch}><Text style={styles.btnTxt}>{t('common.sellAll', { n: batch.totalWon.toFixed(2) })}</Text></TouchableOpacity>
-            </View>
-          </View>
+          <BatchResultPanel
+            items={batch.items}
+            title={t('case.batchDone', { n: batch.count })}
+            spendingLabel={`-$${batch.spending.toFixed(2)}`}
+            spendingUsd={batch.spending}
+            onSellOne={sellOneFromBatch}
+            onSellAll={sellAllBatch}
+            onKeepAll={keepAllBatch}
+            onKeepSelected={keepSelectedFromBatch}
+            onReopen={reopenBatch}
+            reopenLabel={t('batch.reopen', { n: batch.count })}
+            onClose={reset}
+          />
         )}
 
         {phase === 'idle' && (

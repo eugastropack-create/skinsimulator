@@ -54,7 +54,14 @@ Güncellenmesi gereken tipik bölümler:
 8. **Ham renk kodu yazma.** Tüm renkler `src/theme.js`'teki `C` tokenlarından
    gelir. **TEK İSTİSNA:** nadirlik renkleri (`RARITY` — Valve'in resmi
    mavi/mor/pembe/kırmızı/altın paleti) sabittir ve tema değişse bile değişmez.
-9. **Sonucu `Animated` callback'ine bağlama.** `requestAnimationFrame`
+9. **Olasılık tablosu UYDURMA — kutunun içeriğinden türet.** Sabit bir kademe
+   tablosu yazıp "kademede eşya yoksa tüm havuza düş" yedeğine güvenmek bu
+   projede **%1000+ ROI** üreten bir bug'a yol açtı (bkz. `gacas.md` §5.0).
+   Yeni bir çekiliş yazacaksan `prices.js`'teki `getPresentTiers` / `getCaseTiers`
+   / `getCapsuleTiers` + `rollTier` + `poolForTier` dörtlüsünü kullan.
+   **EV hesabı ile çekiliş kodu AYNI tabloyu kullanmalıdır** — ayrışırlarsa
+   kullanıcı kartta bir sayı görüp gerçekte bambaşka bir sonuç yaşar.
+10. **Sonucu `Animated` callback'ine bağlama.** `requestAnimationFrame`
    composite edilmeyen sekmelerde tamamen donabiliyor (ölçüldü: 0 kare/sn).
    Ödül/sonuç açıklaması mutlaka bir `setTimeout` bekçisiyle de garantilenmeli
    (bkz. `CaseOpening.settleOnce`).
@@ -79,6 +86,7 @@ Güncellenmesi gereken tipik bölümler:
 | `src/components/HoverCard.js` | Hover'da 3B yükselen kart | CSS transition kullanır, `Animated` **değil** — geri çevirme |
 | `src/components/Icons.js` | CS simgeleri (yeşil ★ / $) + `ValuePill` | Emoji'ye geri dönme — platformlar arası tutarsız. Sayılar monospace kalmalı |
 | `src/utils.js` | Float üretimi, aşınma eşlemesi, mock fiyat, para formatı | `generateFloat` **ağırlıklı** dağılım kullanır, uniform'a döndürme |
+| `src/components/BatchResultPanel.js` | Çoklu açılış sonuç paneli — Tekrar Aç · tekli satış · çoklu seçim · toplu aksiyonlar | Kasa/Souvenir/Sticker/Armory **hepsi** bunu kullanır. Satışta `batch.totalWon` DEĞİL **kalan** eşyaların toplamını öde (tek tek satış yapılmış olabilir). "Tekrar Aç" paneli önceden KAPATMA — açılış reddedilirse eşyalar kaybolur |
 | `src/prices.js` | Canlı/mock fiyat çözümleme, EV/ROI, kararlı sıralama değeri | Altın kademe `contains_rare`'den gelir; sıralamada `getStableSortValue()` kullan |
 | `src/CaseOpening.js` | Kasa **ve Souvenir** açılışı (`mode` prop'u) | Gösterge KUTU değil OK (`WinnerPointer`) — kutuya geri dönme; `ITEM_PITCH`/`getRouletteWidth()` matematiğini bozma; jitter EKLEME; altın kademe `contains_rare`'den çekilir; **sekme (bounce)** ve **bekçi** mantığını kaldırma |
 | `src/ArmoryOpening.js` | Koleksiyon/charm çekilişi, Limited Edition basımı | `isSpecialItem` dalı kademeli çekiliş **kullanmaz**. **Sticker kapsülleri artık burada DEĞİL** (kendi sekmesinde) — ama `isSticker` dalı korunuyor, silme |
@@ -141,7 +149,7 @@ Bu bir **uygulama bug'ı değildir**.
 > **Ölçüm (28 Ağu 2026):** `document.hidden === true` iken `requestAnimationFrame`
 > **saniyede 0 kez** ateşlendi — yani `Animated` hiç ilerlemiyor. Bu yüzden
 > ödül/sonuç açıklaması artık Animated callback'ine **değil**, bir bekçi
-> zamanlayıcıya da bağlı (bkz. Altın Kural 8). Terminal ve Kapsül ekranları bu
+> zamanlayıcıya da bağlı (bkz. Altın Kural 10). Terminal ve Kapsül ekranları bu
 > ortamda **tam olarak** test edilebiliyor; kasa çarkı ise yalnızca bekçi
 > üzerinden sonuçlanıyor (animasyonun kendisi görünmüyor).
 
@@ -195,6 +203,16 @@ Bu durumda:
 | Souvenir'e normal skin fiyatı buluyor | Market adına `Souvenir ` öneki ekle |
 | **Canlı fiyat bulunamıyor ama hata yok** | Tablo anahtarları aşınma EKLİDİR (`... (Field-Tested)`). Kasa içeriğinde `min_float` YOK — isim üretimini bu alana bağlama, `lookupLivePrice` gibi SIRAYLA dene |
 | Fiyat kaynağının birimi | ByMykel tablosu **CENT** verir — `/100` bölmesini kaldırma |
+| Sabit oran tablosu + "eşya yoksa tüm havuza düş" | Boş kademenin olasılık kütlesi düzgün dağılımlı seçime gider → **%1000+ ROI**. Tabloyu içerikten türet (`getPresentTiers`) |
+| EV hesabı ile çekiliş kodunun ayrı tablo kullanması | İkisi ters yönde yanlış olabilir; kart %11 derken gerçek %1427 çıkar |
+| EV'de sabit float (0.25) kullanmak | Float aralığı dar skinlerde o değer HİÇ oluşamaz; FN primi hesaba girmez. Ağırlıklı bantları eşyanın kendi aralığına ölçekle |
+| Kutu fiyatı bulunamayınca sabit yedeğe düşmek | $1.00'lık yedek + $1047'lik içerik = %104.745 ROI. `resolveContainerCost` ile içerikten tahmin et |
+| Toplu satışta ilk açılıştaki toplamı ödemek | Aradan tek tek satış yapılmışsa aynı eşyanın parası **iki kez** verilir — kalan listeden hesapla |
+| `public/index.html` yorumunda kapanış `head`/`body` etiketi yazmak | Expo enjeksiyonu düz metin araması yapar; bundle script **yorumun içine** gömülür ve uygulama hiç açılmaz |
+| Klavye açılınca odaklanan alanın kaybolması | Varsayılan `resizes-visual` düzen viewport'unu küçültmez. `interactive-widget=resizes-content` + `scrollIntoView({block:'center'})` |
+| Aynı i18n anahtarını iki kez tanımlamak | JS'te **sonuncusu kazanır** — İngilizce blokta unutulmuş bir Türkçe satır tüm arayüzü bozar. Anahtar sayısı iki dilde eşit olmalı |
+| Emoji'yi arayüz simgesi olarak kullanmak | Her platformda farklı çizilir ve renklendirilemez. `components/Icons.js` (SVG) kullan |
+| `src/content/guide.js` içinde kaçışlı kesme (`'`) | Dosyanın tamamı tipografik `’` kullanıyor; tek tırnaklı uzun Türkçe metinlerde kaçış eklemek hem gürültülü hem hataya açık — `’` yaz |
 
 ---
 
@@ -215,6 +233,16 @@ Bu durumda:
 - **Kutuların `price` alanı YOKTUR** (hiçbir kayıtta) — fiyat, kutunun
   `market_hash_name`'i üzerinden canlı fiyat tablosundan çözülür
 - `min_float` / `max_float` `collections.json`'da **eksik olabilir** → `?? 0` / `?? 1` kullan
+- **Armory koleksiyonlarında `Consumer Grade` eşya YOKTUR** (Overpass 2024 /
+  Spy Tech / Arabesque hepsi `Industrial Grade` ile başlar). Sabit bir
+  Consumer-%79.92 tablosu yazmak çekilişlerin %79.92'sini havuzun tamamına
+  düşürür — bu, %1000+ ROI bug'ının ta kendisiydi
+- **Kasa içeriğindeki sticker'larda `market_hash_name` alanı YOKTUR** — yalnızca
+  `id` / `name` / `rarity` / `image` var. Piyasa anahtarı **`Sticker | <ad>`**
+  biçimindedir (ör. `Sticker | compLexity Gaming | Katowice 2014`)
+- **Charm'larda `market_hash_name` VARDIR** ve 78/78'i fiyat tablosunda bulunur
+- **Bazı kutuların piyasa fiyatı YOKTUR** (ör. `EMS Katowice 2014 Legends`) —
+  sabit yedeğe düşmek yerine `resolveContainerCost` ile içerikten tahmin et
 
 ---
 
@@ -232,7 +260,7 @@ Bu durumda:
 | **2026-08-28** | **Açık tema tasarım sistemi (`src/theme.js`) — ham renk yazma kuralı (Altın Kural 7)** |
 | **2026-08-28** | **Terminals / Souvenirs / Stickers sekmeleri; `TerminalOpening.js` + `CapsuleOpening.js` eklendi (ikisi de çarksız)** |
 | **2026-08-28** | **Yeni kabuk: üst-orta logo, canlı arama, rezerve reklam alanı, sabit menü sırası** |
-| **2026-08-28** | **Animasyon bekçisi kuralı (Altın Kural 8) — rAF 0 kare/sn ölçümü belgelendi** |
+| **2026-08-28** | **Animasyon bekçisi kuralı (bugün Altın Kural 10) — rAF 0 kare/sn ölçümü belgelendi** |
 | **2026-08-28** | **`crates.json` önbelleği; kutu fiyatları dinamikleşti; mock fiyata deterministik çarpan** |
 | **2026-08-28** | **Terminal teklif mekaniği (5+1 kart, kredi ile satın alma) — kasa mantığı kaldırıldı** |
 | **2026-08-28** | **i18n (EN varsayılan / TR) + globe değiştirici; sabit metin yazma yasağı (Altın Kural 7)** |
@@ -249,3 +277,7 @@ Bu durumda:
 | **2026-08-28** | **"Animasyonu geç" tiki; Trade-Up 5×2 ızgara + görselli/fiyatlı çıktı listesi** |
 | **2026-08-28** | **Fiyat kaynağı ByMykel price-tracker'a taşındı** (eskisi ölmüştü); isim eşleştirme hatası giderildi — EV/ROI artık gerçekten canlı |
 | **2026-08-28** | **Saydam logo görseli** metin logonun yerini aldı (chroma maskesi; flood-fill bilerek kullanılmadı) |
+| **2026-08-29** | **KRİTİK:** oran tabloları içerikten türetiliyor (`getPresentTiers`/`rollTier`/`poolForTier`); Armory ROI %1427 → %68. EV artık aşınma dağılımına göre |
+| **2026-08-29** | Sticker fiyat anahtarı (`Sticker \| <ad>`), kutu fiyatı tahmini (`resolveContainerCost`), terminal ROI kaldırıldı (`avgOffer`/`bestOffer`) |
+| **2026-08-29** | Terminalde **zorunlu alım kaldırıldı**; ortak `BatchResultPanel`; kapsül yırtık çizgisi bug'ı; mobil klavye düzeltmesi |
+| **2026-08-29** | `public/index.html` (başlık + Google Analytics + viewport); **emoji → SVG simge seti** (`react-native-svg`); i18n yinelenen anahtar bug'ı |

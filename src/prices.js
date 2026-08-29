@@ -1,4 +1,4 @@
-import { getWearFromFloat, generateMockPrice, generateFloat } from './utils';
+import { getWearFromFloat, generateMockPrice, generateFloat, WEAR_TIERS } from './utils';
 
 // ============================================================
 // CANLI FİYAT KAYNAĞI
@@ -168,20 +168,193 @@ export const POPULAR_SKIN_PRIORITY = [
   'AWP | Gungnir', 'M4A1-S | Printstream', 'AK-47 | Neon Rider'
 ];
 
+// StatTrak™ çıkma ihtimali (gerçek CS2 oranı) — EV hesabı ile çekiliş kodu
+// AYNI sabiti kullanmalı, yoksa gösterge ile gerçeklik ayrışır.
+export const STATTRAK_CHANCE = 0.10;
+
+// ============================================================
+// BİR EŞYANIN BEKLENEN FİYATI — AŞINMA DAĞILIMINA GÖRE AĞIRLIKLI
+// ============================================================
+// ⚠️ ESKİ SÜRÜM SABİT float 0.25 (Field-Tested) kullanıyordu. Bu, EV'yi
+// sistematik olarak YANLIŞ hesaplıyordu:
+//   • Bir skinin float aralığı 0.00-0.08 ise (ör. bazı Covert'lar) 0.25 o
+//     eşyada HİÇ oluşamaz; yine de fiyat FT üzerinden aranıyordu.
+//   • Factory New primi (bazı skinlerde 5-7 kat) hesaba HİÇ girmiyordu.
+//
+// Artık `generateFloat` ile BİREBİR aynı model kullanılıyor: ağırlıklı aşınma
+// bantları (FN 3 / MW 24 / FT 33 / WW 24 / BS 16) eşyanın KENDİ min/max float
+// aralığına ölçekleniyor. Böylece kartta yazan EV ile 200.000 çekilişlik
+// simülasyonun ürettiği gerçek EV örtüşüyor.
+//
 // `rarityOverride`: bıçak/eldivenler veride rarity.name === 'Covert' taşır ama
 // piyasada Covert silahlardan kat kat pahalıdır — onlar için 'Rare Special'
 // geçilerek doğru fiyat kademesi kullanılır.
-const getExpectedPriceForItem = (item, priceMap, rarityOverride) => {
-  const avgFloat = 0.25; // Field-Tested varsayılan referans float
-  const r = rarityOverride ?? item.rarity?.name;
-  const base = getRealisticPrice(priceMap, item, avgFloat, false, r);
-  const st = getRealisticPrice(priceMap, item, avgFloat, true, r);
-  // %10 StatTrak ihtimaline göre ağırlıklı ortalama
-  return base * 0.9 + st * 0.1;
+// `opts.isSouvenir` -> market adina "Souvenir " oneki ekler (fiyat AYRIDIR).
+// `opts.statTrak`   -> StatTrak cikma ihtimali; 0 verilirse hic hesaplanmaz.
+//    Bu ikisi AYRI bayraktir: Armory koleksiyon cekilisinde StatTrak YOKTUR
+//    ama esya souvenir de DEGILDIR. Tek bir bayrakla ikisini birden anlatmak
+//    (eskiden oyleydi) yanlis market adi uretiyordu.
+const getExpectedPriceForItem = (item, priceMap, rarityOverride, opts = {}) => {
+  const { isSouvenir = false, statTrak = STATTRAK_CHANCE } = opts;
+  const r = rarityOverride ?? item?.rarity?.name;
+  const lo = item?.min_float ?? 0;
+  const hi = item?.max_float ?? 1;
+  const stChance = isSouvenir ? 0 : statTrak;
+
+  let weighted = 0;
+  let totalWeight = 0;
+  for (const tier of WEAR_TIERS) {
+    // Bandın ORTA noktasını eşyanın kendi aralığına ölçekle (generateFloat ile
+    // aynı dönüşüm: taban float [0,1] -> [min_float, max_float]).
+    const mid = lo + ((tier.lo + tier.hi) / 2) * (hi - lo);
+    const base = getRealisticPrice(priceMap, item, mid, false, r, isSouvenir);
+    const st = stChance > 0 ? getRealisticPrice(priceMap, item, mid, true, r, isSouvenir) : base;
+    weighted += tier.weight * (base * (1 - stChance) + st * stChance);
+    totalWeight += tier.weight;
+  }
+  return totalWeight > 0 ? weighted / totalWeight : 0;
 };
 
 // Anahtar fiyatı Valve tarafından sabitlenmiştir ($2.50) — piyasada değişmez.
 export const KEY_PRICE_USD = 2.50;
+
+// ============================================================
+// KADEME MERDİVENİ — TÜM ÇEKİLİŞLERİN TEK OLASILIK KAYNAĞI
+// ============================================================
+// ⚠️ 29 AĞU 2026 — KRİTİK BUG DÜZELTMESİ ("Armory'de sürekli kâr ediyorum")
+//
+// KÖK NEDEN: Çekiliş kodları SABİT bir kademe tablosu kullanıp, seçilen
+// kademede hiç eşya bulamazlarsa "havuzun TAMAMINDAN rastgele seç" yedeğine
+// düşüyordu:
+//
+//     let pool = contains.filter(i => i.rarity.name === selected.name);
+//     if (pool.length === 0) pool = contains;   // <-- BUG
+//
+// Armory koleksiyonlarında Consumer Grade eşya YOKTUR (doğrulandı: Overpass
+// 2024 / Spy Tech / Arabesque -> Industrial 6, Mil-Spec 4, Restricted 3,
+// Classified 2, Covert 1-2). Tablonun ilk satırı ise %79.92 ile Consumer'dı.
+// Yani çekilişlerin %79.92'si hiç eşya bulamayıp TÜM KOLEKSİYONDAN DÜZGÜN
+// DAĞILIMLI seçim yapıyordu — 17 eşyalık bir koleksiyonda Covert çıkma şansı
+// %0.06 yerine ~%4.7'ye fırlıyordu.
+//
+// ÖLÇÜM (200.000 çekiliş, canlı fiyatlarla):
+//     Overpass 2024 -> gerçek EV $22.83 / maliyet $1.60  = %1427 ROI
+//     Spy Tech      -> gerçek EV $20.95                  = %1309 ROI
+//     Arabesque     -> gerçek EV $15.83                  =  %989 ROI
+// Kartta ise %11-15 yazıyordu (EV hesabı da aynı kademelerde eşya bulamayıp
+// olasılık kütlesini sessizce ÇÖPE ATIYORDU) — yani hem çekiliş hem gösterge
+// yanlıştı, üstelik birbirinin TERS yönünde yanlıştı.
+//
+// ÇÖZÜM: Olasılık tablosu artık SABİT DEĞİL; kutunun İÇİNDE GERÇEKTEN BULUNAN
+// kademelerden türetiliyor. Boş kademe hiç ÇEKİLEMEZ, dolayısıyla "tüm havuza
+// düş" yedeğine ihtiyaç da kalmıyor.
+//
+// MERDİVEN: CS2'de her kademe bir öncekinin 1/5'i kadar olasıdır. Valve'in
+// yayımladığı kasa oranları (79.92 / 15.98 / 3.20 / 0.64) bu geometrik dizinin
+// ta kendisidir — dolayısıyla kademe sayısı kaç olursa olsun aynı formülden
+// üretilebilir ve %100'e normalize edilir.
+const TIER_STEP = 5;
+
+export const buildLadderOdds = (tierCount) => {
+  if (tierCount <= 0) return [];
+  const raw = Array.from({ length: tierCount }, (_, i) => Math.pow(1 / TIER_STEP, i));
+  const total = raw.reduce((a, b) => a + b, 0);
+  return raw.map(w => (w / total) * 100);
+};
+
+// Nadirlik merdiveni — EN SIK'tan EN NADİR'e.
+export const RARITY_LADDER = ['Consumer Grade', 'Industrial Grade', 'Mil-Spec Grade', 'Restricted', 'Classified', 'Covert'];
+
+const RARITY_HEX_BY_NAME = {
+  'Consumer Grade': '#b0c3d9',
+  'Industrial Grade': '#5e98d9',
+  'Mil-Spec Grade': '#4b69ff',
+  'Restricted': '#8847ff',
+  'Classified': '#d32ce6',
+  'Covert': '#eb4b4b'
+};
+
+// Bir eşya listesinde GERÇEKTEN bulunan kademeleri tespit edip merdiveni
+// onlara uygular. Kasa / koleksiyon / souvenir — hepsi bunu kullanır.
+export const getPresentTiers = (items = [], ladder = RARITY_LADDER) => {
+  const present = ladder.filter(r => items.some(i => i.rarity?.name === r));
+  if (present.length === 0) return [];
+  const odds = buildLadderOdds(present.length);
+  return present.map((name, i) => {
+    const sample = items.find(it => it.rarity?.name === name);
+    return {
+      name,
+      chance: parseFloat(odds[i].toFixed(4)),
+      color: sample?.rarity?.color || RARITY_HEX_BY_NAME[name] || '#b0c3d9'
+    };
+  });
+};
+
+// Armory silah koleksiyonu çekilişi (4 yıldız = $1.60).
+export const getCollectionTiers = (collection) => getPresentTiers(collection?.contains || []);
+
+// ============================================================
+// KAPSÜL MERDİVENİ (sticker + charm) — 4 kademe
+// ============================================================
+// Sticker ve charm kapsülleri silah nadirliklerini DEĞİL, kendi 4 kademesini
+// kullanır. buildLadderOdds(4) tam olarak Valve'in yayımladığı kapsül
+// oranlarını üretir: 80.13 / 16.03 / 3.21 / 0.64.
+//
+// ⚠️ Burada da aynı bug vardı: bir kapsülde 4 kademenin hepsi bulunmayabilir
+// (ör. yalnızca 3 kademeli eski kapsüller). Sabit tablo kullanıldığında eksik
+// kademenin olasılık kütlesi "tüm havuzdan rastgele seç" yedeğine düşüyordu.
+export const CAPSULE_LADDER = ['High Grade', 'Remarkable', 'Exotic', 'Extraordinary'];
+export const getCapsuleTiers = (capsule) => getPresentTiers(capsule?.contains || [], CAPSULE_LADDER);
+
+// ============================================================
+// KASA / TERMİNAL KADEMELERİ — Rare Special (bıçak) dilimi DAHİL
+// ============================================================
+// Kasalarda beşinci bir dilim vardır: `contains_rare` (bıçak/eldiven, %0.26).
+// Bu dilim merdivenin bir parçası DEĞİLDİR (Valve onu ayrı yayımlar), bu yüzden
+// önce normal kademeler merdivenden türetilip toplam %(100 - 0.26)'ya
+// ölçeklenir, sonra altın dilim eklenir.
+//
+// ⚠️ `contains_rare` BOŞSA (ör. Genesis Terminal) altın dilim HİÇ eklenmez ve
+// oranlar %100'e yeniden dağıtılır. Eskiden bu %0.26'lık kütle "tüm havuzdan
+// rastgele seç" yedeğine düşüyordu; yani bıçağı olmayan bir kutuda bile %0.26
+// ihtimalle DÜZGÜN DAĞILIMLI (Covert dahil) bir eşya veriyordu.
+const RARE_SPECIAL_CHANCE = 0.26;
+
+export const getCaseTiers = (crate) => {
+  const normal = getPresentTiers(crate?.contains || []);
+  const hasRare = (crate?.contains_rare || []).length > 0;
+  if (normal.length === 0) return [];
+  if (!hasRare) return normal;
+
+  const scale = (100 - RARE_SPECIAL_CHANCE) / 100;
+  const scaled = normal.map(tr => ({ ...tr, chance: parseFloat((tr.chance * scale).toFixed(4)) }));
+  return [...scaled, { name: 'Rare Special', chance: RARE_SPECIAL_CHANCE, color: '#ffd700', isRare: true }];
+};
+
+// Seçilen kademenin eşya havuzu. ⚠️ ARTIK "tüm havuza düş" YEDEĞİ YOK —
+// kademeler zaten içerikten türetildiği için boş havuz imkânsızdır. Yine de
+// bozuk veriye karşı null döner; çağıran tarafı bunu kontrol eder.
+export const poolForTier = (crate, tier) => {
+  if (tier?.isRare || tier?.name === 'Rare Special') {
+    const rare = crate?.contains_rare || [];
+    return rare.length > 0 ? rare : null;
+  }
+  const matched = (crate?.contains || []).filter(i => i.rarity?.name === tier?.name);
+  return matched.length > 0 ? matched : null;
+};
+
+// Kümülatif zar atışı — TÜM ekranlar bunu kullanır (tek kaynak).
+export const rollTier = (tiers) => {
+  if (!tiers || tiers.length === 0) return null;
+  const roll = Math.random() * 100;
+  let cumulative = 0;
+  for (let i = 0; i < tiers.length; i++) {
+    cumulative += tiers[i].chance;
+    if (roll <= cumulative) return tiers[i];
+  }
+  // Kayan nokta artığı: son kademeye düş (kütle kaybı YOK).
+  return tiers[tiers.length - 1];
+};
 
 // ============================================================
 // STANDART KASA ÇIKIŞ ORANLARI (Valve resmi dağılımı)
@@ -200,43 +373,43 @@ export const CASE_RARITY_ODDS = [
 ];
 
 // CS ROI (csroi.com) tarzı: bir kasa için beklenen değer (EV) ve %ROI
+//
+// ⚠️ KADEMELER ARTIK DİNAMİK (bkz. getCaseTiers). Eskiden sabit bir renk->oran
+// tablosu vardı ve kutuda o kademeden eşya yoksa olasılık kütlesi hesaba HİÇ
+// katılmıyordu; EV sistematik olarak DÜŞÜK çıkıyordu. Artık oranlar kutunun
+// gerçek içeriğinden türetiliyor ve toplamları DAİMA %100.
 export const calculateCaseStats = (crate, priceMap = null) => {
-  const RARITY_ODDS = {
-    '#4b69ff': 0.7992, // Mil-Spec
-    '#8847ff': 0.1598, // Restricted
-    '#d32ce6': 0.0320, // Classified
-    '#eb4b4b': 0.0064, // Covert
-    '#ffd700': 0.0026  // Rare Special (Bıçak/Eldiven)
-  };
+  const tiers = getCaseTiers(crate);
 
   let expectedReturn = 0;
   let maxPossibleValue = 0;
 
-  Object.keys(RARITY_ODDS).forEach(color => {
-    const chance = RARITY_ODDS[color];
-    // BUG DÜZELTMESİ: Bıçak/eldivenler `contains` içinde DEĞİL, ayrı
-    // `contains_rare` alanındadır (ve renkleri '#ffd700' değil '#eb4b4b'dir).
-    // Eskiden altın kademe hiç eşleşmediği için EV hesabına bıçaklar HİÇ
-    // katılmıyordu — kasaların beklenen değeri sistematik olarak düşük çıkıyordu.
-    const itemsInRarity = color === '#ffd700'
-      ? (crate.contains_rare || [])
-      : (crate.contains || []).filter(i => i.rarity?.color?.toLowerCase() === color);
-    if (itemsInRarity.length > 0) {
-      const priceRarity = color === '#ffd700' ? 'Rare Special' : undefined;
-      const avgPrice = itemsInRarity.reduce((sum, it) => sum + getExpectedPriceForItem(it, priceMap, priceRarity), 0) / itemsInRarity.length;
-      expectedReturn += avgPrice * chance;
+  tiers.forEach(tier => {
+    const itemsInRarity = poolForTier(crate, tier);
+    if (!itemsInRarity || itemsInRarity.length === 0) return;
+    // BUG DÜZELTMESİ (korunuyor): Bıçak/eldivenler `contains` içinde DEĞİL,
+    // ayrı `contains_rare` alanındadır ve renkleri '#ffd700' değil '#eb4b4b'tir.
+    // Fiyatlandırmada 'Rare Special' kademesi geçilmezse bıçaklar sıradan bir
+    // Covert silah gibi fiyatlanır ve EV ciddi biçimde düşük çıkar.
+    const priceRarity = tier.isRare ? 'Rare Special' : undefined;
+    const avgPrice = itemsInRarity.reduce(
+      (sum, it) => sum + getExpectedPriceForItem(it, priceMap, priceRarity), 0
+    ) / itemsInRarity.length;
+    expectedReturn += avgPrice * (tier.chance / 100);
 
-      itemsInRarity.forEach(it => {
-        const maxP = getRealisticPrice(priceMap, it, 0.001, true, priceRarity ?? it.rarity?.name);
-        if (maxP > maxPossibleValue) maxPossibleValue = maxP;
-      });
-    }
+    itemsInRarity.forEach(it => {
+      const maxP = getRealisticPrice(priceMap, it, it.min_float ?? 0.001, true, priceRarity ?? it.rarity?.name);
+      if (maxP > maxPossibleValue) maxPossibleValue = maxP;
+    });
   });
 
-  // KASA FİYATI ARTIK DİNAMİK: crates.json'da fiyat alanı YOK, ama kasanın
-  // `market_hash_name`'i canlı fiyat tablosunda geçiyor — yani gerçek Steam
-  // fiyatını kullanabiliyoruz (canlı veri yoksa $0.50 tabanına düşer).
-  const casePrice = getContainerPrice(priceMap, crate, 'case');
+  // KASA FİYATI DİNAMİK: crates.json'da fiyat alanı YOK, ama kasanın
+  // `market_hash_name`'i canlı fiyat tablosunda geçiyor. Bulunamazsa fiyat
+  // içerikten TAHMİN edilir (bkz. resolveContainerCost).
+  // ⚠️ Anahtar bedeli tahmine DAHİL DEĞİL: anahtarı Valve satar, fiyatı sabittir.
+  const { cost: casePrice, priceEstimated } = resolveContainerCost(
+    priceMap, crate, 'case', Math.max(0, expectedReturn - KEY_PRICE_USD * CONTAINER_TARGET_ROI)
+  );
   const cost = casePrice + KEY_PRICE_USD;
   const roi = cost > 0 ? (expectedReturn / cost) * 100 : 0;
 
@@ -245,46 +418,72 @@ export const calculateCaseStats = (crate, priceMap = null) => {
     expectedReturn: parseFloat(expectedReturn.toFixed(2)),
     maxProfit: parseFloat(maxPossibleValue.toFixed(2)),
     casePrice,
+    priceEstimated,
     cost
   };
 };
 
 
 // Aynı mantık Armory (Cephanelik) koleksiyonları için — csroi.com/armory tarzı
+//
+// ⚠️ ORANLAR ARTIK `getCollectionTiers` İLE ÜRETİLİYOR — çekiliş kodunun
+// (ArmoryOpening.rollOneArmoryResult) kullandığı TAM OLARAK AYNI tablo.
+// Eskiden burada sabit bir isim->oran haritası vardı; koleksiyonda Consumer
+// Grade eşya olmadığı için %79.92'lik dilim hesaba hiç girmiyor ve EV
+// gerçeğinden ~10 kat düşük görünüyordu.
+export const ARMORY_COLLECTION_STAR_COST = 4;
+export const ARMORY_COLLECTION_USD = 1.60; // 4 yıldız (Armory Pass: 40 yıldız = $16.00)
+
+// Armory Pass: 40 yıldız = $16.00 -> yıldız başına $0.40
+export const STAR_VALUE_USD = 0.40;
+
+// GERÇEK CS2 KURALI: "Limited Edition Item" 25 yıldıza basılır.
+export const SPECIAL_ITEM_STAR_COST = 25;
+
+// ============================================================
+// ARMORY MALİYETİ — kartlarda ve açılış ekranında AYNI sayı
+// ============================================================
+// ⚠️ Armory koleksiyonları PİYASADA satılan bir kutu DEĞİLDİR; yıldızla
+// alınırlar. `getContainerPrice` onlar için isim bulamayıp $0.50'lik genel
+// yedeğe düşüyor ve kartın köşesinde gerçek maliyetle alakasız bir fiyat
+// gösteriyordu. Bu fonksiyon doğru maliyeti tek yerden verir.
+export const getArmoryCost = (subject) => {
+  if (subject?.isSpecialItem) return { stars: SPECIAL_ITEM_STAR_COST, usd: SPECIAL_ITEM_STAR_COST * STAR_VALUE_USD };
+  if (subject?.isCharmCollection) return { stars: CHARM_STAR_COST, usd: CHARM_CAPSULE_PRICE };
+  return { stars: ARMORY_COLLECTION_STAR_COST, usd: ARMORY_COLLECTION_USD };
+};
+
 export const calculateArmoryStats = (collection, priceMap = null) => {
-  const RARITY_CHANCES = {
-    'Consumer Grade': 0.7992,
-    'Industrial Grade': 0.1598,
-    'Mil-Spec Grade': 0.0320,
-    'Restricted': 0.0064,
-    'Classified': 0.0020,
-    'Covert': 0.0006
-  };
+  const tiers = getCollectionTiers(collection);
 
   let expectedReturn = 0;
   let maxPossibleValue = 0;
 
-  Object.keys(RARITY_CHANCES).forEach(rarityName => {
-    const chance = RARITY_CHANCES[rarityName];
-    const itemsInRarity = (collection.contains || []).filter(i => i.rarity?.name === rarityName);
-    if (itemsInRarity.length > 0) {
-      const avgPrice = itemsInRarity.reduce((sum, it) => sum + getExpectedPriceForItem(it, priceMap), 0) / itemsInRarity.length;
-      expectedReturn += avgPrice * chance;
+  tiers.forEach(({ name, chance }) => {
+    const itemsInRarity = (collection.contains || []).filter(i => i.rarity?.name === name);
+    if (itemsInRarity.length === 0) return;
+    // Armory koleksiyon çekilişinde StatTrak YOKTUR (bkz. ArmoryOpening) —
+    // bu yüzden `isSouvenir` bayrağı gibi StatTrak'ı kapatan yol kullanılmıyor;
+    // aşağıdaki çağrı StatTrak'ı hesaba katmayan düz beklenen fiyatı verir.
+    const avgPrice = itemsInRarity.reduce(
+      (sum, it) => sum + getExpectedPriceForItem(it, priceMap, name, { statTrak: 0 }), 0
+    ) / itemsInRarity.length;
+    expectedReturn += avgPrice * (chance / 100);
 
-      itemsInRarity.forEach(it => {
-        const maxP = getRealisticPrice(priceMap, it, 0.001, false, rarityName);
-        if (maxP > maxPossibleValue) maxPossibleValue = maxP;
-      });
-    }
+    itemsInRarity.forEach(it => {
+      const maxP = getRealisticPrice(priceMap, it, it.min_float ?? 0.001, false, name);
+      if (maxP > maxPossibleValue) maxPossibleValue = maxP;
+    });
   });
 
-  const cost = 1.60; // 4 yıldız ≈ $1.60 (Armory Pass: 40 yıldız = $16.00)
+  const cost = ARMORY_COLLECTION_USD;
   const roi = cost > 0 ? (expectedReturn / cost) * 100 : 0;
 
   return {
     roi: parseFloat(roi.toFixed(2)),
     expectedReturn: parseFloat(expectedReturn.toFixed(2)),
-    maxProfit: parseFloat(maxPossibleValue.toFixed(2))
+    maxProfit: parseFloat(maxPossibleValue.toFixed(2)),
+    cost
   };
 };
 
@@ -322,12 +521,13 @@ const CHARM_TIER_BASE_PRICE = {
   'Extraordinary': 18.00
 };
 
-export const getCharmPrice = (priceMap, charm) => {
+export const getCharmPrice = (priceMap, charm, { stable = false } = {}) => {
   if (priceMap && charm?.market_hash_name) {
     const live = priceMap[charm.market_hash_name];
     if (typeof live === 'number' && live > 0) return parseFloat(live.toFixed(2));
   }
   const base = CHARM_TIER_BASE_PRICE[charm?.rarity?.name] ?? CHARM_TIER_BASE_PRICE['High Grade'];
+  if (stable) return parseFloat((base * deterministicItemFactor(charm?.name)).toFixed(2));
   const randomVariance = 0.85 + (Math.random() * 0.30); // generateMockPrice ile aynı varyans mantığı
   return parseFloat((base * randomVariance).toFixed(2));
 };
@@ -350,67 +550,82 @@ const STICKER_TIER_BASE_PRICE = {
 export const STICKER_CAPSULE_PRICE = 0.80; // 2 yıldız ≈ $0.80 (gerçek mağaza fiyatı ~$1.00)
 export const STICKER_STAR_COST = 2;
 
-export const getStickerPrice = (priceMap, sticker) => {
-  if (priceMap && sticker?.market_hash_name) {
-    const live = priceMap[sticker.market_hash_name];
-    if (typeof live === 'number' && live > 0) return parseFloat(live.toFixed(2));
+// `stable: true` -> rastgele varyansı KAPATIR. EV/ROI hesaplarında zorunlu:
+// varyanslı bir değer kullanılırsa kart her render'da farklı bir ROI gösterir
+// (bkz. getStableSortValue'nun var oluş sebebi).
+export const getStickerPrice = (priceMap, sticker, { stable = false } = {}) => {
+  if (priceMap) {
+    // ⚠️ BUG DÜZELTMESİ (29 Ağu 2026) — STICKER FIYATLARI HİÇ BULUNMUYORDU.
+    // Kasa içeriğindeki sticker nesnelerinde `market_hash_name` alanı YOKTUR
+    // (doğrulandı: yalnızca id / name / rarity / image var). Sadece o alana
+    // bakıldığı için 1188 sticker'ın TAMAMI sessızce mock fiyata düşüyor,
+    // Katowice 2014 gibi yüzlerce dolarlık çıkartmalar $0.12 sayılıyordu.
+    //
+    // Piyasa anahtarı "Sticker | <ad>" biçimindedir
+    // (ör. "Sticker | compLexity Gaming | Katowice 2014"). Sırayla deniyoruz;
+    // eşleşme oranı 0/1188 → 856/1188 (%72) oldu. Kalanı (çoğunlukla artık
+    // listelenmeyen eski çıkartmalar) mock fiyata düşer.
+    const keys = [sticker?.market_hash_name, sticker?.name && `Sticker | ${sticker.name}`, sticker?.name];
+    for (const k of keys) {
+      if (!k) continue;
+      const live = priceMap[k];
+      if (typeof live === 'number' && live > 0) return parseFloat(live.toFixed(2));
+    }
   }
   const base = STICKER_TIER_BASE_PRICE[sticker?.rarity?.name] ?? STICKER_TIER_BASE_PRICE['High Grade'];
+  if (stable) return parseFloat((base * deterministicItemFactor(sticker?.name)).toFixed(2));
   const randomVariance = 0.85 + (Math.random() * 0.30);
   return parseFloat((base * randomVariance).toFixed(2));
 };
 
-// Sticker kapsülü için EV/ROI — charm ile aynı oran tablosu, farklı fiyat tablosu.
-export const calculateStickerStats = (capsule, priceMap = null) => {
+// ============================================================
+// KAPSÜL EV/ROI (sticker + charm)
+// ============================================================
+// ⚠️ İKİ DÜZELTME:
+//  1) Oranlar artık `getCapsuleTiers` ile İÇERİKTEN türetiliyor — eksik kademe
+//     olasılık kütlesini artık çöpe atmıyor (EV sistematik olarak düşük çıkıyordu).
+//  2) ROI artık SABİT $0.80 / $1.20 yerine kutunun GERÇEK piyasa fiyatına
+//     bölünüyor. Açılış ekranı zaten `getContainerPrice` ile ücret alıyordu;
+//     kart başka bir maliyete göre ROI gösteriyordu — ikisi ayrışmıştı.
+const capsuleStats = (capsule, priceMap, priceOf, fallbackCost, kind) => {
+  const tiers = getCapsuleTiers(capsule);
   let expectedReturn = 0;
   let maxPossibleValue = 0;
 
-  CHARM_RARITY_ODDS.forEach(({ name, chance }) => {
+  tiers.forEach(({ name, chance }) => {
     const itemsInRarity = (capsule.contains || []).filter(i => i.rarity?.name === name);
-    if (itemsInRarity.length > 0) {
-      const avgPrice = itemsInRarity.reduce((sum, it) => sum + getStickerPrice(priceMap, it), 0) / itemsInRarity.length;
-      expectedReturn += avgPrice * (chance / 100);
-      itemsInRarity.forEach(it => {
-        const p = getStickerPrice(priceMap, it);
-        if (p > maxPossibleValue) maxPossibleValue = p;
-      });
-    }
+    if (itemsInRarity.length === 0) return;
+    const avgPrice = itemsInRarity.reduce((sum, it) => sum + priceOf(priceMap, it, { stable: true }), 0) / itemsInRarity.length;
+    expectedReturn += avgPrice * (chance / 100);
+    itemsInRarity.forEach(it => {
+      const pr = priceOf(priceMap, it, { stable: true });
+      if (pr > maxPossibleValue) maxPossibleValue = pr;
+    });
   });
 
-  const roi = STICKER_CAPSULE_PRICE > 0 ? (expectedReturn / STICKER_CAPSULE_PRICE) * 100 : 0;
+  // Charm kapsüllerinde `kind` yoktur (piyasada satılmaz, yıldızla alınır) —
+  // orada sabit yıldız maliyeti kullanılır.
+  const resolved = kind
+    ? resolveContainerCost(priceMap, capsule, kind, expectedReturn)
+    : { cost: fallbackCost, priceEstimated: false };
+  const cost = resolved.cost;
+  const roi = cost > 0 ? (expectedReturn / cost) * 100 : 0;
   return {
     roi: parseFloat(roi.toFixed(2)),
     expectedReturn: parseFloat(expectedReturn.toFixed(2)),
-    maxProfit: parseFloat(maxPossibleValue.toFixed(2))
+    maxProfit: parseFloat(maxPossibleValue.toFixed(2)),
+    priceEstimated: resolved.priceEstimated,
+    cost
   };
 };
 
-// CS ROI tarzı: bir charm kapsülü için beklenen değer (EV) ve %ROI
-export const calculateCharmStats = (charmCollection, priceMap = null) => {
-  let expectedReturn = 0;
-  let maxPossibleValue = 0;
+export const calculateStickerStats = (capsule, priceMap = null) =>
+  capsuleStats(capsule, priceMap, getStickerPrice, STICKER_CAPSULE_PRICE, 'sticker');
 
-  CHARM_RARITY_ODDS.forEach(({ name, chance }) => {
-    const itemsInRarity = (charmCollection.contains || []).filter(i => i.rarity?.name === name);
-    if (itemsInRarity.length > 0) {
-      const avgPrice = itemsInRarity.reduce((sum, it) => sum + getCharmPrice(priceMap, it), 0) / itemsInRarity.length;
-      expectedReturn += avgPrice * (chance / 100);
-
-      itemsInRarity.forEach(it => {
-        const p = getCharmPrice(priceMap, it);
-        if (p > maxPossibleValue) maxPossibleValue = p;
-      });
-    }
-  });
-
-  const roi = CHARM_CAPSULE_PRICE > 0 ? (expectedReturn / CHARM_CAPSULE_PRICE) * 100 : 0;
-
-  return {
-    roi: parseFloat(roi.toFixed(2)),
-    expectedReturn: parseFloat(expectedReturn.toFixed(2)),
-    maxProfit: parseFloat(maxPossibleValue.toFixed(2))
-  };
-};
+// Charm kapsülleri PİYASADA ayrı bir kutu olarak listelenmez (Armory'den
+// yıldızla alınır), bu yüzden sabit yıldız maliyeti kullanılır.
+export const calculateCharmStats = (charmCollection, priceMap = null) =>
+  capsuleStats(charmCollection, priceMap, getCharmPrice, CHARM_CAPSULE_PRICE, null);
 
 // ============================================================
 // KARARLI SIRALAMA DEĞERİ (İçerik önizlemesi "en değerliden en değersize")
@@ -528,6 +743,44 @@ export const getContainerPrice = (priceMap, crate, kind = 'case') => {
   return CONTAINER_FALLBACK_PRICE[kind] ?? 0.50;
 };
 
+// ============================================================
+// KUTU MALİYETİ — canlı fiyat YOKSA İÇERİKTEN TAHMİN ET
+// ============================================================
+// ⚠️ 29 AĞU 2026 BUG DÜZELTMESİ ("ROI %104.745")
+//
+// Bazı kutuların piyasa fiyatı canlı tabloda BULUNMUYOR (ör. "EMS Katowice
+// 2014 Legends" — Steam'de artık listelenmiyor). Bu durumda tür bazlı sabit
+// bir yedeğe ($1.00) düşülüyordu. Ama o kapsülün İÇİ ~$1047 değerinde:
+//
+//     ROI = 1047 / 1.00 = %104.745
+//
+// Kullanıcı için bu, sınırsız para basan bir kutu demekti — üstelik gerçekte
+// o kapsül binlerce dolar. Sabit yedek, değeri bilinmeyen kutularda YAPISAL
+// olarak yanlıştı.
+//
+// ÇÖZÜM: Fiyat bulunamazsa kutunun maliyetini İÇERİĞİNDEN türetiyoruz.
+// Piyasada kutular içeriklerinin beklenen değerinin BİR MİKTAR ÜSTÜNDE
+// fiyatlanır (aksi hâlde herkes açıp kâr ederdi); ölçülen medyan ROI ~%83.
+// Bu yüzden tahmini maliyet = EV / 0.85.
+//
+// ⚠️ Bu bir TAHMİNDİR ve öyle işaretlenir (`priceEstimated`). Uydurma bir
+// sayıyı gerçek fiyat gibi göstermek yerine, hem tutarlı hem de kullanıcıyı
+// yanıltmayan bir davranış: kutu hep hafif zararına açılır.
+export const CONTAINER_TARGET_ROI = 0.85;
+
+export const resolveContainerCost = (priceMap, crate, kind, expectedReturn) => {
+  if (priceMap && crate?.market_hash_name) {
+    const live = priceMap[crate.market_hash_name];
+    if (typeof live === 'number' && live > 0) {
+      return { cost: parseFloat(live.toFixed(2)), priceEstimated: false };
+    }
+  }
+  const base = expectedReturn > 0
+    ? expectedReturn / CONTAINER_TARGET_ROI
+    : (CONTAINER_FALLBACK_PRICE[kind] ?? 0.50);
+  return { cost: parseFloat(base.toFixed(2)), priceEstimated: true };
+};
+
 // Kart köşesinde gösterilen YEŞİL FİYAT ARALIĞI (ör. "$1.50 – $4.00").
 // Anlamı: bu kutudan çıkabilecek EN UCUZ ödül -> EN DEĞERLİ ödül.
 // Sıralama/eşik hesapları deterministik `getStableSortValue` ile yapılır ki
@@ -566,43 +819,11 @@ export const getContainerValueRange = (priceMap, crate, kind = 'case') => {
 // oranlarını kullanır, ancak içerdikleri kademe SAYISI pakete göre değişir
 // (bazı harita koleksiyonlarında yalnızca 3 kademe var). Bu yüzden oranları
 // sabit bir tabloya gömmek YANLIŞ olurdu — paketin İÇİNDE gerçekten bulunan
-// kademeleri tespit edip standart merdiveni onlara uyguluyoruz.
-//
-// ⚠️ BİLİNÇLİ YAKLAŞIM: Kademe sayısı merdivenden azsa oranlar %100'e yeniden
-// normalize edilir. Valve'in tam iç algoritması açıklanmadığı için bu, veriye
-// dayalı en dürüst yaklaşımdır.
+// kademeleri tespit edip merdiveni onlara uyguluyoruz (getPresentTiers).
 //
 // Souvenir eşyalarında StatTrak YOKTUR; bunun yerine market adları
 // "Souvenir " önekiyle listelenir (bkz. buildMarketHashName isSouvenir).
-const RARITY_LADDER = ['Consumer Grade', 'Industrial Grade', 'Mil-Spec Grade', 'Restricted', 'Classified', 'Covert'];
-const CASE_ODDS_LADDER = [79.92, 15.98, 3.20, 0.64, 0.26];
-
-export const getSouvenirTiers = (pkg) => {
-  const present = RARITY_LADDER.filter(r => (pkg?.contains || []).some(i => i.rarity?.name === r));
-  if (present.length === 0) return [];
-
-  // Merdivenden gelen ham oranlar; kademe sayısı farklıysa %100'e normalize et.
-  const raw = present.map((_, i) => CASE_ODDS_LADDER[i] ?? CASE_ODDS_LADDER[CASE_ODDS_LADDER.length - 1]);
-  const total = raw.reduce((a, b) => a + b, 0);
-
-  return present.map((name, i) => {
-    const sample = (pkg.contains || []).find(it => it.rarity?.name === name);
-    return {
-      name,
-      chance: parseFloat(((raw[i] / total) * 100).toFixed(4)),
-      color: sample?.rarity?.color || RARITY_HEX_BY_NAME[name] || '#b0c3d9'
-    };
-  });
-};
-
-const RARITY_HEX_BY_NAME = {
-  'Consumer Grade': '#b0c3d9',
-  'Industrial Grade': '#5e98d9',
-  'Mil-Spec Grade': '#4b69ff',
-  'Restricted': '#8847ff',
-  'Classified': '#d32ce6',
-  'Covert': '#eb4b4b'
-};
+export const getSouvenirTiers = (pkg) => getPresentTiers(pkg?.contains || []);
 
 export const calculateSouvenirStats = (pkg, priceMap = null) => {
   const tiers = getSouvenirTiers(pkg);
@@ -612,9 +833,8 @@ export const calculateSouvenirStats = (pkg, priceMap = null) => {
   tiers.forEach(({ name, chance }) => {
     const itemsInRarity = (pkg.contains || []).filter(i => i.rarity?.name === name);
     if (itemsInRarity.length === 0) return;
-    // Souvenir'de StatTrak olmadığı için ağırlıklı ortalama YOK — düz fiyat.
     const avgPrice = itemsInRarity.reduce(
-      (sum, it) => sum + getRealisticPrice(priceMap, it, 0.25, false, name, true), 0
+      (sum, it) => sum + getExpectedPriceForItem(it, priceMap, name, { isSouvenir: true }), 0
     ) / itemsInRarity.length;
     expectedReturn += avgPrice * (chance / 100);
 
@@ -624,12 +844,13 @@ export const calculateSouvenirStats = (pkg, priceMap = null) => {
     });
   });
 
-  const cost = getContainerPrice(priceMap, pkg, 'souvenir');
+  const { cost, priceEstimated } = resolveContainerCost(priceMap, pkg, 'souvenir', expectedReturn);
   const roi = cost > 0 ? (expectedReturn / cost) * 100 : 0;
   return {
     roi: parseFloat(roi.toFixed(2)),
     expectedReturn: parseFloat(expectedReturn.toFixed(2)),
     maxProfit: parseFloat(maxPossibleValue.toFixed(2)),
+    priceEstimated,
     cost
   };
 };
@@ -639,17 +860,85 @@ export const calculateSouvenirStats = (pkg, priceMap = null) => {
 // ============================================================
 // VERİ ŞEMASI (doğrulandı): Terminaller normal bir KASA ile birebir aynı
 // yapıdadır — `contains` içinde Mil-Spec/Restricted/Classified/Covert silahlar,
-// `contains_rare` içinde eldivenler (Dead Hand'de 22 adet Extraordinary).
-// Bu yüzden EV/ROI hesabı için kasa fonksiyonu yeniden kullanılır; tek fark,
-// terminalin açılış maliyetinin anahtar gerektirmemesi.
+// `contains_rare` içinde eldivenler (Dead Hand'de 22 adet).
+//
+// ⚠️ 29 AĞU 2026 — "ROI %1000 / %232" BUG DÜZELTMESİ
+// ============================================================
+// Eski hesap `ROI = beklenen ödül / mühürlü terminalin piyasa fiyatı` idi.
+// Bu ORAN ANLAMSIZDI, çünkü bu simülatörde terminali çalıştırmak ÜCRETSİZDİR
+// ve kullanıcı mühürlü kutuyu değil, SEÇTİĞİ TEKLİFİN KENDİ PİYASA FİYATINI
+// öder. Yani hiç ödenmeyen bir maliyete bölünüyordu:
+//     Sealed Genesis Terminal   -> EV $1.24 / kutu $0.12 = %1033
+//     Sealed Dead Hand Terminal -> EV $2.18 / kutu $0.94 = %232
+// Bu sayılar hesap hatası değil, YANLIŞ SORUNUN doğru cevabıydı.
+//
+// Terminal mekaniğinde "ROI" tanımsızdır: teklifi piyasa fiyatına alırsınız,
+// dolayısıyla getiri/maliyet YAPISAL OLARAK %100'dür. Bu yüzden ROI tamamen
+// KALDIRILDI (roi: null -> kartlar bu hücreyi göstermez) ve yerine terminal
+// mekaniğinde GERÇEKTEN anlamı olan iki ölçü kondu:
+//
+//   • avgOffer   : tek bir teklifin beklenen değeri
+//   • bestOffer  : bir oturumda göreceğiniz EN İYİ teklifin beklenen değeri
+//                  (5 bağımsız teklifin maksimumu) — kullanıcının asıl merak
+//                  ettiği sayı budur, çünkü oturumda yalnızca birini alır.
+export const TERMINAL_OFFER_COUNT = 5;
+
+// E[max] hesabı: kademe ortalamalarını ayrık bir dağılım kabul edip
+//   E[max] = Σ v_i · ( P(≤i)^n − P(<i)^n )
+// formülünü uyguluyoruz. Monte Carlo'ya göre avantajı DETERMİNİSTİK olması —
+// kart her render'da aynı sayıyı gösterir (bkz. getStableSortValue'nun var
+// oluş sebebi: rastgelelik içeren gösterge değeri listeyi zıplatır).
+const expectedMaxOfN = (tiers, valueOf, n) => {
+  const rows = tiers
+    .map(tr => ({ chance: tr.chance / 100, value: valueOf(tr) }))
+    .filter(r => r.chance > 0)
+    .sort((a, b) => a.value - b.value);
+  const total = rows.reduce((a, r) => a + r.chance, 0);
+  if (total <= 0) return 0;
+
+  let cumBelow = 0;
+  let acc = 0;
+  rows.forEach(r => {
+    const cumAt = cumBelow + r.chance / total;
+    acc += r.value * (Math.pow(cumAt, n) - Math.pow(cumBelow, n));
+    cumBelow = cumAt;
+  });
+  return acc;
+};
+
 export const calculateTerminalStats = (terminal, priceMap = null) => {
-  const stats = calculateCaseStats(terminal, priceMap);
-  const cost = getContainerPrice(priceMap, terminal, 'terminal');
+  const tiers = getCaseTiers(terminal);
+
+  const tierAvg = new Map();
+  let avgOffer = 0;
+  let maxPossibleValue = 0;
+
+  tiers.forEach(tier => {
+    const items = poolForTier(terminal, tier);
+    if (!items || items.length === 0) { tierAvg.set(tier.name, 0); return; }
+    const priceRarity = tier.isRare ? 'Rare Special' : undefined;
+    const avg = items.reduce(
+      (sum, it) => sum + getExpectedPriceForItem(it, priceMap, priceRarity), 0
+    ) / items.length;
+    tierAvg.set(tier.name, avg);
+    avgOffer += avg * (tier.chance / 100);
+
+    items.forEach(it => {
+      const maxP = getRealisticPrice(priceMap, it, it.min_float ?? 0.001, true, priceRarity ?? it.rarity?.name);
+      if (maxP > maxPossibleValue) maxPossibleValue = maxP;
+    });
+  });
+
+  const bestOffer = expectedMaxOfN(tiers, tr => tierAvg.get(tr.name) ?? 0, TERMINAL_OFFER_COUNT);
+
   return {
-    ...stats,
-    // calculateCaseStats maliyeti "kutu + $2.50 anahtar" varsayar; terminalde
-    // anahtar YOKTUR, bu yüzden ROI'yi terminalin kendi fiyatına göre düzeltiyoruz.
-    roi: cost > 0 ? parseFloat(((stats.expectedReturn / cost) * 100).toFixed(2)) : 0,
-    cost
+    // ⚠️ ROI BİLEREK null — bkz. yukarıdaki açıklama. Kart bileşenleri
+    // `roi == null` durumunda ROI hücresini hiç basmaz.
+    roi: null,
+    expectedReturn: parseFloat(avgOffer.toFixed(2)),
+    avgOffer: parseFloat(avgOffer.toFixed(2)),
+    bestOffer: parseFloat(bestOffer.toFixed(2)),
+    maxProfit: parseFloat(maxPossibleValue.toFixed(2)),
+    cost: getContainerPrice(priceMap, terminal, 'terminal')
   };
 };

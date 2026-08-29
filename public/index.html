@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-C4JPXC4L64"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      gtag('config', 'G-C4JPXC4L64');
+    </script>
+
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+
+    <!--
+      MOBİL KLAVYE DÜZELTMESİ — `interactive-widget=resizes-content`
+      ============================================================
+      SORUN: Trade-Up'ta float kutusuna dokunulduğunda ekran klavyesi açılıyor,
+      eşya kartı tamamen görünmez oluyor ve yazılan değer görülemiyordu.
+
+      KÖK NEDEN: Tarayıcıların varsayılan davranışı `resizes-visual`'dır —
+      klavye açılınca DÜZEN (layout) viewport'u aynı kalır, yalnızca GÖRSEL
+      viewport kayar. Bu uygulamada `body { overflow: hidden }` ve tam yükseklik
+      bir kök eleman olduğu için sayfa hiç kaydırılamıyor; odaklanan kutu
+      klavyenin ARKASINDA kalıyordu.
+
+      `resizes-content` klavye açıldığında DÜZEN viewport'unu da küçültür:
+      uygulamanın ScrollView'i kısalır, dolayısıyla odaklanan alan gerçekten
+      kaydırılabilir hâle gelir. Bunu tamamlayan ikinci parça, odaklanınca
+      kartı ekranın ORTASINA kaydıran kod: src/TradeUpScreen.js -> CompactFloatSlider.
+    -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover, interactive-widget=resizes-content" />
+
+    <!--
+      SEKME BAŞLIĞI: Bu şablon olmadan başlık app.json'daki `expo.name`
+      alanından ("cs2-simulator") üretiliyordu. Expo, `public/index.html`
+      varsa onu şablon olarak kullanır (SDK 57, single-page çıktı) ve bundle
+      script etiketini gövdenin, favicon bağlantısını da head'in sonuna
+      KENDİSİ ekler — bu yüzden burada onları yazmıyoruz.
+
+      DİKKAT — BU DOSYADA KAPANIŞ ETİKETİ YAZMAYIN (yorum içinde bile):
+      Expo'nun enjeksiyonu düz metin araması yapıyor ve kapanış head/body
+      etiketinin İLK geçtiği yeri hedefliyor. Bir yorumun içinde böyle bir
+      metin geçerse script etiketi YORUMUN İÇİNE gömülüyor ve uygulama hiç
+      açılmıyor (bu bir kez yaşandı, 29 Ağu 2026).
+    -->
+    <title>SkinSimulator.com</title>
+    <!-- Aciklama meta etiketini Expo app.json'daki `web.description` alanindan
+         KENDISI ekliyor; burada da yazarsak sayfada IKI tane olur. -->
+
+    <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
+    <style id="expo-reset">
+      /* These styles make the body full-height */
+      html,
+      body {
+        height: 100%;
+      }
+      /* These styles disable body scrolling if you are using <ScrollView> */
+      body {
+        overflow: hidden;
+      }
+      /* These styles make the root element full-height */
+      #root {
+        display: flex;
+        height: 100%;
+        flex: 1;
+      }
+    </style>
+  </head>
+
+  <body>
+    <noscript>
+      You need to enable JavaScript to run this app.
+    </noscript>
+    <!-- The root element for your Expo app. -->
+    <div id="root"></div>
+  </body>
+</html>

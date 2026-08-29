@@ -1,27 +1,41 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { StyleSheet, Text, View, Image, TouchableOpacity, SafeAreaView, Animated, ScrollView, Platform } from 'react-native';
 import { generateFloat, getWearFromFloat, formatSignedMoney, generatePattern } from './utils';
-import { getRealisticPrice, getCharmPrice, getStickerPrice, CHARM_RARITY_ODDS, CHARM_CAPSULE_PRICE, CHARM_STAR_COST, STICKER_CAPSULE_PRICE, STICKER_STAR_COST } from './prices';
+import {
+  getRealisticPrice, getCharmPrice, getStickerPrice,
+  CHARM_CAPSULE_PRICE, CHARM_STAR_COST, STICKER_CAPSULE_PRICE, STICKER_STAR_COST,
+  getCollectionTiers, getCapsuleTiers, rollTier,
+  STAR_VALUE_USD, SPECIAL_ITEM_STAR_COST, ARMORY_COLLECTION_STAR_COST, ARMORY_COLLECTION_USD
+} from './prices';
 import { InlineContentsPanel } from './components/ContentsModal';
+import { StarIcon, STAR_GREEN } from './components/Icons';
+import BatchResultPanel from './components/BatchResultPanel';
 import { useI18n } from './i18n';
 import { C, shadow, rarityGlowStyle } from './theme';
 
-// Gerçekçi CS2 Koleksiyon Drop Oranları (silah koleksiyonları için)
-const COLLECTION_ODDS = [
-  { chance: 79.92, name: 'Consumer Grade', color: '#b0c3d9' },
-  { chance: 15.98, name: 'Industrial Grade', color: '#5e98d9' },
-  { chance: 3.20, name: 'Mil-Spec Grade', color: '#4b69ff' },
-  { chance: 0.64, name: 'Restricted', color: '#8847ff' },
-  { chance: 0.20, name: 'Classified', color: '#d32ce6' },
-  { chance: 0.06, name: 'Covert', color: '#eb4b4b' }
-];
+// ⚠️ SABİT ORAN TABLOSU KALDIRILDI — 29 AĞU 2026 KRİTİK BUG DÜZELTMESİ.
+//
+// Buradaki eski `COLLECTION_ODDS` tablosu %79.92'yi "Consumer Grade"e veriyordu.
+// Ama Armory koleksiyonlarında Consumer Grade eşya YOKTUR (Overpass 2024 /
+// Spy Tech / Arabesque hepsi Industrial ile başlıyor). Kademede eşya
+// bulunamayınca aşağıdaki satır devreye giriyordu:
+//
+//     if (possibleItems.length === 0) possibleItems = collection.contains;
+//
+// yani çekilişlerin %79.92'si TÜM KOLEKSİYONDAN DÜZGÜN DAĞILIMLI seçim
+// yapıyordu ve 17 eşyalık bir koleksiyonda Covert çıkma şansı %0.06 yerine
+// ~%4.7 oluyordu. Ölçülen sonuç: EV $15.83-$22.83 (maliyet $1.60) → %989-1427
+// ROI, yani kullanıcı Armory'de neredeyse HER ZAMAN kâr ediyordu.
+//
+// Oranlar artık koleksiyonun GERÇEK içeriğinden türetiliyor (prices.js →
+// getCollectionTiers). Boş kademe hiç çekilemediği için "tüm havuza düş"
+// yedeğine de gerek kalmadı. Doğrulandı (400.000 çekiliş): EV $0.71-$1.16,
+// ROI %45-68 — yani uzun vadede KAYBETTİRİYOR, gerçek CS2'deki gibi.
 
-const STAR_VALUE_USD = 0.40; // Armory Pass: 40 yıldız = $16.00 -> yıldız başına $0.40
-// GERÇEK CS2 KURALI: Bu kart, oyundaki "Limited Edition Item" mekaniğine dayanıyor —
-// Valve'de gerçekten 25 yıldız karşılığında garantili, tek seferlik özel bir silah
-// basılabiliyor. 5 yıldız gibi düşük bir maliyet, mock fiyatlandırmada bir Covert
-// AK-47'nin ($36-60) yanında %1800'ü aşan gerçekçi olmayan bir ROI üretiyordu.
-const SPECIAL_ITEM_STAR_COST = 25;
+// ⚠️ STAR_VALUE_USD ve SPECIAL_ITEM_STAR_COST artık prices.js'te (tek kaynak) —
+// kart köşesindeki maliyet ile açılış ekranındaki maliyet ayrışmasın diye.
+// GERÇEK CS2 KURALI: "Limited Edition Item" 25 yıldıza basılır; 5 yıldız gibi
+// düşük bir maliyet %1800'ü aşan gerçek dışı bir ROI üretiyordu.
 const USE_NATIVE_DRIVER = Platform.OS !== 'web';
 
 // ÇOKLU AÇILIŞ SONUÇ KARTI: her kart kendi mount anında bağımsız pop-in
@@ -68,10 +82,15 @@ export default function ArmoryOpening({ collection, onBack, balance, setBalance,
   const isSpecialItem = !!collection.isSpecialItem;
   // Charm ve Sticker kapsülleri AYNI 4 kademeli oran tablosunu kullanır.
   const isCapsule = isCharm || isSticker;
-  const ODDS_TABLE = isCapsule ? CHARM_RARITY_ODDS : COLLECTION_ODDS;
+  // ORAN TABLOSU İÇERİKTEN TÜRETİLİR — kapsüller 4 kademeli kendi merdivenini,
+  // silah koleksiyonları nadirlik merdivenini kullanır.
+  const ODDS_TABLE = useMemo(
+    () => (isCapsule ? getCapsuleTiers(collection) : getCollectionTiers(collection)),
+    [collection, isCapsule]
+  );
   // Gerçek CS2: charm kapsülü 3 yıldız, silah koleksiyonu 4 yıldız, özel eşya 25 yıldız
-  const ARMORY_PRICE = isSpecialItem ? SPECIAL_ITEM_STAR_COST : isSticker ? STICKER_STAR_COST : isCharm ? CHARM_STAR_COST : 4;
-  const ARMORY_PRICE_USD = isSpecialItem ? SPECIAL_ITEM_STAR_COST * STAR_VALUE_USD : isSticker ? STICKER_CAPSULE_PRICE : isCharm ? CHARM_CAPSULE_PRICE : 1.60;
+  const ARMORY_PRICE = isSpecialItem ? SPECIAL_ITEM_STAR_COST : isSticker ? STICKER_STAR_COST : isCharm ? CHARM_STAR_COST : ARMORY_COLLECTION_STAR_COST;
+  const ARMORY_PRICE_USD = isSpecialItem ? SPECIAL_ITEM_STAR_COST * STAR_VALUE_USD : isSticker ? STICKER_CAPSULE_PRICE : isCharm ? CHARM_CAPSULE_PRICE : ARMORY_COLLECTION_USD;
   // İçerik önizleme paneline hangi oran tablosunu kullanacağını söyler.
   const contentsKind = isSpecialItem ? 'armory' : isSticker ? 'sticker' : isCharm ? 'charm' : 'armory';
 
@@ -102,32 +121,31 @@ export default function ArmoryOpening({ collection, onBack, balance, setBalance,
       // Fiyat, eşyanın KENDİ nadirliğinden hesaplanır (Heat Treated = Classified);
       // burada sabit 'Covert' kullanmak fiyatı yapay olarak şişiriyordu.
       const price = getRealisticPrice(priceMap, item, floatVal, isStatTrak, item.rarity?.name || 'Classified');
-      return { ...item, isStatTrak, displayColor: item.rarity?.color || '#d32ce6', uid: Date.now().toString() + Math.random().toString(36).slice(2), float: floatVal, wear, pattern: generatePattern(), price, source: '🔥 Limited Edition', acquiredAt: Date.now() };
+      return { ...item, isStatTrak, displayColor: item.rarity?.color || '#d32ce6', uid: Date.now().toString() + Math.random().toString(36).slice(2), float: floatVal, wear, pattern: generatePattern(), price, source: 'LIMITED EDITION', acquiredAt: Date.now() };
     }
 
-    const roll = Math.random() * 100;
-    let cumulative = 0; let selectedRarity = ODDS_TABLE[0];
-    for (let i = 0; i < ODDS_TABLE.length; i++) {
-      cumulative += ODDS_TABLE[i].chance;
-      if (roll <= cumulative) { selectedRarity = ODDS_TABLE[i]; break; }
-    }
-    let possibleItems = collection.contains.filter(item => item.rarity?.name?.toLowerCase() === selectedRarity.name.toLowerCase());
-    if (possibleItems.length === 0) possibleItems = collection.contains;
+    const selectedRarity = rollTier(ODDS_TABLE);
+    if (!selectedRarity) return null; // içerik okunamadı (bozuk veri)
+    // ⚠️ "possibleItems boşsa TÜM koleksiyona düş" YEDEĞİ BİLEREK KALDIRILDI —
+    // bu satır Armory'nin %1000+ ROI bug'ının ta kendisiydi. Kademeler artık
+    // içerikten türediği için havuz boş olamaz.
+    const possibleItems = collection.contains.filter(item => item.rarity?.name === selectedRarity.name);
+    if (possibleItems.length === 0) return null;
     const finalItem = possibleItems[Math.floor(Math.random() * possibleItems.length)];
 
     // Charm ve Sticker'ların float/wear'ı YOKTUR — sabit kozmetik eşyalardır.
     if (isSticker) {
       const price = getStickerPrice(priceMap, finalItem);
-      return { ...finalItem, displayColor: finalItem.rarity?.color || '#4b69ff', uid: Date.now().toString() + Math.random().toString(36).slice(2), price, isSticker: true, source: '🏷️ Sticker', acquiredAt: Date.now() };
+      return { ...finalItem, displayColor: finalItem.rarity?.color || '#4b69ff', uid: Date.now().toString() + Math.random().toString(36).slice(2), price, isSticker: true, source: 'STICKER', acquiredAt: Date.now() };
     }
     if (isCharm) {
       const price = getCharmPrice(priceMap, finalItem);
-      return { ...finalItem, displayColor: finalItem.rarity?.color || '#4b69ff', uid: Date.now().toString() + Math.random().toString(36).slice(2), price, isCharm: true, source: '⭐ Armory', acquiredAt: Date.now() };
+      return { ...finalItem, displayColor: finalItem.rarity?.color || '#4b69ff', uid: Date.now().toString() + Math.random().toString(36).slice(2), price, isCharm: true, source: 'ARMORY', acquiredAt: Date.now() };
     }
     const floatVal = generateFloat(finalItem.min_float ?? 0.00, finalItem.max_float ?? 1.00);
     const wear = getWearFromFloat(floatVal);
     const price = getRealisticPrice(priceMap, finalItem, floatVal, false, finalItem.rarity?.name || 'Consumer Grade');
-    return { ...finalItem, displayColor: finalItem.rarity?.color || '#b0c3d9', uid: Date.now().toString() + Math.random().toString(36).slice(2), float: floatVal, wear, pattern: generatePattern(), price, source: '⭐ Armory', acquiredAt: Date.now() };
+    return { ...finalItem, displayColor: finalItem.rarity?.color || '#b0c3d9', uid: Date.now().toString() + Math.random().toString(36).slice(2), float: floatVal, wear, pattern: generatePattern(), price, source: 'ARMORY', acquiredAt: Date.now() };
   };
 
   const openArmory = () => {
@@ -142,6 +160,7 @@ export default function ArmoryOpening({ collection, onBack, balance, setBalance,
     revealTimeoutRef.current = setTimeout(() => {
       if (!isMountedRef.current) return;
       const itemToSave = rollOneArmoryResult();
+      if (!itemToSave) { setOpening(false); setErrorMsg(t('common.contentsUnreadable')); return; }
       setWonItem(itemToSave);
       setOpening(false);
 
@@ -166,14 +185,46 @@ export default function ArmoryOpening({ collection, onBack, balance, setBalance,
     if (gameMode === 'wallet') setStars(prev => prev - totalStars);
     setWonItem(null); setOpening(false);
 
-    const results = Array.from({ length: count }, () => rollOneArmoryResult());
+    const results = Array.from({ length: count }, () => rollOneArmoryResult()).filter(Boolean);
+    if (results.length === 0) { setErrorMsg(t('common.contentsUnreadable')); return; }
     const totalWon = results.reduce((acc, r) => acc + r.price, 0);
     setBatch({ items: results, count, starsSpent: totalStars, totalWon });
   };
 
   const closeBatch = () => setBatch(null);
   const keepAllBatch = () => { setInventory(prev => [...prev, ...batch.items]); setBatch(null); };
-  const sellAllBatch = () => { if (gameMode === 'wallet') setBalance(prev => prev + batch.totalWon); setBatch(null); };
+
+  // ⚠️ KALAN eşyaların toplamı — aradan tek tek satış yapılmış olabilir.
+  const sellAllBatch = () => {
+    const remaining = batch.items.reduce((a, it) => a + (it.price || 0), 0);
+    if (gameMode === 'wallet') setBalance(prev => prev + remaining);
+    setBatch(null);
+  };
+
+  const sellOneFromBatch = (item) => {
+    if (gameMode === 'wallet') setBalance(prev => prev + (item.price || 0));
+    setBatch(prev => {
+      if (!prev) return prev;
+      const items = prev.items.filter(i => i.uid !== item.uid);
+      return items.length === 0 ? null : { ...prev, items };
+    });
+  };
+
+  const keepSelectedFromBatch = (selectedItems) => {
+    const uids = selectedItems.map(i => i.uid);
+    setInventory(prev => [...prev, ...selectedItems]);
+    setBatch(prev => {
+      if (!prev) return prev;
+      const items = prev.items.filter(i => !uids.includes(i.uid));
+      return items.length === 0 ? null : { ...prev, items };
+    });
+  };
+
+  // TEKRARDAN AÇ: aynı koleksiyon/kapsül, AYNI adet.
+  // ⚠️ SONUÇ PANELİNİ ÖNCEDEN KAPATMA: yeni açılış "yetersiz kredi" ile
+  // reddedilirse kullanıcı hem yeni sonuç alamaz hem de eldeki eşyaları kaybeder.
+  // `openMultipleArmory` başarılı olursa batch'i zaten kendisi değiştiriyor.
+  const reopenBatch = () => { openMultipleArmory(batch?.count || 1); };
 
   const sellArmoryItem = () => {
     if (gameMode === 'wallet') setBalance(prev => prev + wonItem.price);
@@ -193,7 +244,9 @@ export default function ArmoryOpening({ collection, onBack, balance, setBalance,
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={onBack}><Text style={styles.backText}>{t('common.back')}</Text></TouchableOpacity>
-        {gameMode === 'wallet' ? <Text style={styles.balanceText}>⭐ {stars}</Text> : <Text style={styles.unlimitedText}>{t('common.unlimitedMode')}</Text>}
+        {gameMode === 'wallet'
+          ? <View style={styles.starRow}><StarIcon size={14} /><Text style={styles.balanceText}>{stars}</Text></View>
+          : <Text style={styles.unlimitedText}>{t('common.unlimitedMode')}</Text>}
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
@@ -211,7 +264,11 @@ export default function ArmoryOpening({ collection, onBack, balance, setBalance,
           <View style={styles.roiPanel}>
             <View style={styles.roiBox}>
               <Text style={styles.roiLbl}>{t('armory.mintCost')}</Text>
-              <Text style={styles.roiVal}>{ARMORY_PRICE}⭐ (${ARMORY_PRICE_USD.toFixed(2)})</Text>
+              <View style={styles.starRow}>
+                <Text style={styles.roiVal}>{ARMORY_PRICE}</Text>
+                <StarIcon size={12} />
+                <Text style={styles.roiVal}>(${ARMORY_PRICE_USD.toFixed(2)})</Text>
+              </View>
             </View>
             <View style={styles.roiBox}>
               <Text style={styles.roiLbl}>{t('armory.floatRange')}</Text>
@@ -284,24 +341,25 @@ export default function ArmoryOpening({ collection, onBack, balance, setBalance,
           </Animated.View>
         )}
 
-        {/* ÇOKLU AÇILIŞ SONUÇLARI (5x Aç) */}
+        {/* ÇOKLU AÇILIŞ SONUÇLARI — ortak panel (kasa/kapsül ile AYNI bileşen) */}
         {batch && (
-          <View style={styles.batchContainer}>
-            <Text style={styles.batchTitle}>{t('armory.batchDone', { n: batch.count })}</Text>
-            <View style={batchStyles.grid}>
-              {batch.items.map((it, i) => <RevealCard key={it.uid} item={it} delay={i * 90} isCharm={isCapsule} />)}
-            </View>
-            <View style={styles.batchSummary}>
-              <View style={styles.batchStatBox}><Text style={styles.roiLbl}>{t('common.spent')}</Text><Text style={[styles.roiVal, { color: C.danger }]}>-{batch.starsSpent}⭐</Text></View>
-              <View style={styles.batchStatBox}><Text style={styles.roiLbl}>{t('common.won')}</Text><Text style={[styles.roiVal, { color: C.success }]}>${batch.totalWon.toFixed(2)}</Text></View>
-              <View style={styles.batchStatBox}><Text style={styles.roiLbl}>{t('common.profit')}</Text><Text style={[styles.roiVal, { color: (batch.totalWon - batch.starsSpent * STAR_VALUE_USD) >= 0 ? C.success : C.danger }]}>{formatSignedMoney(batch.totalWon - batch.starsSpent * STAR_VALUE_USD)}</Text></View>
-            </View>
-            <View style={styles.actionRow}>
-              <TouchableOpacity style={styles.keepBtn} onPress={keepAllBatch}><Text style={styles.btnTxt}>{t('common.keepAll')}</Text></TouchableOpacity>
-              <TouchableOpacity style={styles.sellBtn} onPress={sellAllBatch}><Text style={styles.btnTxt}>{t('common.sellAll', { n: batch.totalWon.toFixed(2) })}</Text></TouchableOpacity>
-            </View>
-            <TouchableOpacity onPress={closeBatch}><Text style={styles.batchCloseTxt}>{t('common.close')}</Text></TouchableOpacity>
-          </View>
+          <BatchResultPanel
+            items={batch.items}
+            title={t('armory.batchDone', { n: batch.count })}
+            /* ⚠️ Armory YILDIZ harcar, dolar değil: harcama etiketi yıldızla
+               yazılır ama kâr/zarar DOLARA çevrilerek hesaplanır (1 yıldız = $0.40),
+               yoksa "40★ harcadım, $8 kazandım" gibi karşılaştırılamaz iki birim
+               yan yana görünürdü. */
+            spendingLabel={`-${batch.starsSpent}★`}
+            spendingUsd={batch.starsSpent * STAR_VALUE_USD}
+            onSellOne={sellOneFromBatch}
+            onSellAll={sellAllBatch}
+            onKeepAll={keepAllBatch}
+            onKeepSelected={keepSelectedFromBatch}
+            onReopen={reopenBatch}
+            reopenLabel={t('batch.reopen', { n: batch.count })}
+            onClose={closeBatch}
+          />
         )}
 
         {!opening && !wonItem && !batch && (
@@ -318,7 +376,10 @@ export default function ArmoryOpening({ collection, onBack, balance, setBalance,
               {[5, 10].map(n => (
                 <TouchableOpacity key={n} style={styles.multiBtn} onPress={() => openMultipleArmory(n)}>
                   <Text style={styles.multiBtnTxt}>{t('common.openX', { n })}</Text>
-                  <Text style={styles.multiBtnPrice}>{ARMORY_PRICE * n}⭐</Text>
+                  <View style={styles.starRow}>
+                    <Text style={styles.multiBtnPrice}>{ARMORY_PRICE * n}</Text>
+                    <StarIcon size={10} />
+                  </View>
                 </TouchableOpacity>
               ))}
             </View>
@@ -341,7 +402,8 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 18, paddingVertical: 12 },
   backBtn: { backgroundColor: C.surface, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, ...shadow.card },
   backText: { color: C.accentDeep, fontSize: 14, fontWeight: '800' },
-  balanceText: { color: C.gold, fontSize: 15, fontWeight: '800' },
+  balanceText: { color: STAR_GREEN, fontSize: 15, fontWeight: '800' },
+  starRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   unlimitedText: { color: C.accentDeep, fontSize: 15, fontWeight: '800' },
   content: { alignItems: 'center', padding: 20, paddingBottom: 60 },
   imageFrame: { width: 168, height: 168, alignItems: 'center', justifyContent: 'center', backgroundColor: C.surface, borderRadius: 26, ...shadow.card },

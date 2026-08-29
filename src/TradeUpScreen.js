@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { StyleSheet, Text, View, Image, TouchableOpacity, SafeAreaView, FlatList, TextInput, Modal, ActivityIndicator, ScrollView, useWindowDimensions } from 'react-native';
+import { StyleSheet, Text, View, Image, TouchableOpacity, SafeAreaView, FlatList, TextInput, Modal, ActivityIndicator, ScrollView, useWindowDimensions, Platform } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { getWearFromFloat, formatSignedMoney, generatePattern } from './utils';
 import { getRealisticPrice, POPULAR_SKIN_PRIORITY } from './prices';
@@ -7,6 +7,7 @@ import { fetchSkins } from './api';
 import { useToast, ToastBanner } from './components/Toast';
 import { useI18n } from './i18n';
 import { C, RARITY, shadow } from './theme';
+import { IconLock } from './components/Icons';
 
 const NEXT_RARITY_NAME = { 'Consumer Grade': 'Industrial Grade', 'Industrial Grade': 'Mil-Spec Grade', 'Mil-Spec Grade': 'Restricted', 'Restricted': 'Classified', 'Classified': 'Covert' };
 const RARITY_LABELS = { 'Consumer Grade': 'Consumer', 'Industrial Grade': 'Industrial', 'Mil-Spec Grade': 'Mil-Spec', 'Restricted': 'Restricted', 'Classified': 'Classified', 'Covert': 'Covert' };
@@ -66,7 +67,9 @@ const isValidTradeUpOutput = (item) => {
 function CompactFloatSlider({ value, min, max, onChange }) {
   const wearName = getWearFromFloat(value);
   const [text, setText] = useState(value.toFixed(4));
+  const [focused, setFocused] = useState(false);
   const lastCommitted = useRef(value);
+  const inputRef = useRef(null);
 
   useEffect(() => {
     if (Math.abs(value - lastCommitted.current) > 0.00001) {
@@ -90,16 +93,52 @@ function CompactFloatSlider({ value, min, max, onChange }) {
     onChange(v);
   };
 
+  // ============================================================
+  // MOBİL KLAVYE DÜZELTMESİ — "float yazarken eşya kayboluyor"
+  // ============================================================
+  // SORUN: Telefonda float kutusuna dokunulunca ekran klavyesi açılıyor, eşya
+  // kartı ve yazılan değer ekrandan tamamen çıkıyordu; kullanıcı ancak
+  // klavyeyi kapatınca ne yazdığını görebiliyordu.
+  //
+  // İKİ PARÇALI ÇÖZÜM:
+  //  1) public/index.html → viewport'a `interactive-widget=resizes-content`.
+  //     Tarayıcının varsayılanı `resizes-visual`'dır: klavye açılınca DÜZEN
+  //     viewport'u küçülmez, yalnızca görsel viewport kayar. `body` zaten
+  //     `overflow: hidden` olduğu için sayfa kaydırılamıyor ve odaklanan kutu
+  //     klavyenin ARKASINDA kalıyordu.
+  //  2) Aşağıdaki `onFocus`: kartın TAMAMINI ekranın ortasına kaydırır.
+  //
+  // ⚠️ NEDEN KUTUYU DEĞİL KARTI KAYDIRIYORUZ: kutuyu ortalamak yeterli
+  // görünüyor ama kullanıcı float'ı EŞYAYA BAKARAK ayarlıyor. Kart ortalanınca
+  // görsel + isim + yazdığı değer aynı anda görünür kalıyor.
+  //
+  // ⚠️ GECİKME ŞART: klavye açılma animasyonu sürerken kaydırırsak tarayıcı
+  // düzeni yeniden hesaplayınca hedef kayıyor. 320 ms, Android Chrome ve iOS
+  // Safari'nin klavye animasyonundan biraz uzun.
+  const handleFocus = () => {
+    setFocused(true);
+    if (Platform.OS !== 'web') return;
+    setTimeout(() => {
+      const node = inputRef.current;
+      if (!node || typeof node.closest !== 'function') return;
+      const target = node.closest('[data-tradecard]') || node;
+      target.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+    }, 320);
+  };
+
   return (
     <View style={fc.wrapper}>
       <View style={fc.row}>
         <Text style={fc.wearLabel} numberOfLines={1}>{wearName}</Text>
         <TextInput
-          style={fc.input}
-          keyboardType="numeric"
+          ref={inputRef}
+          style={[fc.input, focused && fc.inputFocused]}
+          keyboardType="decimal-pad"
+          inputMode="decimal"
           value={text}
           onChangeText={handleTextChange}
-          onBlur={() => setText(value.toFixed(4))}
+          onFocus={handleFocus}
+          onBlur={() => { setFocused(false); setText(value.toFixed(4)); }}
         />
       </View>
       <Slider style={{ width: '100%', height: 22 }} minimumValue={min} maximumValue={max} value={value} onValueChange={handleSliderChange} minimumTrackTintColor={C.accent} maximumTrackTintColor={C.surfaceSunken} thumbTintColor={C.accentDeep} />
@@ -111,7 +150,10 @@ const fc = StyleSheet.create({
   wrapper: { width: '100%', marginTop: 6 },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   wearLabel: { color: C.textDim, fontSize: 9, fontWeight: '800', flexShrink: 1, marginRight: 4 },
-  input: { backgroundColor: C.surfaceAlt, color: C.text, fontSize: 10, paddingVertical: 4, paddingHorizontal: 6, borderRadius: 8, width: 56, textAlign: 'center', fontWeight: '700', outlineStyle: 'none' }
+  // ⚠️ Odaklanınca belirgin bir çerçeve: mobilde kart ekranın ortasına
+  // kaydırıldığında kullanıcının HANGİ kutuya yazdığını görmesi gerekiyor.
+  input: { backgroundColor: C.surfaceAlt, color: C.text, fontSize: 11, paddingVertical: 5, paddingHorizontal: 6, borderRadius: 3, width: 58, textAlign: 'center', fontWeight: '800', outlineStyle: 'none', borderWidth: 1, borderColor: C.border },
+  inputFocused: { borderColor: C.accent, backgroundColor: C.surface, color: C.accentDeep }
 });
 
 // Dikey KART formatındaki eşya kutucuğu. `locked` -> AKILLI YUVA KİLİTLEME:
@@ -122,7 +164,7 @@ function TradeCard({ entry, index, cardWidth, locked, onPress, onLockedPress, on
     if (locked) {
       return (
         <TouchableOpacity style={[card.empty, card.lockedCard, { width: cardWidth }]} onPress={onLockedPress}>
-          <Text style={card.lockIcon}>🔒</Text>
+          <IconLock size={20} color={C.textFaint} />
           <Text style={card.lockedTxt}>{t('tradeup.locked')}</Text>
         </TouchableOpacity>
       );
@@ -136,7 +178,10 @@ function TradeCard({ entry, index, cardWidth, locked, onPress, onLockedPress, on
   }
   const min = entry.skin.min_float ?? 0; const max = entry.skin.max_float ?? 1;
   return (
-    <View style={[card.filled, { width: cardWidth, borderTopColor: entry.skin.rarity?.color || C.borderStrong }]}>
+    // `dataSet` -> DOM'da `data-tradecard="1"` olur. Float kutusuna
+    // odaklanıldığında mobil klavye düzeltmesi bu işaretle KARTIN tamamını
+    // buluyor ve ekranın ortasına kaydırıyor (bkz. CompactFloatSlider.handleFocus).
+    <View dataSet={{ tradecard: '1' }} style={[card.filled, { width: cardWidth, borderTopColor: entry.skin.rarity?.color || C.borderStrong }]}>
       <TouchableOpacity style={card.removeBtn} onPress={() => onRemove(index)}>
         <Text style={card.removeTxt}>✕</Text>
       </TouchableOpacity>
@@ -204,7 +249,7 @@ function SummaryContent({ analysis, filledCount, profitAmount, profitPct, t }) {
       {analysis.isKnifeRecipe && (
         <View style={ts.knifeBanner}>
           <Text style={ts.knifeBannerTxt}>
-            🔪 <Text style={{ fontWeight: '800' }}>{t('tradeup.knifeRecipe')}</Text> {t('tradeup.knifeRecipeBody')}
+            <Text style={{ fontWeight: '800' }}>{t('tradeup.knifeRecipe')}</Text> {t('tradeup.knifeRecipeBody')}
           </Text>
         </View>
       )}
@@ -446,7 +491,7 @@ export default function TradeUpScreen({ inventory, setInventory, priceMap, allCo
 
     const ev = possibleOutcomes.reduce((a, o) => a + o.price * (o.chance / 100), 0);
     const sourceCollectionNames = isKnifeRecipe
-      ? ['🔪 Bıçak Havuzu (Simülatöre Özel Kural)']
+      ? ['Bıçak / Eldiven Havuzu (Simülatöre Özel Kural)']
       : totalVotes > 0
         ? Object.keys(collectionVotes).map(id => collectionById[id]?.name).filter(Boolean)
         : [];
@@ -464,16 +509,18 @@ export default function TradeUpScreen({ inventory, setInventory, priceMap, allCo
     const done = () => onPendingItemHandled?.();
 
     if (!isValidTradeUpInput(pendingItem)) {
-      showToast('Bu eşya trade-up girdisi olamaz (bıçak/eldiven/sticker/charm).', 'error');
+      showToast(t('tradeup.invalidInput'), 'error');
       return done();
     }
     if (typeof pendingItem.float !== 'number') {
-      showToast('Bu eşyanın float değeri yok, sözleşmeye eklenemez.', 'error');
+      // ⚠️ Sabit metin yazma yasağı (Altın Kural 7): bu satır Türkçe gömülüydü
+      // ve İngilizce arayüzde de Türkçe görünüyordu.
+      showToast(t('tradeup.noFloat'), 'error');
       return done();
     }
     const r = pendingItem.rarity?.name;
     if (lockedRarity && r !== lockedRarity) {
-      showToast(`Sözleşme "${lockedRarity}" nadirliğine kilitli — önce seçimi sıfırla.`, 'error');
+      showToast(t('tradeup.rarityLocked', { rarity: lockedRarity }), 'error');
       return done();
     }
 
@@ -574,11 +621,11 @@ export default function TradeUpScreen({ inventory, setInventory, priceMap, allCo
   // analiz sonucu olup olmadığına göre de devre dışı bırakılıyor.
   const executeTradeUp = () => {
     if (filledCount !== requiredCount) {
-      showToast('Sözleşme için tam 10 eşya eklemelisin.', 'error');
+      showToast(t('tradeup.needTen', { n: requiredCount }), 'error');
       return;
     }
     if (!analysis || analysis.outcomes.length === 0) {
-      showToast('Seçilen eşyaların bir üst nadirlik derecesi bulunmuyor — farklı eşyalar dene.', 'error');
+      showToast(t('tradeup.noHigherTier'), 'error');
       return;
     }
     // NOT: Bakiye kontrolü/düşümü BİLEREK YOK — bkz. dosya başındaki açıklama.
@@ -591,7 +638,7 @@ export default function TradeUpScreen({ inventory, setInventory, priceMap, allCo
     const wonIsKnife = isKnife(winner.skin);
     const winColor = wonIsKnife ? RARITY.gold : winner.skin.rarity?.color;
 
-    setWonItem({ ...winner.skin, float: winner.outFloat, price: winner.price, displayColor: winColor, isKnifeWin: wonIsKnife, wear: getWearFromFloat(winner.outFloat), pattern: generatePattern(), acquiredAt: Date.now(), uid: Date.now().toString(), source: wonIsKnife ? '🔪 Trade-Up (Bıçak)' : '🔄 Trade-Up' });
+    setWonItem({ ...winner.skin, float: winner.outFloat, price: winner.price, displayColor: winColor, isKnifeWin: wonIsKnife, wear: getWearFromFloat(winner.outFloat), pattern: generatePattern(), acquiredAt: Date.now(), uid: Date.now().toString(), source: wonIsKnife ? 'TRADE-UP ★' : 'TRADE-UP' });
 
     // GEÇMİŞ: kullanılan 10 girdiyi (skin+float+fiyat) ve sonucu kaydet — kullanıcı
     // "Geçmiş" sekmesinden tıklayınca aynı kombinasyon slotlara geri yüklenebilsin.
@@ -837,7 +884,7 @@ export default function TradeUpScreen({ inventory, setInventory, priceMap, allCo
               <View style={ts.excludedGrid}>
                 {excludedSearchMatches.map(item => (
                   <View key={item.id} style={ts.excludedCard}>
-                    <Text style={ts.excludedLock}>🔒</Text>
+                    <IconLock size={14} color={C.warn} />
                     <Image source={{ uri: item.image }} style={{ width: 44, height: 33, opacity: 0.5 }} resizeMode="contain" />
                     <Text style={ts.excludedName} numberOfLines={2}>{item.name}</Text>
                   </View>

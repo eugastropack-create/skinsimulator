@@ -1,6 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import { StyleSheet, Text, View, Image, TouchableOpacity, SafeAreaView, Modal, ScrollView } from 'react-native';
-import { getItemPriceRange, getCharmPrice, getStickerPrice, getStableSortValue, getSouvenirTiers, getRealisticPrice } from '../prices';
+import {
+  getItemPriceRange, getCharmPrice, getStickerPrice, getStableSortValue,
+  getSouvenirTiers, getCaseTiers, getCollectionTiers, getCapsuleTiers, getRealisticPrice
+} from '../prices';
 import { useI18n } from '../i18n';
 import { C, RARITY, shadow, rarityTint } from '../theme';
 
@@ -27,46 +30,57 @@ const KNIFE_PREVIEW_COUNT = 10;
 //   Sarı (Bıçak/Eldiven) → Kırmızı → Pembe → Mor → Koyu Mavi → Açık Mavi → Gri
 // Kullanıcı bir kutuya baktığında önce EN DEĞERLİ ödülleri görür; ucuz Mil-Spec
 // yığınını geçmek için aşağı kaydırmak zorunda kalmaz.
-const CASE_TIERS = [
-  { key: 'color', match: RARITY.gold, chance: 0.26, label: 'Rare Special (Bıçak/Eldiven)', color: RARITY.gold },
-  { key: 'color', match: RARITY.red, chance: 0.64, label: 'Covert (Kırmızı)', color: RARITY.red },
-  { key: 'color', match: RARITY.pink, chance: 3.20, label: 'Classified (Pembe)', color: RARITY.pink },
-  { key: 'color', match: RARITY.purple, chance: 15.98, label: 'Restricted (Mor)', color: RARITY.purple },
-  { key: 'color', match: RARITY.blue, chance: 79.92, label: 'Mil-Spec (Mavi)', color: RARITY.blue }
-];
+// ============================================================
+// ⚠️ ORAN TABLOLARI ARTIK SABİT DEĞİL — İÇERİKTEN TÜRETİLİR
+// ============================================================
+// 29 Ağu 2026 düzeltmesi. Buradaki dört sabit tablo (CASE / ARMORY / CAPSULE /
+// SOUVENIR) çekiliş kodundan BAĞIMSIZ yaşıyordu ve ikisi ayrışmıştı:
+//
+//   • ARMORY tablosu "Consumer Grade %79.92" diyordu; oysa Armory
+//     koleksiyonlarında Consumer Grade eşya YOKTUR. Kullanıcı önizlemede
+//     hiç çıkmayacak bir kademenin oranını görüyordu.
+//   • Kasa tablosu her kutuda 5 kademe varsayıyordu; bıçağı olmayan
+//     kutularda (ör. Genesis Terminal) %0.26'lık altın dilim gösteriliyordu
+//     ama o kutudan asla bıçak çıkmıyordu.
+//
+// Artık üçü de prices.js'teki TEK kaynaktan besleniyor. Böylece önizlemede
+// yazan oran ile gerçekten uygulanan oran MATEMATİKSEL OLARAK aynı.
+//
+// SIRALAMA: tablolar EN DEĞERLİDEN EN DEĞERSİZE çevrilir (merdiven en sıktan
+// en nadire gelir, biz ters basıyoruz) — kullanıcı önce en iyi ödülü görsün.
+const RARITY_LABEL_TR = {
+  'Rare Special': 'Rare Special (Bıçak/Eldiven)',
+  'Covert': 'Covert (Kırmızı)',
+  'Classified': 'Classified (Pembe)',
+  'Restricted': 'Restricted (Mor)',
+  'Mil-Spec Grade': 'Mil-Spec Grade (Mavi)',
+  'Industrial Grade': 'Industrial Grade (Açık Mavi)',
+  'Consumer Grade': 'Consumer Grade (Gri)',
+  'Extraordinary': 'Extraordinary (Kırmızı)',
+  'Exotic': 'Exotic (Pembe)',
+  'Remarkable': 'Remarkable (Mor)',
+  'High Grade': 'High Grade (Mavi)'
+};
 
-const ARMORY_TIERS = [
-  { key: 'name', match: 'Covert', chance: 0.06, label: 'Covert (Kırmızı)', color: RARITY.red },
-  { key: 'name', match: 'Classified', chance: 0.20, label: 'Classified (Pembe)', color: RARITY.pink },
-  { key: 'name', match: 'Restricted', chance: 0.64, label: 'Restricted (Mor)', color: RARITY.purple },
-  { key: 'name', match: 'Mil-Spec Grade', chance: 3.20, label: 'Mil-Spec Grade (Koyu Mavi)', color: RARITY.blue },
-  { key: 'name', match: 'Industrial Grade', chance: 15.98, label: 'Industrial Grade (Açık Mavi)', color: RARITY.lightBlue },
-  { key: 'name', match: 'Consumer Grade', chance: 79.92, label: 'Consumer Grade (Gri)', color: RARITY.grey }
-];
-
-// Charm ve Sticker kapsülleri BİREBİR aynı 4 kademeyi kullanır.
-const CAPSULE_TIERS = [
-  { key: 'name', match: 'Extraordinary', chance: 0.64, label: 'Extraordinary (Kırmızı)', color: RARITY.red },
-  { key: 'name', match: 'Exotic', chance: 3.21, label: 'Exotic (Pembe)', color: RARITY.pink },
-  { key: 'name', match: 'Remarkable', chance: 16.02, label: 'Remarkable (Mor)', color: RARITY.purple },
-  { key: 'name', match: 'High Grade', chance: 80.13, label: 'High Grade (Mavi)', color: RARITY.blue }
-];
-
-// SOUVENIR: kademeler SABİT DEĞİLDİR — pakete göre değişir (bazı harita
-// koleksiyonlarında yalnızca 3 kademe var). Bu yüzden tablo, paketin gerçek
-// içeriğinden ÜRETİLİR (bkz. prices.getSouvenirTiers) ve burada yalnızca
-// azalan sıraya çevrilir.
-const souvenirTiersFor = (subject) =>
-  getSouvenirTiers(subject)
+// prices.js kademe nesnesini bu bileşenin beklediği satır biçimine çevirir.
+const toRows = (tiers) =>
+  tiers
     .slice()
     .reverse() // en değerliden en değersize
-    .map(t => ({ key: 'name', match: t.name, chance: t.chance, label: t.name, color: t.color }));
+    .map(tr => ({
+      key: 'name',
+      match: tr.isRare ? 'Rare Special' : tr.name,
+      isRare: !!tr.isRare,
+      chance: tr.chance,
+      label: RARITY_LABEL_TR[tr.name] || tr.name,
+      color: tr.color
+    }));
 
 const tiersFor = (kind, subject) => {
-  if (kind === 'case') return CASE_TIERS;
-  if (kind === 'souvenir') return souvenirTiersFor(subject);
-  if (kind === 'charm' || kind === 'sticker') return CAPSULE_TIERS;
-  return ARMORY_TIERS;
+  if (kind === 'case') return toRows(getCaseTiers(subject));
+  if (kind === 'souvenir') return toRows(getSouvenirTiers(subject));
+  if (kind === 'charm' || kind === 'sticker') return toRows(getCapsuleTiers(subject));
+  return toRows(getCollectionTiers(subject));
 };
 
 // Bir eşyanın gösterilecek fiyat metni — türüne göre doğru fiyat motoru kullanılır.
@@ -111,24 +125,22 @@ export function ContentsList({ subject, kind, priceMap, compact = false }) {
         // ALTIN (Rare Special) kademe: bıçak/eldivenler `contains` içinde DEĞİL,
         // ayrı `contains_rare` alanındadır — bu yüzden ayrıca ele alınır.
         // Aksi halde kasa önizlemesinde Sarı kademe HİÇ görünmezdi.
-        const items = tier.match === RARITY.gold
+        const items = tier.isRare
           ? (subject.contains_rare || [])
-          : contains.filter(it =>
-              tier.key === 'color' ? it.rarity?.color?.toLowerCase() === tier.match : it.rarity?.name === tier.match
-            );
+          : contains.filter(it => it.rarity?.name === tier.match);
         if (items.length === 0) return null;
         // EN DEĞERLİDEN EN DEĞERSİZE: kademe içinde de sırala. Sıralama
         // deterministik `getStableSortValue` ile yapılır — `generateMockPrice`
         // rastgele varyans içerdiği için onunla sıralamak listeyi her
         // render'da zıplatırdı.
-        const priceRarity = tier.match === RARITY.gold ? 'Rare Special' : undefined;
+        const priceRarity = tier.isRare ? 'Rare Special' : undefined;
         const sorted = [...items].sort(
           (a, b) => getStableSortValue(priceMap, b, priceRarity) - getStableSortValue(priceMap, a, priceRarity)
         );
         return {
           ...tier,
           items: sorted,
-          isKnifeTier: tier.match === RARITY.gold,
+          isKnifeTier: tier.isRare,
           perItemChance: tier.chance / sorted.length
         };
       })

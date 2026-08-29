@@ -2,7 +2,11 @@ import React, { useState, useMemo } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ScrollView, useWindowDimensions } from 'react-native';
 import { useI18n } from './i18n';
 import { GUIDE, GUIDE_SECTIONS } from './content/guide';
+import { IconBook, IconList, IconGem, IconRefresh, IconLock, IconGlobe } from './components/Icons';
 import { C, shadow, webTransition } from './theme';
+
+// Bölüm anahtarı -> çizgi ikon eşlemesi (guide.js artık emoji tutmaz, anahtar tutar).
+const SECTION_ICONS = { book: IconBook, list: IconList, gem: IconGem, refresh: IconRefresh, lock: IconLock, globe: IconGlobe };
 
 // ============================================================
 // REHBER / BLOG EKRANI — SEMANTİK HTML
@@ -65,7 +69,7 @@ export default function BlogScreen({ initialSection = 'about' }) {
             style={[s.navBtn, on && s.navBtnOn, webTransition('background-color', 140)]}
             onPress={() => setActive(sec.id)}
           >
-            <Text style={s.navIcon}>{sec.icon}</Text>
+            {(() => { const Ico = SECTION_ICONS[sec.icon] || IconBook; return <Ico size={15} color={on ? C.accentDeep : C.textDim} />; })()}
             <Text style={[s.navTxt, on && s.navTxtOn]} numberOfLines={1}>
               {copy[sec.id].title}
             </Text>

@@ -1,13 +1,15 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { StyleSheet, Text, View, Image, TouchableOpacity, SafeAreaView, Animated, Easing, useWindowDimensions, ScrollView, Platform } from 'react-native';
 import { generateFloat, getWearFromFloat, formatSignedMoney, generatePattern } from './utils';
-import { getRealisticPrice, getSouvenirTiers, getContainerPrice, KEY_PRICE_USD, CASE_RARITY_ODDS } from './prices';
+import {
+  getRealisticPrice, getSouvenirTiers, getCaseTiers, poolForTier, rollTier,
+  getContainerPrice, KEY_PRICE_USD, STATTRAK_CHANCE
+} from './prices';
 import { InlineContentsPanel } from './components/ContentsModal';
+import BatchResultPanel from './components/BatchResultPanel';
+import { IconCase, IconKey } from './components/Icons';
 import { useI18n } from './i18n';
-import { C, RARITY, shadow, rarityGlowStyle, hexToRgba } from './theme';
-
-// Oran tablosu prices.js'te TEK bir yerde tanımlı — Terminal ekranı da aynısını kullanır.
-const RARITY_ODDS = CASE_RARITY_ODDS;
+import { C, shadow, rarityGlowStyle, hexToRgba } from './theme';
 
 // react-native-web'de `useNativeDriver: true` desteklenmiyor (konsola "native
 // animated module missing" uyarısı basıp JS'e düşüyor) — bu geçiş bazı
@@ -52,35 +54,24 @@ const SETTLE_SPRING = { friction: 4.6, tension: 32 };
 // item N'nin şerit başlangıcına göre TAM ORTASININ konumu (soldaki ilk margin dahil).
 const centerOfRouletteItem = (n) => ITEM_MARGIN + n * ITEM_PITCH + ITEM_WIDTH / 2;
 
-const GOLD = RARITY.gold;
+// (GOLD sabiti artık gerekmiyor — altın kademe prices.js/getCaseTiers'ten gelir)
 
 // ============================================================
-// BUG DÜZELTMESİ: BIÇAKLAR `contains` İÇİNDE DEĞİL
+// KADEME HAVUZU — artık prices.js'teki `poolForTier` kullanılıyor
 // ============================================================
-// ByMykel verisinde kasanın normal skinleri `contains`, bıçak/eldivenleri ise
-// AYRI bir `contains_rare` alanındadır. Üstelik `contains_rare` öğelerinin
-// rarity.color'ı '#ffd700' DEĞİL, '#eb4b4b' (Covert kırmızısı)'dır.
-// Eski kod altın kademeyi `contains` içinde '#ffd700' renginde arıyordu; hiçbir
-// zaman bulamadığı için "eşleşme yoksa tüm listeye düş" yedeğine giriyor ve
-// %0.26'lık Rare Special çekilişi SESSİZCE sıradan bir skin veriyordu —
-// yani kasadan ASLA bıçak çıkmıyordu. Artık altın kademe doğru havuzdan çekilir.
+// BUG DÜZELTMESİ (korunuyor): ByMykel verisinde kasanın normal skinleri
+// `contains`, bıçak/eldivenleri ise AYRI bir `contains_rare` alanındadır.
+// Üstelik `contains_rare` öğelerinin rarity.color'ı '#ffd700' DEĞİL, '#eb4b4b'
+// (Covert kırmızısı)'dır. Eski kod altın kademeyi `contains` içinde '#ffd700'
+// renginde arıyordu; hiçbir zaman bulamadığı için kasadan ASLA bıçak çıkmıyordu.
 //
-// SOUVENIR NOTU: Souvenir paketlerinde altın kademe yoktur ve kademeler
-// renkle değil ADLA eşleşir (dinamik kademe tespiti — bkz. getSouvenirTiers).
-const poolForRarity = (crate, rarity, mode) => {
-  if (mode === 'souvenir') {
-    const matched = (crate.contains || []).filter(i => i.rarity?.name === rarity.name);
-    return matched.length > 0 ? matched : (crate.contains || []);
-  }
-  if (rarity.color === GOLD) {
-    const rare = crate.contains_rare || [];
-    if (rare.length > 0) return rare;
-  }
-  const matched = (crate.contains || []).filter(
-    i => i.rarity?.color?.toLowerCase() === rarity.color.toLowerCase()
-  );
-  return matched.length > 0 ? matched : (crate.contains || []);
-};
+// ⚠️ 29 AĞU 2026 — İKİNCİ DÜZELTME: Eski `poolForRarity` bir kademede eşya
+// bulamazsa `crate.contains`'in TAMAMINA düşüyordu. Bıçağı olmayan bir kutuda
+// (ör. Genesis Terminal) bu, %0.26'lık altın dilimin DÜZGÜN DAĞILIMLI bir eşya
+// vermesi demekti — Covert dahil. Artık kademe tablosu kutunun içeriğinden
+// türetiliyor (getCaseTiers), yani boş kademe hiç çekilemiyor ve o yedeğe
+// ihtiyaç kalmıyor. (Aynı hatanın büyük ölçekli hâli Armory'de %1000+ ROI
+// üretiyordu — bkz. prices.js kademe merdiveni açıklaması.)
 
 // CS TARZI GÖSTERGE (POINTER)
 // Eskiden kazananın etrafına bir ÇERÇEVE/KUTU çiziliyordu; amatör duruyordu.
@@ -251,9 +242,11 @@ export default function CaseOpening({ crate, onBack, balance, setBalance, invent
   const { width } = useWindowDimensions();
 
   const isSouvenir = mode === 'souvenir';
-  // Souvenir kademeleri paketin İÇERİĞİNDEN türetilir — sabit tablo YOK.
+  // ⚠️ KADEMELER HER İKİ MODDA DA İÇERİKTEN TÜRETİLİR — sabit tablo YOK.
+  // Souvenir paketlerinde kademe sayısı pakete göre değişir; kasalarda ise
+  // `contains_rare` boşsa altın dilim hiç oluşturulmaz.
   const oddsTable = useMemo(
-    () => (isSouvenir ? getSouvenirTiers(crate) : RARITY_ODDS),
+    () => (isSouvenir ? getSouvenirTiers(crate) : getCaseTiers(crate)),
     [crate, isSouvenir]
   );
 
@@ -267,9 +260,15 @@ export default function CaseOpening({ crate, onBack, balance, setBalance, invent
   const getRouletteWidth = () => rouletteWidthRef.current ?? (width - 40); // 40 = content padding (20 sol + 20 sağ)
   // FİYAT ARTIK DİNAMİK: kutunun kendi `market_hash_name`'i canlı fiyat
   // tablosunda aranır; bulunamazsa türe göre gerçekçi bir tabana düşer.
-  const CASE_PRICE = getContainerPrice(priceMap, crate, isSouvenir ? 'souvenir' : 'case');
+  // ⚠️ KART İLE AÇILIŞ EKRANI AYNI FİYATI KULLANMALI.
+  // Piyasada fiyatı bulunamayan kutularda kart, fiyatı içerikten TAHMİN ediyor
+  // (prices.resolveContainerCost). Burada yeniden `getContainerPrice` çağırmak
+  // sabit $0.50/$2.50 yedeğine düşer ve kart "$1233" derken açılış "$1.00"
+  // tahsil ederdi. Bu yüzden önce kartın hesapladığı değeri kullanıyoruz.
+  const CASE_PRICE = (isSouvenir ? crate.cost : crate.casePrice)
+    ?? getContainerPrice(priceMap, crate, isSouvenir ? 'souvenir' : 'case');
   const TOTAL_COST_PER_OPEN = isSouvenir ? CASE_PRICE : CASE_PRICE + KEY_PRICE;
-  const SOURCE_LABEL = isSouvenir ? '🏆 Souvenir' : '📦 Kasa';
+  const SOURCE_LABEL = isSouvenir ? 'SOUVENIR' : 'CASE';
 
   // BELLEK SIZINTISI DÜZELTMESİ: bileşen unmount olduktan sonra bu setTimeout'lar
   // (ve Animated'ın tamamlanma callback'i, clearTimeout ile iptal edilemez)
@@ -325,16 +324,9 @@ export default function CaseOpening({ crate, onBack, balance, setBalance, invent
   }, []);
 
   // Nadirlik zarını atıp kademeyi seçer — tekli/çoklu açılışta AYNI fonksiyon.
-  const rollRarity = () => {
-    const roll = Math.random() * 100;
-    let cumulative = 0;
-    let selected = oddsTable[0];
-    for (let i = 0; i < oddsTable.length; i++) {
-      cumulative += oddsTable[i].chance;
-      if (roll <= cumulative) { selected = oddsTable[i]; break; }
-    }
-    return selected;
-  };
+  // Zar mantığı prices.js'te TEK bir yerde (rollTier) duruyor; kasalar,
+  // terminaller, koleksiyonlar ve kapsüller hepsi onu kullanıyor.
+  const rollRarity = () => rollTier(oddsTable);
 
   // Tekli kasa açma mekaniği — MANTIK olduğu gibi korunuyor.
   // Görsel eklemeler: rulet-pitch bug düzeltmesi (bkz. ITEM_PITCH), kenar solma
@@ -369,7 +361,7 @@ export default function CaseOpening({ crate, onBack, balance, setBalance, invent
 
     const items = Array.from({ length: stripLength }, () => {
       const selectedRarity = rollRarity();
-      const possibleItems = poolForRarity(crate, selectedRarity, mode);
+      const possibleItems = poolForTier(crate, selectedRarity) || crate.contains || [];
       return { item: possibleItems[Math.floor(Math.random() * possibleItems.length)], rarity: selectedRarity };
     });
 
@@ -379,7 +371,7 @@ export default function CaseOpening({ crate, onBack, balance, setBalance, invent
     // imkansız.
     const winnerData = items[WINNER_INDEX];
     // GERÇEK CS2 KURALI: Souvenir eşyalarında StatTrak YOKTUR.
-    const isStatTrak = !isSouvenir && Math.random() < 0.10;
+    const isStatTrak = !isSouvenir && Math.random() < STATTRAK_CHANCE;
     // GERÇEK CS2 KURALI: Her skinin kendine özgü float sınırı vardır (bazı skinler hiç
     // Factory New olamaz, bazıları hiç Battle-Scarred olamaz). Eskiden her eşya için
     // sabit 0.00-1.00 kullanılıyordu — artık eşyanın kendi min_float/max_float'ı kullanılıyor.
@@ -460,9 +452,9 @@ export default function CaseOpening({ crate, onBack, balance, setBalance, invent
   // kasa için bağımsız bir kez çalıştırılır.
   const rollOneItem = () => {
     const selectedRarity = rollRarity();
-    const possibleItems = poolForRarity(crate, selectedRarity, mode);
+    const possibleItems = poolForTier(crate, selectedRarity) || crate.contains || [];
     const item = possibleItems[Math.floor(Math.random() * possibleItems.length)];
-    const isStatTrak = !isSouvenir && Math.random() < 0.10;
+    const isStatTrak = !isSouvenir && Math.random() < STATTRAK_CHANCE;
     const floatVal = generateFloat(item.min_float ?? 0.00, item.max_float ?? 1.00);
     const price = getRealisticPrice(priceMap, item, floatVal, isStatTrak, selectedRarity.name, isSouvenir);
     return { ...item, isStatTrak, isSouvenir, displayColor: selectedRarity.color, uid: Date.now().toString() + Math.random().toString(36).slice(2), float: floatVal, wear: getWearFromFloat(floatVal), pattern: generatePattern(), price, source: SOURCE_LABEL, acquiredAt: Date.now() };
@@ -587,9 +579,43 @@ export default function CaseOpening({ crate, onBack, balance, setBalance, invent
     setBatch(null);
   };
 
+  // ⚠️ `batch.totalWon` DEĞİL, KALAN eşyaların toplamı kullanılır: kullanıcı
+  // aradan tek tek satış yapmış olabilir; ilk açılıştaki toplamı ödemek
+  // satılan eşyaların parasını İKİ KEZ verirdi.
   const sellAllBatch = () => {
-    if (gameMode === 'wallet') setBalance(prev => prev + batch.totalWon);
+    const remaining = batch.items.reduce((a, it) => a + (it.price || 0), 0);
+    if (gameMode === 'wallet') setBalance(prev => prev + remaining);
     setBatch(null);
+  };
+
+  // TEKLİ SATIŞ (hover): eşya ızgaradan çıkar, parası bakiyeye eklenir.
+  const sellOneFromBatch = (item) => {
+    if (gameMode === 'wallet') setBalance(prev => prev + (item.price || 0));
+    setBatch(prev => {
+      if (!prev) return prev;
+      const items = prev.items.filter(i => i.uid !== item.uid);
+      return items.length === 0 ? null : { ...prev, items };
+    });
+  };
+
+  // SEÇİLENLERİ ENVANTERE GÖNDER: yalnızca işaretlenenler aktarılır, kalanlar
+  // ekranda durur (kullanıcı beğenmediklerini sonra tek tuşla satabilsin).
+  const keepSelectedFromBatch = (selectedItems) => {
+    const uids = selectedItems.map(i => i.uid);
+    setInventory(prev => [...prev, ...selectedItems]);
+    setBatch(prev => {
+      if (!prev) return prev;
+      const items = prev.items.filter(i => !uids.includes(i.uid));
+      return items.length === 0 ? null : { ...prev, items };
+    });
+  };
+
+  // TEKRARDAN AÇ: aynı kutuyu AYNI adetle yeniden açar.
+  // ⚠️ Panel ÖNCEDEN KAPATILMAZ: yeni açılış "yetersiz bakiye" ile reddedilirse
+  // kullanıcı eldeki eşyaları da kaybederdi. Başarılı açılış batch'i kendisi değiştirir.
+  const reopenBatch = () => {
+    const n = batch?.count || 1;
+    if (n === 1) handleOpenCase(); else openMultiple(n);
   };
 
   const netProfit = sessionWon - sessionSpent;
@@ -620,11 +646,31 @@ export default function CaseOpening({ crate, onBack, balance, setBalance, invent
               <Image source={{ uri: crate.image }} style={styles.crateImage} resizeMode="contain" />
             </View>
             <Text style={styles.crateName}>{crate.name}</Text>
-            <Text style={styles.costBreakdown}>
-              {isSouvenir
-                ? t('case.costSouvenir', { n: CASE_PRICE.toFixed(2) })
-                : t('case.costBreakdown', { case: CASE_PRICE.toFixed(2), key: KEY_PRICE.toFixed(2) })}
-            </Text>
+            {/* ============================================================
+                FİYAT DÖKÜMÜ — kutunun hemen altında, AYRI AYRI
+                ============================================================
+                Eskiden tek satırlık küçük gri bir metindi ("Kasa $0.24 +
+                Anahtar $2.50") ve toplam da açma butonunun üzerinde
+                tekrarlanıyordu. Kullanıcı hangi rakamın ne olduğunu
+                ayırt edemiyordu. Artık her kalem kendi satırında, kendi
+                CS2 ikonuyla ve okunaklı puntoda. */}
+            <View style={styles.priceRow}>
+              <View style={styles.priceItem}>
+                <IconCase size={16} color={C.textSoft} />
+                <Text style={styles.priceLbl}>{isSouvenir ? t('case.priceSouvenir') : t('case.priceCase')}</Text>
+                <Text style={styles.priceVal}>${CASE_PRICE.toFixed(2)}</Text>
+              </View>
+              {!isSouvenir && (
+                <>
+                  <View style={styles.priceSep} />
+                  <View style={styles.priceItem}>
+                    <IconKey size={16} color={C.textSoft} />
+                    <Text style={styles.priceLbl}>{t('case.priceKey')}</Text>
+                    <Text style={styles.priceVal}>${KEY_PRICE.toFixed(2)}</Text>
+                  </View>
+                </>
+              )}
+            </View>
 
             {crate.expectedReturn != null && (
               <View style={styles.roiPanel}>
@@ -703,13 +749,13 @@ export default function CaseOpening({ crate, onBack, balance, setBalance, invent
         {/* ÇOKLU AÇILIŞ SONUÇLARI */}
         {batch && (
           <View style={styles.batchContainer}>
-            <View style={styles.batchHeaderRow}>
+            {/* ⚠️ Açılış BİTTİĞİNDE bu başlık basılmaz — BatchResultPanel kendi
+                başlığını taşıyor, ikisi birlikte aynı satırı iki kez gösterirdi. */}
+            <View style={[styles.batchHeaderRow, batch.revealed && { display: 'none' }]}>
               <Text style={styles.batchTitle}>
-                {batch.revealed
-                  ? t('case.batchDone', { n: batch.count })
-                  : batch.sequential
-                    ? t('case.batchSequential', { n: batch.count, done: revealedCount, total: batch.count })
-                    : t('case.batchOpening', { n: batch.count })}
+                {batch.sequential
+                  ? t('case.batchSequential', { n: batch.count, done: revealedCount, total: batch.count })
+                  : t('case.batchOpening', { n: batch.count })}
               </Text>
               {/* "HEMEN GÖSTER" (Instant Show): sadece sıralı belirme sürerken görünür */}
               {batch.sequential && !batch.revealed && (
@@ -727,7 +773,7 @@ export default function CaseOpening({ crate, onBack, balance, setBalance, invent
               </View>
             )}
 
-            {batch.sequential && (
+            {batch.sequential && !batch.revealed && (
               <View style={styles.batchGrid}>
                 {batch.items.slice(0, revealedCount).map(it => <RevealCard key={it.uid} item={it} />)}
                 {Array.from({ length: batch.count - revealedCount }).map((_, i) => (
@@ -737,45 +783,31 @@ export default function CaseOpening({ crate, onBack, balance, setBalance, invent
             )}
 
             {batch.revealed && (
-              <>
-                {!batch.sequential && (
-                  <View style={styles.batchGrid}>
-                    {batch.items.map(it => (
-                      <View key={it.uid} style={[styles.batchCard, { borderBottomColor: it.displayColor }]}>
-                        <RarityGlow color={it.displayColor} height="46%" strength={0.55} />
-                        {it.isStatTrak && <Text style={styles.stTagSmall}>ST™</Text>}
-                        <Image source={{ uri: it.image }} style={styles.batchImg} resizeMode="contain" />
-                        <Text style={styles.batchPrice}>${it.price.toFixed(2)}</Text>
-                      </View>
-                    ))}
-                  </View>
-                )}
-
-                <View style={styles.batchSummary}>
-                  <View style={styles.statBox}><Text style={styles.statLbl}>{t('common.spent')}</Text><Text style={[styles.statVal, { color: C.danger }]}>-${batch.spending.toFixed(2)}</Text></View>
-                  <View style={styles.statBox}><Text style={styles.statLbl}>{t('common.won')}</Text><Text style={[styles.statVal, { color: C.success }]}>+${batch.totalWon.toFixed(2)}</Text></View>
-                  <View style={styles.statBox}><Text style={styles.statLbl}>{t('common.profit')}</Text><Text style={[styles.statVal, { color: batchNetProfit >= 0 ? C.success : C.danger }]}>{formatSignedMoney(batchNetProfit)}</Text></View>
-                </View>
-
-                <View style={styles.actionRow}>
-                  <TouchableOpacity style={styles.keepBtn} onPress={keepAllBatch}>
-                    <Text style={styles.btnTxt}>{t('common.keepAll')}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.sellBtn} onPress={sellAllBatch}>
-                    <Text style={styles.btnTxt}>{t('common.sellAll', { n: batch.totalWon.toFixed(2) })}</Text>
-                  </TouchableOpacity>
-                </View>
-                <TouchableOpacity onPress={closeBatch}><Text style={styles.batchCloseTxt}>{t('common.close')}</Text></TouchableOpacity>
-              </>
+              <BatchResultPanel
+                items={batch.items}
+                title={t('case.batchDone', { n: batch.count })}
+                spendingLabel={`-$${batch.spending.toFixed(2)}`}
+                spendingUsd={batch.spending}
+                onSellOne={sellOneFromBatch}
+                onSellAll={sellAllBatch}
+                onKeepAll={keepAllBatch}
+                onKeepSelected={keepSelectedFromBatch}
+                onReopen={reopenBatch}
+                reopenLabel={t('batch.reopen', { n: batch.count })}
+                onClose={closeBatch}
+              />
             )}
           </View>
         )}
 
         {!opening && !wonItem && !batch && (
           <>
+            {/* ⚠️ TOPLAM FİYAT BUTONDAN KALDIRILDI: fiyatlar artık kutunun
+                hemen altında ayrı ayrı yazıyor (yukarı bakın). Butonun üzerinde
+                iki satır olması hem okunurluğu düşürüyor hem de aynı bilgiyi
+                iki kez gösteriyordu. */}
             <TouchableOpacity style={styles.openBtn} onPress={handleOpenCase}>
               <Text style={styles.openBtnTxt}>{isSouvenir ? t('case.openPackage') : t('case.openCase')}</Text>
-              <Text style={styles.openBtnPrice}>${TOTAL_COST_PER_OPEN.toFixed(2)}</Text>
             </TouchableOpacity>
 
             {/* ANİMASYONU GEÇ — 1x ve 5x için */}
@@ -816,6 +848,8 @@ export default function CaseOpening({ crate, onBack, balance, setBalance, invent
   );
 }
 
+const CASE_MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 18, paddingVertical: 12 },
@@ -832,7 +866,16 @@ const styles = StyleSheet.create({
   crateStage: { width: 140, height: 140, alignItems: 'center', justifyContent: 'center', backgroundColor: C.surface, borderRadius: 24, marginTop: 6, ...shadow.card },
   crateImage: { width: 110, height: 110 },
   crateName: { color: C.text, fontSize: 20, fontWeight: '800', marginTop: 14, textAlign: 'center' },
-  costBreakdown: { color: C.textDim, fontSize: 12, marginTop: 6, marginBottom: 14 },
+  // --- FİYAT DÖKÜMÜ (kasa + anahtar) ---
+  priceRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 10, marginBottom: 16,
+    backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 4,
+    paddingHorizontal: 16, paddingVertical: 10, flexWrap: 'wrap', justifyContent: 'center'
+  },
+  priceItem: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  priceLbl: { color: C.textSoft, fontSize: 12.5, fontWeight: '700' },
+  priceVal: { color: C.success, fontSize: 14, fontWeight: '800', fontFamily: CASE_MONO },
+  priceSep: { width: 1, height: 20, backgroundColor: C.border },
   compactHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10, backgroundColor: C.surface, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, ...shadow.card },
   compactCrateImg: { width: 32, height: 32 },
   compactCrateName: { color: C.text, fontSize: 13, fontWeight: '700', flexShrink: 1 },

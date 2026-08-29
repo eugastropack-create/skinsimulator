@@ -21,7 +21,11 @@
     },
     "web": {
       "favicon": "./assets/favicon.png",
-      "bundler": "metro"
+      "bundler": "metro",
+      "name": "SkinSimulator.com",
+      "shortName": "SkinSim",
+      "description": "Free CS2 case, terminal, souvenir and sticker capsule opening simulator with live market prices and Trade-Up contracts. No real money, no gambling.",
+      "lang": "en"
     }
   }
 }

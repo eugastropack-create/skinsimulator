@@ -12,7 +12,7 @@ import { fetchCrates, fetchKeychains, fetchCollections, fetchStickerCapsules, fe
 import {
   fetchLivePrices, calculateCaseStats, calculateArmoryStats, calculateCharmStats,
   calculateStickerStats, calculateSouvenirStats, calculateTerminalStats,
-  getContainerPrice
+  getContainerPrice, getArmoryCost
 } from './src/prices';
 import { ACTIVE_ARMORY_COLLECTION_NAMES } from './src/armoryData';
 import { useToast, ToastBanner } from './src/components/Toast';
@@ -21,7 +21,12 @@ import ContentsModal from './src/components/ContentsModal';
 import ItemInspectModal from './src/components/ItemInspectModal';
 import SellConfirmModal from './src/components/SellConfirmModal';
 import HoverCard from './src/components/HoverCard';
-import { StarIcon, DollarIcon, ValuePill, STAR_GREEN } from './src/components/Icons';
+import {
+  StarIcon, DollarIcon, ValuePill, STAR_GREEN,
+  IconSearch, IconInventory, IconClose, IconCheck, IconInfinity, IconRefresh,
+  IconBook, IconList, IconChart, IconGem, IconTag, IconTrend, IconClock,
+  IconArrowDown, IconArrowUp, IconSelect, IconTrash, IconSell
+} from './src/components/Icons';
 import LanguageSwitcher from './src/components/LanguageSwitcher';
 import Disclaimer from './src/components/Disclaimer';
 import { I18nProvider, useI18n } from './src/i18n';
@@ -76,20 +81,25 @@ const KIND_BADGE = {
 
 // ENVANTER SIRALAMA SEÇENEKLERİ
 // "En iyi float" = düşükten yükseğe (0.00 en iyidir), "en kötü" tersi.
+// ⚠️ İKONLAR ARTIK METNİN İÇİNDE DEĞİL, AYRI BİR ALANDA.
+// Eskiden etiketler '💎 Most Expensive' gibi emoji ÖNEKLİ metinlerdi. Emoji'ye
+// renk verilemediği ve her platformda farklı çizildiği için (kullanıcı: "Mario
+// / Minecraft gibi duruyor") ikon artık ayrı bir bileşen olarak render ediliyor
+// ve aktif/pasif duruma göre RENK ALIYOR — metin de sözlükte temiz kaldı.
 const INVENTORY_SORTS = [
-  { key: 'newest',    labelKey: 'inv.sortNewest' },
-  { key: 'priceDesc', labelKey: 'inv.sortPriceDesc' },
-  { key: 'priceAsc',  labelKey: 'inv.sortPriceAsc' },
-  { key: 'floatAsc',  labelKey: 'inv.sortFloatAsc' },
-  { key: 'floatDesc', labelKey: 'inv.sortFloatDesc' }
+  { key: 'newest',    labelKey: 'inv.sortNewest',    Icon: IconClock },
+  { key: 'priceDesc', labelKey: 'inv.sortPriceDesc', Icon: IconArrowDown },
+  { key: 'priceAsc',  labelKey: 'inv.sortPriceAsc',  Icon: IconArrowUp },
+  { key: 'floatAsc',  labelKey: 'inv.sortFloatAsc',  Icon: IconGem },
+  { key: 'floatDesc', labelKey: 'inv.sortFloatDesc', Icon: IconTag }
 ];
 
 const LIST_SORT_OPTIONS = [
-  { key: 'default',   labelKey: 'sort.default' },
-  { key: 'roi',       labelKey: 'sort.roi' },
-  { key: 'expensive', labelKey: 'sort.expensive' },
-  { key: 'cheap',     labelKey: 'sort.cheap' },
-  { key: 'popular',   labelKey: 'sort.popular' }
+  { key: 'default',   labelKey: 'sort.default',   Icon: IconList },
+  { key: 'roi',       labelKey: 'sort.roi',       Icon: IconChart },
+  { key: 'expensive', labelKey: 'sort.expensive', Icon: IconGem },
+  { key: 'cheap',     labelKey: 'sort.cheap',     Icon: IconTag },
+  { key: 'popular',   labelKey: 'sort.popular',   Icon: IconTrend }
 ];
 
 // En fazla kaç canlı arama sonucu gösterilecek (liste uzayınca kullanılamaz olur).
@@ -279,7 +289,7 @@ function AppShell() {
   // durumda başlık animasyonu yarıda KİLİTLİ kalıyordu. Üstelik tarayıcılar
   // scroll olayını zaten kare başına en fazla bir kez üretir, yani rAF ek bir
   // akıcılık kazandırmıyordu — sadece bir kırılganlık ekliyordu.
-  // (bkz. AGENTS.md Altın Kural 9 — sonucu rAF'a bağlama.)
+  // (bkz. AGENTS.md Altın Kural 10 — sonucu rAF'a bağlama.)
   const handleListScroll = useCallback((e) => {
     const y = e?.nativeEvent?.contentOffset?.y ?? 0;
     const p = Math.min(1, Math.max(0, y / SHRINK_RANGE));
@@ -650,16 +660,39 @@ function AppShell() {
     // ⚠️ Sağ üstte artık FİYAT ARALIĞI değil, kutunun KENDİ fiyatı var.
     // Aralık ("$0.97 – $1980.00") kutunun ne kadara alındığını değil, içinden
     // ne çıkabileceğini anlatıyordu ve alışveriş kararı verirken yanıltıcıydı.
-    const ownPrice = getContainerPrice(priceMap, item, kind === 'terminal' ? 'terminal' : kind);
+    // ⚠️ ARMORY KUTULARI PİYASADA SATILMAZ — yıldızla alınırlar. `getContainerPrice`
+    // onlar için isim bulamayıp $0.50'lik genel yedeğe düşüyor ve kartın köşesinde
+    // gerçek maliyetle alakasız bir fiyat gösteriyordu. Armory'de doğru sayı
+    // `getArmoryCost` ile geliyor ve yıldız simgesiyle işaretleniyor.
+    const isArmoryKind = kind === 'armory';
+    const armoryCost = isArmoryKind ? getArmoryCost(item) : null;
+    // ⚠️ `item.casePrice` / `item.cost` calculate*Stats'ten gelir ve piyasa
+    // fiyatı bulunamayan kutularda içerikten TAHMİN edilmiş değeri taşır.
+    // Doğrudan `getContainerPrice` çağırmak sabit yedeğe düşer ve kart ile
+    // açılış ekranı farklı fiyat gösterirdi.
+    const ownPrice = isArmoryKind
+      ? armoryCost.usd
+      : (item.casePrice ?? item.cost
+         ?? getContainerPrice(priceMap, item, kind === 'terminal' ? 'terminal' : kind));
     return (
       <HoverCard
         style={s.card}
         onPress={() => setOpenTarget({ kind, subject: item })}
       >
-        {/* SAĞ ÜST — kutunun kendi fiyatı, yeşil */}
+        {/* SAĞ ÜST — kutunun kendi fiyatı, yeşil (Armory'de: yıldız + $ karşılığı) */}
         <View style={s.priceBadge}>
-          <DollarIcon size={11} />
-          <Text style={s.priceTxt}>{ownPrice.toFixed(2)}</Text>
+          {armoryCost ? (
+            <>
+              <StarIcon size={11} />
+              <Text style={[s.priceTxt, { color: STAR_GREEN }]}>{armoryCost.stars}</Text>
+              <Text style={s.priceSubTxt}>${ownPrice.toFixed(2)}</Text>
+            </>
+          ) : (
+            <>
+              <DollarIcon size={11} />
+              <Text style={s.priceTxt}>{ownPrice.toFixed(2)}</Text>
+            </>
+          )}
         </View>
 
         {badge && (
@@ -671,9 +704,30 @@ function AppShell() {
         <Image source={{ uri: item.image }} style={s.cardImg} resizeMode="contain" />
         <Text style={s.cardName} numberOfLines={2}>{item.name}</Text>
 
-        {/* ALT — istatistikler (EV / ROI). Sağ üstten buraya taşındı. */}
+        {/* ============================================================
+            ALT — İSTATİSTİKLER
+            ============================================================
+            ⚠️ TERMİNALLERDE ROI GÖSTERİLMEZ (29 Ağu 2026 düzeltmesi).
+            Terminalde teklifi PİYASA FİYATINA alırsınız, yani getiri/maliyet
+            yapısal olarak %100'dür; eski hesap ödülü hiç ödenmeyen "mühürlü
+            kutu" fiyatına bölüyor ve %1033 / %232 gibi imkânsız sayılar
+            üretiyordu. Yerine terminal mekaniğinde gerçekten anlamı olan iki
+            ölçü var: bir teklifin ortalama değeri ve 5 teklifin EN İYİSİNİN
+            beklenen değeri. */}
         <View style={s.cardStats}>
-          {item.expectedReturn != null ? (
+          {item.isTerminal && item.bestOffer != null ? (
+            <>
+              <View style={s.statCell}>
+                <Text style={s.statCellLbl}>{t('common.avgOffer')}</Text>
+                <Text style={s.statCellVal}>${item.avgOffer.toFixed(2)}</Text>
+              </View>
+              <View style={s.statDivider} />
+              <View style={s.statCell}>
+                <Text style={s.statCellLbl}>{t('common.bestOffer')}</Text>
+                <Text style={[s.statCellVal, { color: C.success }]}>${item.bestOffer.toFixed(2)}</Text>
+              </View>
+            </>
+          ) : item.expectedReturn != null ? (
             <>
               <View style={s.statCell}>
                 <Text style={s.statCellLbl}>EV</Text>
@@ -718,11 +772,15 @@ function AppShell() {
     return (
       <View style={{ flex: 1 }}>
         <View style={s.sortRow}>
-          {LIST_SORT_OPTIONS.map(opt => (
-            <TouchableOpacity key={opt.key} style={[s.sortChip, listSortMode === opt.key && s.sortChipActive]} onPress={() => setListSortMode(opt.key)}>
-              <Text style={[s.sortChipTxt, listSortMode === opt.key && s.sortChipTxtActive]}>{t(opt.labelKey)}</Text>
-            </TouchableOpacity>
-          ))}
+          {LIST_SORT_OPTIONS.map(opt => {
+            const active = listSortMode === opt.key;
+            return (
+              <TouchableOpacity key={opt.key} style={[s.sortChip, active && s.sortChipActive]} onPress={() => setListSortMode(opt.key)}>
+                <opt.Icon size={13} color={active ? C.onAccent : C.textDim} />
+                <Text style={[s.sortChipTxt, active && s.sortChipTxtActive]}>{t(opt.labelKey)}</Text>
+              </TouchableOpacity>
+            );
+          })}
           <Text style={s.resultCount}>{t('list.results', { n: sortedList.length })}</Text>
         </View>
         <FlatList
@@ -830,10 +888,11 @@ function AppShell() {
                 <View style={s.miniStatWrap}><StarIcon size={11} /><Text style={[s.miniStat, { color: STAR_GREEN }]}>{stars}</Text></View>
               </>
             ) : (
-              <Text style={[s.miniStat, { color: C.success }]}>♾️</Text>
+              <IconInfinity size={16} color={C.success} />
             )}
             <TouchableOpacity style={s.miniInvBtn} onPress={() => switchTab('inventory')}>
-              <Text style={s.miniInvTxt}>🎒 {inventory.length}</Text>
+              <IconInventory size={13} color={C.textSoft} />
+              <Text style={s.miniInvTxt}>{inventory.length}</Text>
             </TouchableOpacity>
             <LanguageSwitcher />
           </View>
@@ -897,15 +956,18 @@ function AppShell() {
             style={[s.ghostBtn, tab === 'inventory' && s.ghostBtnActive]}
             onPress={() => switchTab('inventory')}
           >
+            <IconInventory size={13} color={tab === 'inventory' ? C.onAccent : C.textSoft} />
             <Text style={[s.ghostBtnTxt, tab === 'inventory' && s.ghostBtnTxtActive]}>{t('util.inventory', { n: inventory.length })}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[s.ghostBtn, tab === 'blog' && s.ghostBtnActive]}
             onPress={() => { setBlogSection('about'); switchTab('blog'); }}
           >
+            <IconBook size={13} color={tab === 'blog' ? C.onAccent : C.textSoft} />
             <Text style={[s.ghostBtnTxt, tab === 'blog' && s.ghostBtnTxtActive]}>{t('util.blog')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={s.dangerGhostBtn} onPress={() => setResetAllConfirmOpen(true)}>
+            <IconRefresh size={13} color={C.danger} />
             <Text style={s.dangerGhostTxt}>{t('util.reset')}</Text>
           </TouchableOpacity>
           <LanguageSwitcher />
@@ -942,7 +1004,9 @@ function AppShell() {
             ============================================================ */}
         <View style={[s.searchZone, compact && s.searchZoneCompact, isNarrow && s.searchZoneNarrow]}>
           <View style={[s.searchBox, (searchFocused || searchQuery) && s.searchBoxActive]}>
-            <Text style={s.searchIcon}>🔍</Text>
+            {/* ⚠️ EMOJİ DEĞİL: renksiz, ince çizgili "scope" büyüteci
+                (bkz. src/components/Icons.js → IconSearch). */}
+            <IconSearch size={17} color={searchFocused || searchQuery ? C.accentDeep : C.textDim} />
             <TextInput
               style={s.searchInput}
               placeholder={t('search.placeholder')}
@@ -956,8 +1020,8 @@ function AppShell() {
               onBlur={() => setTimeout(() => setSearchFocused(false), 180)}
             />
             {searchQuery !== '' && (
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
-                <Text style={s.searchClear}>✕</Text>
+              <TouchableOpacity style={s.searchClearBtn} onPress={() => setSearchQuery('')}>
+                <IconClose size={14} color={C.textDim} strokeWidth={2.2} />
               </TouchableOpacity>
             )}
           </View>
@@ -1050,11 +1114,15 @@ function AppShell() {
                 <View style={{ flex: 1 }}>
                   {/* SIRALAMA */}
                   <View style={s.sortRow}>
-                    {INVENTORY_SORTS.map(opt => (
-                      <TouchableOpacity key={opt.key} style={[s.sortChip, invSort === opt.key && s.sortChipActive]} onPress={() => setInvSort(opt.key)}>
-                        <Text style={[s.sortChipTxt, invSort === opt.key && s.sortChipTxtActive]}>{t(opt.labelKey)}</Text>
-                      </TouchableOpacity>
-                    ))}
+                    {INVENTORY_SORTS.map(opt => {
+                      const active = invSort === opt.key;
+                      return (
+                        <TouchableOpacity key={opt.key} style={[s.sortChip, active && s.sortChipActive]} onPress={() => setInvSort(opt.key)}>
+                          <opt.Icon size={13} color={active ? C.onAccent : C.textDim} />
+                          <Text style={[s.sortChipTxt, active && s.sortChipTxtActive]}>{t(opt.labelKey)}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
                   </View>
 
                   {/* ARAÇ ÇUBUĞU: çoklu seçim + toplu satış + sıfırlama */}
@@ -1063,6 +1131,7 @@ function AppShell() {
                       style={[s.invToolBtn, selectMode && s.invToolBtnActive]}
                       onPress={() => { setSelectMode(m => !m); setSelectedUids([]); }}
                     >
+                      <IconSelect size={13} color={selectMode ? C.onAccent : C.textSoft} />
                       <Text style={[s.invToolTxt, selectMode && { color: C.onAccent }]}>
                         {selectMode ? t('inv.multiSelectOn') : t('inv.multiSelect')}
                       </Text>
@@ -1086,6 +1155,7 @@ function AppShell() {
                     )}
 
                     <TouchableOpacity style={s.clearInvBtnSm} onPress={clearInventory}>
+                      <IconTrash size={13} color={C.danger} />
                       <Text style={s.clearInvTxt}>{t('inv.clear')}</Text>
                     </TouchableOpacity>
                   </View>
@@ -1116,11 +1186,12 @@ function AppShell() {
                         >
                           {selectMode && (
                             <View style={[s.checkbox, picked && s.checkboxOn]}>
-                              <Text style={s.checkboxTxt}>{picked ? '✓' : ''}</Text>
+                              {picked && <IconCheck size={12} color={C.onAccent} strokeWidth={3} />}
                             </View>
                           )}
                           {showQuickSell && (
                             <TouchableOpacity style={s.quickSellBtn} onPress={() => sellSingle(item)}>
+                              <IconSell size={10} color={C.onAccent} strokeWidth={2.2} />
                               <Text style={s.quickSellTxt}>{t('inv.sell')}</Text>
                             </TouchableOpacity>
                           )}
@@ -1279,11 +1350,11 @@ const s = StyleSheet.create({
   unlimitedTxt: { color: C.success, fontWeight: '800', fontSize: 11, letterSpacing: 0.5 },
   sandboxTxt: { color: '#8b6ce0', fontSize: 10, fontWeight: '700', marginTop: 2 },
 
-  ghostBtn: { backgroundColor: C.surfaceAlt, borderWidth: 1, borderColor: C.border, paddingHorizontal: 11, paddingVertical: 6, borderRadius: 4 },
+  ghostBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: C.surfaceAlt, borderWidth: 1, borderColor: C.border, paddingHorizontal: 11, paddingVertical: 6, borderRadius: 4 },
   ghostBtnActive: { backgroundColor: C.accent, borderColor: C.accent },
   ghostBtnTxt: { color: C.textSoft, fontSize: 11, fontWeight: '800', letterSpacing: 0.3 },
   ghostBtnTxtActive: { color: C.onAccent },
-  dangerGhostBtn: { backgroundColor: C.dangerSoft, borderWidth: 1, borderColor: '#f3cfcf', paddingHorizontal: 11, paddingVertical: 6, borderRadius: 4 },
+  dangerGhostBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: C.dangerSoft, borderWidth: 1, borderColor: '#f3cfcf', paddingHorizontal: 11, paddingVertical: 6, borderRadius: 4 },
   dangerGhostTxt: { color: C.danger, fontSize: 11, fontWeight: '800', letterSpacing: 0.3 },
 
   // --- SABIT KABUK ---
@@ -1305,7 +1376,7 @@ const s = StyleSheet.create({
   miniRight: { flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1 },
   miniStatWrap: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   miniStat: { color: C.success, fontSize: 12, fontWeight: '800', fontFamily: MONO_FONT },
-  miniInvBtn: { backgroundColor: C.surfaceAlt, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999 },
+  miniInvBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: C.surfaceAlt, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 4 },
   miniInvTxt: { color: C.textSoft, fontSize: 11, fontWeight: '800' },
 
   // --- LOGO ---
@@ -1322,9 +1393,9 @@ const s = StyleSheet.create({
     paddingHorizontal: 18, paddingVertical: 13, borderRadius: 999, ...shadow.card
   },
   searchBoxActive: { ...shadow.cardHover },
-  searchIcon: { fontSize: 15 },
+
   searchInput: { flex: 1, color: C.text, fontSize: 15, outlineStyle: 'none', fontWeight: '500' },
-  searchClear: { color: C.textDim, fontSize: 15, fontWeight: '800', paddingHorizontal: 4 },
+  searchClearBtn: { paddingHorizontal: 4, paddingVertical: 2 },
   searchDropdown: {
     width: '100%', maxWidth: 640, backgroundColor: C.surface, borderRadius: 18,
     marginTop: 10, paddingVertical: 8, ...shadow.modal
@@ -1362,7 +1433,7 @@ const s = StyleSheet.create({
   loadingWrap: { alignItems: 'center', paddingVertical: 60 },
   loadingTxt: { color: C.textDim, fontSize: 13, marginTop: 14, fontWeight: '600' },
   sortRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, paddingHorizontal: 20, marginBottom: 12 },
-  sortChip: { backgroundColor: C.surface, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, ...shadow.card },
+  sortChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: C.surface, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, borderColor: C.border, ...shadow.card },
   sortChipActive: { backgroundColor: C.accent },
   sortChipTxt: { color: C.textSoft, fontSize: 11, fontWeight: '800' },
   sortChipTxtActive: { color: C.onAccent },
@@ -1383,6 +1454,7 @@ const s = StyleSheet.create({
     backgroundColor: C.successSoft, borderWidth: 1, borderColor: '#bfe8d5',
     paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4
   },
+  priceSubTxt: { color: C.textDim, fontSize: 10, fontWeight: '700', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace' },
   priceTxt: { color: C.success, fontSize: 12, fontWeight: '800', fontFamily: MONO_FONT },
   kindBadge: { position: 'absolute', top: 10, left: 10, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 3, zIndex: 2 },
   kindBadgeTxt: { color: '#fff', fontSize: 9, fontWeight: '800' },
@@ -1413,9 +1485,9 @@ const s = StyleSheet.create({
 
   // --- ENVANTER ---
   clearInvTxt: { color: C.danger, fontWeight: '800', fontSize: 11 },
-  clearInvBtnSm: { backgroundColor: C.dangerSoft, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999, marginLeft: 'auto' },
+  clearInvBtnSm: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: C.dangerSoft, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 4, marginLeft: 'auto' },
   invToolbar: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, paddingHorizontal: 20, paddingBottom: 10 },
-  invToolBtn: { backgroundColor: C.surface, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999, ...shadow.card },
+  invToolBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: C.surface, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 4, borderWidth: 1, borderColor: C.border, ...shadow.card },
   invToolBtnActive: { backgroundColor: C.accent },
   invToolTxt: { color: C.textSoft, fontSize: 11, fontWeight: '800' },
   bulkSellBtn: { backgroundColor: C.success, paddingHorizontal: 16, paddingVertical: 9, borderRadius: 999 },
@@ -1428,10 +1500,9 @@ const s = StyleSheet.create({
   invImg: { width: 66, height: 54, marginTop: 18 },
   invName: { color: C.textSoft, textAlign: 'center', fontSize: 10, marginTop: 6, fontWeight: '600' },
   invWear: { color: C.textDim, fontSize: 9, marginTop: 3 },
-  checkbox: { position: 'absolute', top: 6, left: 6, width: 19, height: 19, borderRadius: 6, borderWidth: 1.5, borderColor: C.borderStrong, backgroundColor: C.surface, alignItems: 'center', justifyContent: 'center', zIndex: 3 },
+  checkbox: { position: 'absolute', top: 6, left: 6, width: 19, height: 19, borderRadius: 3, borderWidth: 1.5, borderColor: C.borderStrong, backgroundColor: C.surface, alignItems: 'center', justifyContent: 'center', zIndex: 3 },
   checkboxOn: { backgroundColor: C.success, borderColor: C.success },
-  checkboxTxt: { color: C.onAccent, fontSize: 11, fontWeight: '800' },
-  quickSellBtn: { position: 'absolute', top: 5, right: 5, backgroundColor: C.success, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, zIndex: 4 },
+  quickSellBtn: { position: 'absolute', top: 5, right: 5, flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: C.success, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 3, zIndex: 4 },
   quickSellTxt: { color: C.onAccent, fontSize: 9, fontWeight: '800' },
   stTag: { position: 'absolute', top: 6, left: 7, color: C.warn, fontSize: 8, fontWeight: '800' },
   priceTagWrap: { position: 'absolute', top: 6, right: 8, flexDirection: 'row', alignItems: 'center', gap: 1, zIndex: 2 },

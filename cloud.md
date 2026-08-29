@@ -270,6 +270,38 @@ Site, reklam ağı incelemesinden geçebilmesi için şunlarla donatıldı:
 
 ---
 
+## 5.8 Google Analytics (GA4)
+
+**Ölçüm kimliği:** `G-C4JPXC4L64`
+**Nerede:** `public/index.html` → `<head>`'in **en başında** (gtag.js snippet'i).
+
+Expo, `public/index.html` varsa onu şablon olarak kullanır (SDK 57, single-page
+çıktı) ve `npx expo export --platform web` sırasında bundle script'ini gövdenin,
+favicon bağlantısını da head'in sonuna kendisi ekler. Doğrulandı: `dist/index.html`
+içinde gtag satır 5'te, `<title>SkinSimulator.com</title>` satır 49'da,
+`favicon.ico` bağlantısı satır 72'de, bundle script satır 80'de.
+
+> ⚠️ **BU DOSYADA KAPANIŞ `head`/`body` ETİKETİ YAZMAYIN — YORUM İÇİNDE BİLE.**
+> Expo'nun enjeksiyonu düz metin araması yapıyor ve kapanış etiketinin **ilk**
+> geçtiği yeri hedefliyor; yorumun içindeki bir metin bundle script'ini yorumun
+> içine gömer ve uygulama hiç açılmaz.
+
+> ⚠️ **Çerez bildirimi:** GA çerez kullanır. AB/UK trafiği hedefleniyorsa
+> Rehber ekranındaki Gizlilik Politikası bölümü ve bir çerez onayı katmanı
+> gerekebilir — bu **henüz eklenmedi**.
+
+### Sekme başlığı
+`<title>` artık **`SkinSimulator.com`**. Eskiden `app.json`'daki `expo.name`
+alanından ("cs2-simulator") üretiliyordu. `app.json` → `expo.web.name` de
+`SkinSimulator.com` olarak güncellendi (PWA manifest'i için).
+
+## 5.9 Yeni Bağımlılık: `react-native-svg`
+
+Arayüz simgeleri emoji'den **SVG**'ye taşındı (bkz. `gacas.md` §6.2.29).
+`npx expo install react-native-svg` ile SDK 57 uyumlu sürüm kuruldu (15.15.4).
+Web'de `react-native-web` üzerinden gerçek `<svg>` elemanına çevrilir; ek bir
+yapılandırma veya polyfill **gerekmez**.
+
 ## 6. Gizlilik ve Güvenlik
 
 - ✅ Kişisel veri toplanmaz, gönderilmez, saklanmaz.
@@ -281,6 +313,11 @@ Site, reklam ağı incelemesinden geçebilmesi için şunlarla donatıldı:
 ---
 
 ## 7. Değişiklik Günlüğü
+
+| Tarih | Değişiklik |
+|---|---|
+| **2026-08-29** | `public/index.html` şablonu eklendi: sekme başlığı `SkinSimulator.com`, Google Analytics (`G-C4JPXC4L64`), mobil klavye için `interactive-widget=resizes-content` |
+| **2026-08-29** | `react-native-svg` (15.15.4) bağımlılığı eklendi — arayüz simgeleri |
 
 | Tarih | Değişiklik |
 |---|---|

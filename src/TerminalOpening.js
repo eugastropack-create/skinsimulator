@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { StyleSheet, Text, View, Image, TouchableOpacity, SafeAreaView, ScrollView, Platform, useWindowDimensions } from 'react-native';
 import { generateFloat, getWearFromFloat, generatePattern } from './utils';
-import { getRealisticPrice, CASE_RARITY_ODDS } from './prices';
+import { getRealisticPrice, getCaseTiers, poolForTier, rollTier, STATTRAK_CHANCE } from './prices';
 import { InlineContentsPanel } from './components/ContentsModal';
 import { useToast, ToastBanner } from './components/Toast';
 import { useI18n } from './i18n';
-import { C, RARITY, shadow, rarityGlowStyle, rarityTint, webTransition } from './theme';
+import { C, shadow, rarityGlowStyle, rarityTint, webTransition } from './theme';
 
 // ============================================================
 // ARMORY TERMİNALİ — GERÇEK CS2 "TEKLİF SEÇİMİ" MEKANİĞİ
@@ -39,7 +39,7 @@ import { C, RARITY, shadow, rarityGlowStyle, rarityTint, webTransition } from '.
 // "kredi etiketi" yoktur. Bu, kullanıcının cüzdanıyla terminal arasındaki
 // dönüşüm kafa karışıklığını tamamen ortadan kaldırır.
 
-const GOLD = RARITY.gold;
+// (GOLD sabiti artık gerekmiyor — altın kademe prices.js/getCaseTiers'ten gelir)
 
 // Tarama temposu: hızlı başlar, kademeli olarak yavaşlar.
 const SCAN_FAST_MS = 45;
@@ -47,26 +47,23 @@ const SCAN_SLOW_MS = 260;
 const SCAN_TICKS = 26;
 const FLASH_MS = 460;
 
-// TEKLİF SAYISI
+// ============================================================
+// TEKLİF SAYISI ve NADİR 6. TEKLİF (BONUS ROLL)
+// ============================================================
+// GERÇEK CS2 ARMORY: Terminal normalde 5 teklif sunar; düşük bir ihtimalle
+// fazladan bir slot daha açılır ve kullanıcı 6 teklif arasından seçer.
+// Simülatörde bu ihtimal %5'tir — yani ortalama 20 oturumda bir görülür.
+// (Valve kesin sayıyı yayımlamıyor; %5, "nadir ama oynanışta fark edilir"
+// bandının alt ucudur. Değiştirilecekse gacas.md §5 de güncellenmeli.)
+//
+// ⚠️ Bonus, teklifler ÜRETİLİRKEN bir kez atılır ve oturum boyunca sabittir;
+// "pas geçtikçe şansım artar mı" belirsizliği bilinçli olarak yok edilmiştir.
 const BASE_OFFER_COUNT = 5;
-const BONUS_OFFER_CHANCE = 0.05; // %5 ihtimalle 6. slot açılır
+const BONUS_OFFER_CHANCE = 0.05;
 
 const HEX = '0123456789ABCDEF';
 const randomHex = (n = 6) => Array.from({ length: n }, () => HEX[Math.floor(Math.random() * 16)]).join('');
 const SCAN_VERBS = ['SCANNING', 'DECRYPTING', 'MATCHING', 'INDEXING', 'VERIFYING', 'ALLOCATING'];
-
-const poolForRarity = (terminal, rarity) => {
-  // Bıçak/eldivenler `contains` içinde DEĞİL, ayrı `contains_rare` alanındadır
-  // (bkz. AGENTS.md §5 — aynı tuzak kasalarda da var).
-  if (rarity.color === GOLD) {
-    const rare = terminal.contains_rare || [];
-    if (rare.length > 0) return rare;
-  }
-  const matched = (terminal.contains || []).filter(
-    i => i.rarity?.color?.toLowerCase() === rarity.color.toLowerCase()
-  );
-  return matched.length > 0 ? matched : (terminal.contains || []);
-};
 
 // ============================================================
 // CRT EKRANI
@@ -179,6 +176,9 @@ export default function TerminalOpening({ terminal, onBack, balance, setBalance,
     };
   }, []);
 
+  // Terminalin kendi kademe tablosu — içerikten türetilir, sabit DEĞİL.
+  const TIERS = useMemo(() => getCaseTiers(terminal), [terminal]);
+
   // Tarama sırasında ekranda akacak isim havuzu (gerçek içerik — sahte isim yok).
   const namePool = useMemo(() => {
     const all = [...(terminal.contains || []), ...(terminal.contains_rare || [])];
@@ -188,18 +188,17 @@ export default function TerminalOpening({ terminal, onBack, balance, setBalance,
   // Tek bir teklif üretir — kasa oran tablosunu kullanır (terminaller veri
   // şeması olarak normal bir kasayla birebir aynıdır).
   const rollOffer = () => {
-    const roll = Math.random() * 100;
-    let cumulative = 0;
-    let selectedRarity = CASE_RARITY_ODDS[0];
-    for (let i = 0; i < CASE_RARITY_ODDS.length; i++) {
-      cumulative += CASE_RARITY_ODDS[i].chance;
-      if (roll <= cumulative) { selectedRarity = CASE_RARITY_ODDS[i]; break; }
-    }
-    const pool = poolForRarity(terminal, selectedRarity);
+    // ⚠️ KADEMELER TERMİNALİN İÇERİĞİNDEN TÜRETİLİR (bkz. prices.js getCaseTiers).
+    // Genesis Terminal'de `contains_rare` BOŞTUR; sabit tabloda %0.26'lık altın
+    // dilim yine de çekiliyor ve eşya bulunamayınca TÜM havuzdan düzgün
+    // dağılımlı bir eşya (Covert dahil) veriyordu.
+    const selectedRarity = rollTier(TIERS);
+    if (!selectedRarity) return null;
+    const pool = poolForTier(terminal, selectedRarity) || terminal.contains || [];
     const item = pool[Math.floor(Math.random() * pool.length)];
-    const isStatTrak = Math.random() < 0.10;
+    const isStatTrak = Math.random() < STATTRAK_CHANCE;
     const floatVal = generateFloat(item.min_float ?? 0.00, item.max_float ?? 1.00);
-    const price = getRealisticPrice(priceMap, item, floatVal, isStatTrak, selectedRarity.name);
+    const price = getRealisticPrice(priceMap, item, floatVal, isStatTrak, selectedRarity.isRare ? 'Rare Special' : selectedRarity.name);
     return {
       ...item,
       isStatTrak,
@@ -209,7 +208,7 @@ export default function TerminalOpening({ terminal, onBack, balance, setBalance,
       wear: getWearFromFloat(floatVal),
       pattern: generatePattern(),
       price,
-      source: '🖥️ Terminal',
+      source: 'TERMINAL',
       acquiredAt: Date.now()
     };
   };
@@ -266,7 +265,8 @@ export default function TerminalOpening({ terminal, onBack, balance, setBalance,
     // dönüş başlamadan belirlenmesiyle aynı ilke).
     const bonus = Math.random() < BONUS_OFFER_CHANCE;
     const count = BASE_OFFER_COUNT + (bonus ? 1 : 0);
-    const generated = Array.from({ length: count }, () => rollOffer());
+    const generated = Array.from({ length: count }, () => rollOffer()).filter(Boolean);
+    if (generated.length === 0) { setErrorMsg(t('common.contentsUnreadable')); return; }
 
     setHasBonus(bonus);
     setClaimedItem(null);
@@ -282,6 +282,9 @@ export default function TerminalOpening({ terminal, onBack, balance, setBalance,
       triggerFlash();
       setOffers(generated);
       setPhase('offers');
+      // Nadir 6. teklif çıktıysa duyur — ekrandaki küçük rozet tek başına
+      // fark edilmiyordu ve oyunun en özel anı sessizce geçiyordu.
+      if (bonus) showToast(t('terminal.bonusToast'), 'success');
     });
   };
 
@@ -318,9 +321,23 @@ export default function TerminalOpening({ terminal, onBack, balance, setBalance,
   // Kart yüksekliği `cardStage.minHeight` ile sabitlendiği için sayfa da
   // ZIPLAMAZ.
   const nextOffer = () => {
-    // SON SEÇENEKTE PAS GEÇİLEMEZ — buton zaten devre dışı, bu ikinci kalkan.
+    // Son teklifte "sonraki" diye bir şey yok; oradaki buton artık
+    // `declineSession` (almadan kapat) olarak çalışır.
     if (activeIndex >= offers.length - 1) return;
     setActiveIndex(i => i + 1);
+  };
+
+  // ============================================================
+  // ALMADAN KAPAT — "zorunlu alım" kaldırıldı (29 Ağu 2026)
+  // ============================================================
+  // Önceki sürümde son teklifte "Pas Geç" DEVRE DIŞI bırakılıyor ve kullanıcı
+  // eşyayı almak ZORUNDA kalıyordu. Bu ne gerçek CS2 davranışıydı ne de adil:
+  // teklifleri görmek ücretsiz olduğu hâlde, çıkış yolu yoktu.
+  // Artık son adımda "Alma / Kapat" butonu var; oturum hiçbir ücret ödenmeden
+  // kapanır. (Terminali tekrar çalıştırmak da ücretsizdir.)
+  const declineSession = () => {
+    closeSession();
+    showToast(t('terminal.declinedToast'), 'info');
   };
 
   const closeSession = () => {
@@ -453,15 +470,18 @@ export default function TerminalOpening({ terminal, onBack, balance, setBalance,
               "ayrı bir kart" hissi oluşmuyor. */}
           {phase === 'offers' && activeOffer && (
             <View style={crt.actionBar}>
-              <TouchableOpacity
-                style={[crt.skipBtn, isLastOffer && crt.skipBtnDisabled]}
-                onPress={nextOffer}
-                disabled={isLastOffer}
-              >
-                <Text style={[crt.skipBtnTxt, isLastOffer && crt.skipBtnTxtDisabled]}>
-                  {t('terminal.skipNext')}
-                </Text>
-              </TouchableOpacity>
+              {/* ⚠️ SON ADIMDA BUTON "PAS GEÇ" DEĞİL "ALMA / KAPAT" OLUR —
+                  devre dışı bir buton göstermek yerine gerçek bir çıkış yolu
+                  sunuyoruz (zorunlu alım kaldırıldı). */}
+              {isLastOffer ? (
+                <TouchableOpacity style={crt.declineBtn} onPress={declineSession}>
+                  <Text style={crt.declineBtnTxt}>{t('terminal.decline')}</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity style={crt.skipBtn} onPress={nextOffer}>
+                  <Text style={crt.skipBtnTxt}>{t('terminal.skipNext')}</Text>
+                </TouchableOpacity>
+              )}
 
               <TouchableOpacity style={crt.buyBtn} onPress={() => buyOffer(activeIndex)}>
                 <Text style={crt.buyBtnTxt}>
@@ -554,8 +574,10 @@ const crt = StyleSheet.create({
   // --- CİHAZ ÜZERİNDEKİ AKSİYONLAR (ekranla aynı blok) ---
   actionBar: { flexDirection: 'row', gap: 10, marginTop: 12, width: '100%', justifyContent: 'center', flexWrap: 'wrap' },
   skipBtn: { borderWidth: 1, borderColor: C.borderStrong, backgroundColor: C.surfaceAlt, paddingHorizontal: 26, paddingVertical: 12, borderRadius: 6 },
-  skipBtnDisabled: { opacity: 0.4 },
   skipBtnTxt: { color: C.textSoft, fontSize: 13, fontWeight: '800', fontFamily: MONO },
+  // "Alma / Kapat" — vazgeçme eylemi olduğu için uyarı tonunda ama saldırgan değil.
+  declineBtn: { borderWidth: 1, borderColor: C.danger, backgroundColor: C.surface, paddingHorizontal: 22, paddingVertical: 12, borderRadius: 6 },
+  declineBtnTxt: { color: C.danger, fontSize: 13, fontWeight: '800', fontFamily: MONO },
   // "Al" butonu ekranın mint rengini kasaya taşır — vurgu tek bir renkten gelir.
   buyBtn: { backgroundColor: C.crtBg, borderWidth: 1, borderColor: C.crtText, paddingHorizontal: 26, paddingVertical: 12, borderRadius: 6 },
   buyBtnTxt: { color: C.crtText, fontSize: 13, fontWeight: '800', fontFamily: MONO }

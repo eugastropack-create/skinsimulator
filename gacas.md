@@ -195,6 +195,94 @@ yoktur** — iki önek asla birlikte kullanılmaz.
 
 ## 5. Şans Mekanikleri (Kritik Bölüm)
 
+### 5.0 ⚠️ TEK OLASILIK KAYNAĞI — 29 Ağustos 2026 KRİTİK DÜZELTMESİ
+
+> **Kullanıcı şikâyeti:** *"Armory'de 10 açılış yaptığımda neredeyse istisnasız
+> ~50 dolar kâr ediyorum."* — Doğruydu, üstelik sanılandan çok daha büyüktü.
+
+**KÖK NEDEN.** Çekiliş yapan her ekran (`ArmoryOpening`, `CaseOpening`,
+`CapsuleOpening`, `TerminalOpening`) **kendi sabit oran tablosunu** taşıyordu ve
+hepsinde şu yedek vardı:
+
+```js
+let pool = contains.filter(i => i.rarity.name === selected.name);
+if (pool.length === 0) pool = contains;   // ← BUG
+```
+
+Armory koleksiyonlarında **Consumer Grade eşya YOKTUR** (doğrulandı — Overpass
+2024 / Spy Tech / Arabesque: Industrial 6, Mil-Spec 4, Restricted 3,
+Classified 2, Covert 1-2). Tablonun ilk satırı ise **%79.92 ile Consumer**'dı.
+Yani çekilişlerin **%79.92'si** hiç eşya bulamıyor ve **tüm koleksiyondan düzgün
+dağılımlı** seçim yapıyordu — 17 eşyalık bir koleksiyonda Covert çıkma şansı
+%0.06 yerine **~%4.7**'ye fırlıyordu.
+
+**ÖLÇÜM** (200.000 çekiliş, canlı fiyatlarla):
+
+| Koleksiyon | Gerçek EV | Maliyet | Gerçek ROI | Kartta yazan |
+|---|---|---|---|---|
+| Overpass 2024 | $22.83 | $1.60 | **%1427** | %11.6 |
+| Spy Tech | $20.95 | $1.60 | **%1309** | %15.4 |
+| Arabesque | $15.83 | $1.60 | **%989** | %11.3 |
+
+Gösterge de yanlıştı — ama **ters yönde**: `calculateArmoryStats` aynı boş
+kademelerde eşya bulamayıp o olasılık kütlesini **sessizce çöpe atıyordu**.
+
+**ÇÖZÜM — üç parça:**
+
+1. **Oran tabloları artık sabit DEĞİL.** `prices.js` içindeki `getPresentTiers`
+   kutunun/koleksiyonun **içinde gerçekten bulunan** kademeleri tespit edip
+   merdiveni onlara uygular. Boş kademe **hiç çekilemez**, dolayısıyla
+   "tüm havuza düş" yedeğine de gerek kalmaz — o satırlar **silindi**.
+2. **Zar atışı tek yerde.** `rollTier(tiers)` + `poolForTier(crate, tier)` —
+   kasalar, terminaller, koleksiyonlar ve kapsüller hepsi bunları kullanır.
+3. **EV hesabı çekilişle aynı tabloyu kullanır.** Artık kartta yazan EV ile
+   200.000 çekilişlik simülasyonun ürettiği EV **örtüşüyor** (aşağıya bakın).
+
+**MERDİVEN.** CS2'de her kademe bir öncekinin **1/5'i** kadar olasıdır. Valve'in
+yayımladığı kasa oranları (79.92 / 15.98 / 3.20 / 0.64) bu geometrik dizinin ta
+kendisidir; `buildLadderOdds(n)` kademe sayısı kaç olursa olsun aynı formülden
+üretip %100'e normalize eder.
+
+**DOĞRULAMA (düzeltme sonrası, 400.000 çekiliş):**
+
+| Kutu | Simülasyon EV | Kart EV | ROI |
+|---|---|---|---|
+| Arabesque | $0.714 | $0.72 | %45 |
+| Overpass 2024 | $1.158 | $1.08 | %68 |
+| Spy Tech | $0.812 | $0.80 | %50 |
+| Chroma Case | $4.715 | $4.65 | %48 |
+| Kilowatt Case | $1.305 | $1.31 | %48 |
+| Fever Case | $1.983 | $1.97 | %58 |
+
+Site genelinde **hiçbir kasa / souvenir / koleksiyon %100'ün üstünde ROI
+göstermiyor** (kasalar min %16 · medyan %54 · maks %70; souvenir maks %85).
+
+> ⚠️ **Sticker kapsüllerinde 100 kutudan 14'ü hâlâ %100'ün üstünde.** Bu bir hata
+> DEĞİL: hem kutunun hem içeriğin fiyatı gerçek Steam verisinden geliyor ve
+> üretimi durmuş bazı kapsüller (ör. içinde $16'lık foil bulunan $1.01'lik
+> "Sticker Capsule") piyasada gerçekten içeriğinin altında işlem görüyor.
+
+### 5.0.1 Beklenen fiyat artık AŞINMA DAĞILIMINA göre hesaplanıyor
+
+Eski `getExpectedPriceForItem` **sabit float 0.25** (Field-Tested) kullanıyordu.
+Bu iki şekilde yanlıştı: float aralığı 0.00–0.08 olan bir skinde 0.25 hiç
+oluşamaz, ve Factory New primi (bazı skinlerde 5-7 kat) hesaba hiç girmiyordu.
+Artık `generateFloat` ile **birebir aynı model** kullanılıyor: ağırlıklı aşınma
+bantları (FN 3 / MW 24 / FT 33 / WW 24 / BS 16) eşyanın kendi min/max float
+aralığına ölçekleniyor.
+
+### 5.0.2 Kutu fiyatı bulunamazsa İÇERİKTEN tahmin edilir
+
+Bazı kutuların piyasa fiyatı canlı tabloda yok (ör. *EMS Katowice 2014 Legends*
+— Steam'de artık listelenmiyor). Eskiden tür bazlı sabit bir yedeğe ($1.00)
+düşülüyordu; o kapsülün içi ~$1047 değerinde olduğu için **ROI %104.745**
+çıkıyordu — sınırsız para basan bir kutu. Artık `resolveContainerCost` fiyatı
+**içerikten** türetir (`EV / 0.85`; ölçülen medyan kutu ROI'si ~%83) ve sonucu
+`priceEstimated: true` ile işaretler. Kart ile açılış ekranı **aynı** sayıyı
+kullanır (`crate.casePrice` / `crate.cost`), yoksa kart "$1233" derken açılış
+"$1.00" tahsil ederdi.
+
+
 ### 5.1 Kasa Açma Oranları (gerçek CS2 ile birebir)
 
 > ⚠️ **VERİ TUZAĞI — bıçaklar `contains` içinde DEĞİL:** ByMykel verisinde kasanın
@@ -217,11 +305,38 @@ yoktur** — iki önek asla birlikte kullanılmaz.
 StatTrak™ ihtimali: **%10** (her açılışta bağımsız).
 
 ### 5.2 Armory Koleksiyon Oranları
-Consumer %79.92 · Industrial %15.98 · Mil-Spec %3.20 · Restricted %0.64 ·
-Classified %0.20 · Covert %0.06 — Maliyet: **4 yıldız** (≈$1.60).
 
-### 5.3 Kapsül Oranları (Charm **ve** Sticker — ortak tablo)
-High Grade %80.13 · Remarkable %16.02 · Exotic %3.21 · Extraordinary %0.64
+⚠️ **SABİT TABLO YOK** — oranlar `getCollectionTiers(collection)` ile
+koleksiyonun içeriğinden türetilir (bkz. §5.0). Aktif üç koleksiyonun hiçbirinde
+Consumer Grade eşya olmadığı için pratikte şu değerler çıkar:
+
+| Kademe | Oran |
+|---|---|
+| Industrial Grade | %80.03 |
+| Mil-Spec Grade | %16.01 |
+| Restricted | %3.20 |
+| Classified | %0.64 |
+| Covert | %0.13 |
+
+Maliyet: **4 yıldız** (≈$1.60). Armory koleksiyon çekilişinde **StatTrak YOKTUR**.
+
+> Valve rotasyonla Consumer Grade içeren bir koleksiyon eklerse tablo
+> **kendiliğinden** altı kademeye genişler — kodda değişiklik gerekmez.
+
+### 5.3 Kapsül Oranları (Charm **ve** Sticker — ortak merdiven)
+High Grade %80.13 · Remarkable %16.03 · Exotic %3.21 · Extraordinary %0.64
+
+⚠️ Bu değerler de artık sabit değil: `getCapsuleTiers(capsule)` kapsülde
+**gerçekten bulunan** kademelere `buildLadderOdds` uygular (dört kademenin hepsi
+varsa yukarıdaki tabloyu birebir üretir).
+
+> ⚠️ **STICKER FİYAT BUG'I (29 Ağu 2026):** Kasa içeriğindeki sticker
+> nesnelerinde `market_hash_name` alanı **YOKTUR**; yalnızca ona bakıldığı için
+> **1188 sticker'ın tamamı** sessizce mock fiyata düşüyor, Katowice 2014 gibi
+> yüzlerce dolarlık çıkartmalar $0.12 sayılıyordu. Piyasa anahtarı
+> `Sticker | <ad>` biçimindedir; sırayla denenince eşleşme **0/1188 → 856/1188
+> (%72)** oldu. Kalanı (çoğunlukla artık listelenmeyen eski çıkartmalar) hâlâ
+> mock fiyata düşer.
 
 | Kapsül | Maliyet | Fiyat tablosu |
 |---|---|---|
@@ -307,8 +422,15 @@ Souvenir paketleri normal kasalarla **aynı kademe merdivenini** kullanır, anca
 içerdikleri kademe **sayısı** pakete göre değişir (bazı harita koleksiyonlarında
 yalnızca 3 kademe var). Bu yüzden oranları sabit bir tabloya gömmek **yanlış**
 olurdu — `getSouvenirTiers(pkg)` paketin **içinde gerçekten bulunan** kademeleri
-tespit edip standart merdiveni (`79.92 / 15.98 / 3.20 / 0.64 / 0.26`) onlara
-uygular ve toplam %100'e **yeniden normalize** edilir.
+tespit edip merdiveni (`buildLadderOdds`, her kademe bir öncekinin 1/5'i) onlara
+uygular ve toplam %100'e **yeniden normalize** edilir. Bu artık kasa /
+koleksiyon / kapsül ile **aynı** fonksiyondur (`getPresentTiers`, bkz. §5.0).
+
+> **Souvenir ROI'leri neden bu kadar düşük (%0.4–%85)?** Bu bir hata değil.
+> Eski souvenir paketleri koleksiyon eşyasıdır: *DreamHack 2013 Souvenir
+> Package* piyasada **$1150**'ye işlem görürken içindeki eşyaların ortalaması
+> ~**$13**. Fiyat eşleşmesi doğrulandı: 30 pakette **537/545** eşya canlı
+> fiyatla bulunuyor.
 
 > ⚠️ **Bilinçli yaklaşım:** Valve'in tam iç algoritması açıklanmadığı için bu,
 > veriye dayalı en dürüst yaklaşımdır.
@@ -326,6 +448,46 @@ fazla **TEKLİF (offer)** sunulur. Kullanıcı teklifler arasında gezinir, biri
 **kredi** karşılığında satın alır ya da hepsini geçer. Her oturumda **yalnızca
 bir** eşya alınabilir; satın alma yapıldığında oturum kapanır.
 
+#### ⚠️ TERMİNALDE ROI GÖSTERİLMEZ — 29 Ağustos 2026 düzeltmesi
+
+> **Kullanıcı şikâyeti:** *"Bazı terminallerin ROI'si %1000 veya %232 gibi
+> imkânsız seviyelerde."*
+
+Eski hesap `ROI = beklenen ödül / mühürlü terminalin piyasa fiyatı` idi. Bu oran
+**anlamsızdı**, çünkü bu simülatörde terminali çalıştırmak **ücretsizdir** ve
+kullanıcı mühürlü kutuyu değil, **seçtiği teklifin kendi piyasa fiyatını** öder.
+Yani hiç ödenmeyen bir maliyete bölünüyordu:
+
+| Terminal | EV | Mühürlü kutu | Eski "ROI" |
+|---|---|---|---|
+| Sealed Genesis Terminal | $1.60 | $0.12 | **%1033** |
+| Sealed Dead Hand Terminal | $2.61 | $0.94 | **%232** |
+
+Bu sayılar hesap hatası değil, **yanlış sorunun** doğru cevabıydı. Terminal
+mekaniğinde ROI **tanımsızdır**: teklifi piyasa fiyatına alırsınız, dolayısıyla
+getiri/maliyet yapısal olarak %100'dür.
+
+Bu yüzden `calculateTerminalStats` artık **`roi: null`** döndürür (kartlar bu
+hücreyi hiç basmaz) ve yerine mekanikte gerçekten anlamı olan iki ölçü koydu:
+
+| Ölçü | Anlamı | Genesis | Dead Hand |
+|---|---|---|---|
+| `avgOffer` | Tek bir teklifin beklenen değeri | $1.60 | $2.61 |
+| `bestOffer` | Bir oturumdaki **en iyi** teklifin beklenen değeri (5 teklifin maksimumu) | $6.22 | $11.08 |
+
+`bestOffer`, Monte Carlo yerine **deterministik** olarak hesaplanır
+(`E[max] = Σ vᵢ · (P(≤i)ⁿ − P(<i)ⁿ)`) — kart her render'da aynı sayıyı
+göstermeli, yoksa liste zıplar. Simülasyonla doğrulandı: sim $6.63 / $11.08 —
+kart $6.22 / $11.08.
+
+#### ⚠️ ZORUNLU ALIM KALDIRILDI (29 Ağustos 2026)
+
+Önceki sürümde **son teklifte "Pas Geç" devre dışı** bırakılıyor ve kullanıcı
+eşyayı almak **zorunda** kalıyordu. Bu ne gerçek CS2 davranışıydı ne de adil:
+teklifleri görmek ücretsiz olduğu hâlde çıkış yolu yoktu. Artık son adımda
+kırmızı kenarlı **"ALMADAN KAPAT"** butonu var; oturum hiçbir ücret ödenmeden
+kapanır ve terminali tekrar çalıştırmak da ücretsizdir.
+
 **Akış (ADIM ADIM — teklifler AYNI ANDA gösterilmez):**
 
 | Aşama | Ne olur |
@@ -337,7 +499,14 @@ bir** eşya alınabilir; satın alma yapıldığında oturum kapanır.
 
 #### ⚠️ Adım adım akış kuralları
 - Kullanıcı aynı anda **yalnızca BİR** teklif görür.
-- **[✓ Eşyayı Al]** → kredi düşer, eşya envantere girer, **oturum biter**.
+- **[EŞYAYI AL]** → bakiyeden teklifin fiyatı düşer, eşya envantere girer, **oturum biter**.
+- **SON adımda [ALMADAN KAPAT]** → hiçbir ücret ödenmez, oturum kapanır
+  (`terminal.declinedToast` bildirimi çıkar).
+- **Nadir 6. teklif:** `BONUS_OFFER_CHANCE = 0.05`. Zar teklifler üretilirken
+  **bir kez** atılır ve oturum boyunca sabittir — "pas geçtikçe şansım artar mı"
+  belirsizliği bilinçli olarak yok edilmiştir. Bonus açıldığında ekranın üstünde
+  `BONUS SLOT UNLOCKED` rozeti çıkar **ve** bir bildirim gösterilir (rozet tek
+  başına fark edilmiyordu, oyunun en özel anı sessizce geçiyordu).
 - **[Pas Geç →]** → bir sonraki teklife geçer. **GERİ DÖNÜŞ YOKTUR.**
 - **SON seçenekte `Pas Geç` DEVRE DIŞIDIR** — kullanıcı almak zorundadır.
   (Buton hem `disabled` hem de `nextOffer()` içinde ikinci bir kalkanla korunur.)
@@ -619,7 +788,7 @@ Scroll olaylarını rAF'a kuyruklamak akıllıca görünüyor ama rAF, composite
 edilmeyen sekmelerde **tamamen donuyor** (bu projede ölçüldü: 0 kare/sn) ve o
 durumda başlık **yarıda kilitli** kalıyordu. Üstelik tarayıcılar scroll olayını
 zaten kare başına en fazla bir kez üretir — rAF ek akıcılık getirmiyor, sadece
-kırılganlık ekliyordu. Boyama artık **senkron**. (Altın Kural 9'un aynı ruhu.)
+kırılganlık ekliyordu. Boyama artık **senkron**. (Altın Kural 10'un aynı ruhu.)
 
 #### ⚠️ EN ÜSTTE (p = 0) HİÇBİR STİL YAZILMAZ — kırpılma hatasının kökü
 Önceki sürüm `p = 0` iken bile `height` + `overflow: hidden` uyguluyordu.
@@ -793,6 +962,128 @@ yukarı doğru **sönümlenerek** çıkan, nadirlik rengindeki ışık. Web'de g
 Uygulandığı yerler: kasa çarkındaki **her** şerit öğesi (dönerken renkler akıp
 gider), kazanılan eşya kartı, çoklu açılış kartları, terminal ve kapsül
 sonuçları, envanter inceleme modalı.
+
+### 6.2.27 Çoklu Açılış Sonuç Paneli (`components/BatchResultPanel.js`)
+
+Kasa, Souvenir, Sticker Kapsülü ve Armory koleksiyonu açılışlarının **hepsi**
+artık tek bir sonuç panelini kullanır. Önceden dört ekranda dört ayrı (ve farklı
+özellikli) sonuç ızgarası vardı; biri güncellenince diğerleri unutuluyordu.
+
+| Yetenek | Davranış |
+|---|---|
+| **Tekrardan Aç** | Aynı kutuyu **aynı adetle** yeniden açar |
+| **Tekli satış** | Eşyanın üzerine gelince küçük yeşil "Sat" düğmesi çıkar |
+| **Çoklu seçim** | Karta tıklayınca seçilir (mavi çerçeve + tik rozeti) |
+| **Hepsini Envantere Gönder** | Kalan tüm eşyaları aktarır |
+| **Seçilenleri Gönder** | Yalnızca işaretlenenleri aktarır, kalanlar ekranda durur |
+| **Kalanları Sat** | Ekranda kalan istenmeyen eşyaları tek tuşla satar |
+
+> ⚠️ **`batch.totalWon` DEĞİL, KALAN eşyaların toplamı ödenir.** Kullanıcı aradan
+> tek tek satış yapmış olabilir; ilk açılıştaki toplamı ödemek satılan eşyaların
+> parasını **iki kez** verirdi.
+
+> ⚠️ **"Tekrar Aç" paneli ÖNCEDEN KAPATMAZ.** Yeni açılış "yetersiz bakiye" ile
+> reddedilirse kullanıcı hem yeni sonuç alamaz hem de eldeki eşyaları kaybederdi.
+> Başarılı açılış `batch`'i zaten kendisi değiştirir.
+
+> ⚠️ Dokunmatik platformlarda hover yoktur; "Sat" düğmesi orada **daima**
+> görünür (`Platform.OS !== 'web'`).
+
+Ayrıca sıralı beliriş ızgarası artık `batch.sequential && !batch.revealed`
+koşuluyla basılır — aksi hâlde panelin kendi ızgarasıyla üst üste gelip eşyaları
+**iki kez** gösteriyordu.
+
+### 6.2.28 Kasa Açma Ekranı — Fiyat Gösterimi
+
+Kutunun hemen altında, her kalem **kendi satırında** ve **kendi CS2 ikonuyla**:
+
+```
+[kasa ikonu] Kasa  $0.88    │    [anahtar ikonu] Anahtar  $2.50
+```
+
+Eskiden tek satırlık küçük gri bir metindi ("Kasa $0.24 + Anahtar $2.50") ve
+**toplam** da açma butonunun üzerinde tekrarlanıyordu; kullanıcı hangi rakamın ne
+olduğunu ayırt edemiyordu. Artık butonun üzerinde **sadece "KASAYI AÇ"** yazıyor.
+
+### 6.2.29 Simge Seti — SVG (`components/Icons.js`)
+
+⚠️ **EMOJİ TAMAMEN KALDIRILDI.** Kullanıcı geri bildirimi: *"ikonlar fazla
+çocuksu (Mario veya Minecraft gibi) duruyor."* İki yapısal sebep:
+
+1. Emoji her işletim sisteminde **farklı** çizilir (🔍 Windows'ta renkli ve
+   şişkin, macOS'ta bambaşka, Android'de bambaşka) — aynı arayüz üç ayrı görsel
+   dile bölünüyordu.
+2. Emoji'ye **renk/kalınlık verilemez.** CS2'nin arayüz dili monokrom ve ince
+   çizgilidir; renk yalnızca nadirlikte ve para/kredi göstergesinde kullanılır.
+
+Yerine `react-native-svg` tabanlı bir set geldi. **Tasarım kuralları (tek yerde):**
+24×24 viewBox · `stroke` tabanlı (dolgu yok) · `strokeWidth` 1.6 ·
+`round` uç/köşe · renk **daima prop'tan** gelir.
+
+| Simge | Kullanım |
+|---|---|
+| `IconSearch` | Arama — CS tarzı nişangâhlı büyüteç (renkli dürbün emojisi değil) |
+| `IconInventory` | Envanter — taşıma sandığı (Minecraft bloğu değil) |
+| `IconCase` / `IconKey` | Kasa açma ekranındaki fiyat etiketleri (CS2 kasası ve anahtarı) |
+| `IconList` `IconChart` `IconGem` `IconTag` `IconTrend` | Liste sıralama seçenekleri |
+| `IconClock` `IconArrowUp/Down` | Envanter sıralama |
+| `IconRefresh` `IconBook` `IconTrash` `IconSelect` `IconSell` | Menü ve araç çubuğu |
+| `IconGlobe` | Dil değiştirici |
+| `IconLock` `IconCheck` `IconClose` `IconInfinity` `IconWallet` | Genel |
+| `StarIcon` / `DollarIcon` | **TEK RENKLİ İSTİSNA** — bakiye/kredi göstergeleri yeşildir |
+
+> ⚠️ Yıldız ve dolar bilinçli olarak **renklidir**: bunlar arayüzün "durum"
+> katmanıdır; monokrom bırakılırlarsa gezinme simgelerinden ayrışmaz ve göz
+> onları taramada bulamaz.
+
+Sözlükteki (`i18n.js`) **tüm** emoji önekleri de temizlendi; simge artık metnin
+içinde değil, **ayrı bir bileşen** olarak render ediliyor ve aktif/pasif duruma
+göre **renk alıyor**.
+
+### 6.2.30 Mobil Klavye — Trade-Up Float Kutusu
+
+> **Kullanıcı şikâyeti:** *"Float kutusuna tıklayınca klavye açılıyor, item
+> tamamen ekrandan kayboluyor; yazdığım değeri göremiyorum."*
+
+**KÖK NEDEN:** Tarayıcıların varsayılan davranışı `interactive-widget=resizes-visual`'dır
+— klavye açılınca **düzen (layout) viewport'u aynı kalır**, yalnızca görsel
+viewport kayar. Bu uygulamada `body { overflow: hidden }` ve tam yükseklik bir
+kök eleman olduğu için sayfa hiç kaydırılamıyor, odaklanan kutu klavyenin
+**arkasında** kalıyordu.
+
+**İKİ PARÇALI ÇÖZÜM:**
+
+1. `public/index.html` → viewport meta'sına **`interactive-widget=resizes-content`**.
+   Klavye açıldığında düzen viewport'u da küçülür, ScrollView kısalır ve
+   odaklanan alan gerçekten kaydırılabilir hâle gelir.
+2. `CompactFloatSlider.handleFocus` → odaklanınca **kartın tamamını** ekranın
+   ortasına kaydırır (`scrollIntoView({ block: 'center' })`).
+
+> ⚠️ **Kutuyu değil KARTI kaydırıyoruz:** kullanıcı float'ı **eşyaya bakarak**
+> ayarlıyor. Kart ortalanınca görsel + isim + yazdığı değer aynı anda görünür kalır.
+> Kartı bulmak için `dataSet={{ tradecard: '1' }}` → `data-tradecard` işareti kullanılır.
+
+> ⚠️ **320 ms gecikme şart:** klavye açılma animasyonu sürerken kaydırılırsa
+> tarayıcı düzeni yeniden hesaplayınca hedef kayar.
+
+**Doğrulama:** odaklanmadan önce kutu `y = 811` (720 px'lik görüntü alanının
+dışında), odaklandıktan sonra `y = 463` — kart görünür ve ortalanmış.
+
+### 6.2.31 Sekme Başlığı, Google Analytics ve `public/index.html`
+
+Expo, `public/index.html` varsa onu **şablon** olarak kullanır (SDK 57,
+single-page çıktı). Bu dosya üç şeyi taşıyor:
+
+- `<title>SkinSimulator.com</title>` (eskiden `app.json`'daki `expo.name`'den
+  "cs2-simulator" üretiliyordu)
+- **Google Analytics** etiketi (`G-C4JPXC4L64`), `head`'in en başında
+- Mobil klavye düzeltmesinin viewport meta'sı (§6.2.30)
+
+> ⚠️ **BU DOSYADA KAPANIŞ `head`/`body` ETİKETİ YAZMAYIN — YORUM İÇİNDE BİLE.**
+> Expo'nun enjeksiyonu düz metin araması yapıyor ve kapanış etiketinin **ilk**
+> geçtiği yeri hedefliyor. Bir yorumun içinde böyle bir metin geçerse bundle
+> script etiketi **yorumun içine** gömülür ve uygulama hiç açılmaz.
+> (Bu bir kez yaşandı — 29 Ağu 2026.)
 
 ### 6.3 Önemli UI Bileşenleri
 - **Satış akışı:** TÜM satışlar (hover hızlı satış, inceleme modalı, toplu satış)
@@ -971,6 +1262,22 @@ npm run ios      # iOS
 ---
 
 ## 9. Değişiklik Günlüğü
+
+| Tarih | Değişiklik |
+|---|---|
+| **2026-08-29** | **KRİTİK — Armory %1000+ ROI bug'ı:** çekiliş kodları boş kademede "tüm havuza düş" yedeğine giriyordu; Armory koleksiyonlarında Consumer Grade olmadığı için çekilişlerin %79.92'si düzgün dağılımlı seçim yapıyordu. Gerçek EV $15.83–$22.83 (maliyet $1.60). Oran tabloları artık içerikten türetiliyor (`getPresentTiers` / `rollTier` / `poolForTier`); ROI %45–68'e indi |
+| **2026-08-29** | **EV artık aşınma dağılımına göre:** sabit float 0.25 yerine ağırlıklı bantlar eşyanın kendi min/max aralığına ölçekleniyor — kart EV'si ile 400.000 çekilişlik simülasyon örtüşüyor |
+| **2026-08-29** | **Bug:** kasa içeriğindeki sticker'larda `market_hash_name` YOK; 1188 sticker'ın tamamı mock fiyata düşüyordu. `Sticker \| <ad>` anahtarı eklendi → eşleşme 0/1188 → 856/1188 |
+| **2026-08-29** | **Bug:** piyasa fiyatı bulunamayan kutular sabit $1.00 sayılıyor, EMS Katowice 2014 Legends %104.745 ROI gösteriyordu. `resolveContainerCost` fiyatı içerikten tahmin ediyor; kart ve açılış ekranı aynı sayıyı kullanıyor |
+| **2026-08-29** | **Terminal ROI kaldırıldı** (%1033 / %232) — teklif piyasa fiyatına alındığı için ROI tanımsız. Yerine `avgOffer` ve `bestOffer` (5 teklifin en iyisi, deterministik `E[max]`) |
+| **2026-08-29** | **Terminalde zorunlu alım kaldırıldı** — son adımda "ALMADAN KAPAT"; nadir 6. teklif (%5) artık bildirimle duyuruluyor |
+| **2026-08-29** | **Ortak çoklu açılış sonuç paneli** (`BatchResultPanel`): Tekrar Aç · hover ile tekli satış · çoklu seçim · Hepsini/Seçilenleri Gönder · Kalanları Sat |
+| **2026-08-29** | **Kapsül animasyonu bug'ı:** yırtık çizgisi `phase === 'tearing' \|\| burst` koşuluyla çiziliyordu; kapsül yarıları savrulduktan sonra 11 beyaz kare ekranın ortasında kalıyordu. Artık yalnızca yırtılma aşamasında görünüyor |
+| **2026-08-29** | **Mobil klavye düzeltmesi:** `interactive-widget=resizes-content` + odaklanınca kartı ortalayan `scrollIntoView` (ölçüldü: y 811 → 463) |
+| **2026-08-29** | **Sekme başlığı `SkinSimulator.com`** ve **Google Analytics** (`G-C4JPXC4L64`) — `public/index.html` şablonu eklendi. **Bug:** yorum içindeki kapanış etiketi Expo'nun script enjeksiyonunu yorumun içine gömüyordu |
+| **2026-08-29** | **Emoji → SVG simge seti** (`react-native-svg`): arama, envanter, sıralama, cüzdan, yıldız, kasa, anahtar, globe; sözlükteki tüm emoji önekleri temizlendi |
+| **2026-08-29** | **Bug:** `i18n.js` İngilizce bloğunun içine 5 Türkçe satır sızmıştı (aynı anahtar iki kez → sonuncusu kazanıyor), İngilizce arayüzde Türkçe metin görünüyordu. Trade-Up'taki 4 sabit Türkçe toast da sözlüğe taşındı |
+| **2026-08-29** | **İçerik önizlemesi oranları da içerikten türetiliyor** — Armory tablosu "Consumer Grade %79.92" gibi hiç çıkmayacak bir kademeyi gösteriyordu |
 
 | Tarih | Değişiklik |
 |---|---|

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Modal, Pressable } from 'react-native';
 import { useI18n, LANGUAGES } from '../i18n';
 import { C, shadow, webTransition } from '../theme';
+import { IconGlobe } from './Icons';
 
 // ============================================================
 // DİL DEĞİŞTİRİCİ (Globe)
@@ -26,7 +27,10 @@ export default function LanguageSwitcher() {
         onPress={() => setOpen(true)}
         accessibilityLabel={t('util.language')}
       >
-        <Text style={s.globe}>🌐</Text>
+        {/* ⚠️ EMOJİ DEĞİL: 🌐 her platformda farklı (ve renkli) çizilir;
+            arayuzun geri kalanı monokrom çizgi ikonları kullandığı için tek başına
+            sırıtıyordu. */}
+        <IconGlobe size={14} color={C.textSoft} />
         <Text style={s.code}>{current.short}</Text>
       </TouchableOpacity>
 
