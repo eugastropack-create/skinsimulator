@@ -1078,6 +1078,9 @@ single-page çıktı). Bu dosya üç şeyi taşıyor:
   "cs2-simulator" üretiliyordu)
 - **Google Analytics** etiketi (`G-C4JPXC4L64`), `head`'in en başında
 - Mobil klavye düzeltmesinin viewport meta'sı (§6.2.30)
+- **Google Search Console** site doğrulama meta etiketi
+  (`google-site-verification`) — ⚠️ bu Analytics DEĞİLDİR, ayrı bir
+  jetondur ve silinirse doğrulama düşer (bkz. `cloud.md` §5.8.1)
 
 > ⚠️ **BU DOSYADA KAPANIŞ `head`/`body` ETİKETİ YAZMAYIN — YORUM İÇİNDE BİLE.**
 > Expo'nun enjeksiyonu düz metin araması yapıyor ve kapanış etiketinin **ilk**

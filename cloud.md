@@ -295,6 +295,27 @@ içinde gtag satır 5'te, `<title>SkinSimulator.com</title>` satır 49'da,
 alanından ("cs2-simulator") üretiliyordu. `app.json` → `expo.web.name` de
 `SkinSimulator.com` olarak güncellendi (PWA manifest'i için).
 
+## 5.8.1 Google Search Console — site sahipliği doğrulaması
+
+| | |
+|---|---|
+| **Yöntem** | HTML meta etiketi |
+| **Jeton** | `8xDkNMJr_jeEF5Qb89A7yPFwTqJDwkaGkcihnhSO6k4` |
+| **Nerede** | `public/index.html` → `<head>` |
+
+⚠️ **BU ANALYTICS DEĞİLDİR.** Analytics ayrı bir şeydir (gtag.js,
+ölçüm kimliği `G-C4JPXC4L64` — bkz. §5.8). `google-site-verification`
+jetonu trafik ölçmez, hiçbir veri toplamaz; yalnızca Search Console'a
+"bu alan adı bana ait" der ve arama sorguları / indeksleme durumu /
+sitemap ekranlarına erişim açar.
+
+⚠️ **SİLMEYİN:** Google etiketi periyodik olarak yeniden kontrol eder.
+Kaldırılırsa doğrulama düşer ve Search Console erişimi kesilir.
+
+⚠️ Doğrulamanın geçerli olması için etiketin **yayındaki** ana sayfada
+bulunması gerekir — yani `npx expo export` sonrası `dist/` klasörü
+dağıtılmadan Search Console "doğrulanamadı" der.
+
 ## 5.9 Yeni Bağımlılık: `react-native-svg`
 
 Arayüz simgeleri emoji'den **SVG**'ye taşındı (bkz. `gacas.md` §6.2.29).
@@ -341,6 +362,7 @@ Cloudflare Worker'ınız) geçmek için değiştirilecek tek yer `contactConfig.
 | **2026-08-29** | `public/index.html` şablonu eklendi: sekme başlığı `SkinSimulator.com`, Google Analytics (`G-C4JPXC4L64`), mobil klavye için `interactive-widget=resizes-content` |
 | **2026-08-29** | `react-native-svg` (15.15.4) bağımlılığı eklendi — arayüz simgeleri |
 | **2026-08-30** | Koleksiyonlar sekmesi eklendi — **yeni dış servis YOK**; zaten indirilen `collections.json` yeniden kullanılıyor. Aktif drop havuzu listesi elle bakımlı (`src/armoryData.js`) |
+| **2026-08-30** | **Google Search Console doğrulama meta etiketi** eklendi (`public/index.html`). Analytics'ten AYRI bir şeydir |
 | **2026-08-30** | **YENİ DIŞ SERVİS: FormSubmit** — iletişim formu mesajlarını `eolyrics@gmail.com` adresine iletir (bkz. §5.10). İlk gönderimde aktivasyon gerekir |
 
 | Tarih | Değişiklik |
