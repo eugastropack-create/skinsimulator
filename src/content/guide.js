@@ -296,7 +296,7 @@ export const GUIDE = {
           'publishing the site, since a working contact route is one of the things ad ' +
           'networks look for during review.' },
         { type: 'ul', items: [
-          'Email: your-address@example.com',
+          'Email: eolyrics@gmail.com',
           'Response time: usually within a few days',
           'For bug reports, please include what you clicked and what you expected'
         ] },
@@ -582,7 +582,7 @@ export const GUIDE = {
           'adresiyle değiştirin; çalışan bir iletişim yolu, reklam ağlarının inceleme ' +
           'sırasında aradığı şeylerden biridir.' },
         { type: 'ul', items: [
-          'E-posta: adresiniz@example.com',
+          'E-posta: eolyrics@gmail.com',
           'Yanıt süresi: genellikle birkaç gün içinde',
           'Hata bildirimlerinde neye tıkladığınızı ve ne beklediğinizi yazın'
         ] },

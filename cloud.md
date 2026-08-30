@@ -302,6 +302,28 @@ Arayüz simgeleri emoji'den **SVG**'ye taşındı (bkz. `gacas.md` §6.2.29).
 Web'de `react-native-web` üzerinden gerçek `<svg>` elemanına çevrilir; ek bir
 yapılandırma veya polyfill **gerekmez**.
 
+## 5.10 İletişim Formu — Dış Servis (FormSubmit)
+
+| | |
+|---|---|
+| **Hedef adres** | `eolyrics@gmail.com` (`src/contactConfig.js` → `CONTACT_EMAIL`) |
+| **Servis** | `https://formsubmit.co/ajax/<adres>` — kayıt/API anahtarı gerektirmez |
+| **Kim çağırıyor** | `src/api.js` → `sendContactMessage` (Ağ Katmanı Kuralı) |
+| **Yedek** | Servis erişilemezse form `mailto:` bağlantısına düşer |
+
+⚠️ **NEDEN GEREKLİ:** Proje sunucusuzdur (§1). Tarayıcıdan doğrudan e-posta
+göndermek mümkün değildir; SMTP için sunucu ve gizli parola gerekir, istemci
+koduna konulan parola herkesçe okunabilir.
+
+⚠️ **İLK MESAJDA AKTİVASYON:** FormSubmit, adresin sahibi olduğunuzu doğrulamak
+için ilk gönderimde `CONTACT_EMAIL`'e bir onay bağlantısı yollar. **O bağlantıya
+bir kez tıklanmadan hiçbir mesaj iletilmez.**
+
+⚠️ **GİZLİLİK:** Gönderilen ad / e-posta / mesaj bu servisin sunucularından
+geçer. AB/UK trafiği hedefleniyorsa Gizlilik Politikası bölümünde belirtilmesi
+gerekir. Başka bir sağlayıcıya (Formspree, Web3Forms, EmailJS veya kendi
+Cloudflare Worker'ınız) geçmek için değiştirilecek tek yer `contactConfig.js`.
+
 ## 6. Gizlilik ve Güvenlik
 
 - ✅ Kişisel veri toplanmaz, gönderilmez, saklanmaz.
@@ -319,6 +341,7 @@ yapılandırma veya polyfill **gerekmez**.
 | **2026-08-29** | `public/index.html` şablonu eklendi: sekme başlığı `SkinSimulator.com`, Google Analytics (`G-C4JPXC4L64`), mobil klavye için `interactive-widget=resizes-content` |
 | **2026-08-29** | `react-native-svg` (15.15.4) bağımlılığı eklendi — arayüz simgeleri |
 | **2026-08-30** | Koleksiyonlar sekmesi eklendi — **yeni dış servis YOK**; zaten indirilen `collections.json` yeniden kullanılıyor. Aktif drop havuzu listesi elle bakımlı (`src/armoryData.js`) |
+| **2026-08-30** | **YENİ DIŞ SERVİS: FormSubmit** — iletişim formu mesajlarını `eolyrics@gmail.com` adresine iletir (bkz. §5.10). İlk gönderimde aktivasyon gerekir |
 
 | Tarih | Değişiklik |
 |---|---|

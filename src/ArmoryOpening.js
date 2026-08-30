@@ -9,6 +9,7 @@ import {
 } from './prices';
 import { InlineContentsPanel } from './components/ContentsModal';
 import { StarIcon, STAR_GREEN } from './components/Icons';
+import Tooltip from './components/Tooltip';
 import BatchResultPanel from './components/BatchResultPanel';
 import { useI18n } from './i18n';
 import { C, shadow, rarityGlowStyle } from './theme';
@@ -281,18 +282,18 @@ export default function ArmoryOpening({ collection, onBack, balance, setBalance,
           </View>
         ) : collection.expectedReturn != null && (
           <View style={styles.roiPanel}>
-            <View style={styles.roiBox}>
+            <Tooltip text={t('tip.ev')} style={styles.roiBox}>
               <Text style={styles.roiLbl}>{t('common.expectedValue')}</Text>
               <Text style={styles.roiVal}>${collection.expectedReturn.toFixed(2)}</Text>
-            </View>
-            <View style={styles.roiBox}>
+            </Tooltip>
+            <Tooltip text={t('tip.roi')} style={styles.roiBox}>
               <Text style={styles.roiLbl}>{t('common.roi')}</Text>
               <Text style={[styles.roiVal, { color: collection.roi >= 100 ? C.success : C.danger }]}>%{collection.roi.toFixed(1)}</Text>
-            </View>
-            <View style={styles.roiBox}>
+            </Tooltip>
+            <Tooltip text={t('tip.maxWin')} style={styles.roiBox}>
               <Text style={styles.roiLbl}>{t('common.maxWin')}</Text>
               <Text style={[styles.roiVal, { color: C.gold }]}>${collection.maxProfit.toFixed(2)}</Text>
-            </View>
+            </Tooltip>
           </View>
         )}
 

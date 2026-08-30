@@ -9,6 +9,8 @@ import TerminalOpening from './src/TerminalOpening';
 import CapsuleOpening from './src/CapsuleOpening';
 import BlogScreen from './src/BlogScreen';
 import CollectionsScreen from './src/CollectionsScreen';
+import ContactWidget from './src/components/ContactWidget';
+import Tooltip from './src/components/Tooltip';
 import { fetchCrates, fetchKeychains, fetchCollections, fetchStickerCapsules, fetchSouvenirPackages, fetchTerminals } from './src/api';
 import {
   fetchLivePrices, calculateCaseStats, calculateArmoryStats, calculateCharmStats,
@@ -138,7 +140,14 @@ export default function App() {
 function AppShell() {
   const { t } = useI18n();
   const [tab, setTab] = useState('cases');
-  const [gameMode, setGameMode] = useState('wallet');
+  // ⚠️ VARSAYILAN MOD: SINIRSIZ (30 Ağu 2026 — kullanıcı isteği).
+  // Site ilk açıldığında kullanıcı hemen deneme yapabilsin diye bakiye
+  // kısıtı yok. Cüzdan modu üst çubuktan tek tıkla açılıyor.
+  //
+  // ⚠️ `SellConfirmModal`'ın "Sınırsız Mod'da satış" yönlendirmesi bu değişiklikten
+  // ETKİLENİR: artık kullanıcıların çoğu o modalı ilk satışta görecek. Modal zaten
+  // üç seçenek sunuyor (cüzdana geç / sanal sat / vazgeç), davranış doğru kalıyor.
+  const [gameMode, setGameMode] = useState('unlimited');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
 
@@ -719,31 +728,33 @@ function AppShell() {
             ölçü var: bir teklifin ortalama değeri ve 5 teklifin EN İYİSİNİN
             beklenen değeri. */}
         <View style={s.cardStats}>
+          {/* Her metrik bir Tooltip ile sarılı: hover'da ne anlama geldiğini
+              açıklar, fare çekilince kaybolur (bkz. components/Tooltip.js). */}
           {item.isTerminal && item.bestOffer != null ? (
             <>
-              <View style={s.statCell}>
+              <Tooltip text={t('tip.avgOffer')} style={s.statCell}>
                 <Text style={s.statCellLbl}>{t('common.avgOffer')}</Text>
                 <Text style={s.statCellVal}>${item.avgOffer.toFixed(2)}</Text>
-              </View>
+              </Tooltip>
               <View style={s.statDivider} />
-              <View style={s.statCell}>
+              <Tooltip text={t('tip.bestOffer')} style={s.statCell}>
                 <Text style={s.statCellLbl}>{t('common.bestOffer')}</Text>
                 <Text style={[s.statCellVal, { color: C.success }]}>${item.bestOffer.toFixed(2)}</Text>
-              </View>
+              </Tooltip>
             </>
           ) : item.expectedReturn != null ? (
             <>
-              <View style={s.statCell}>
+              <Tooltip text={t('tip.ev')} style={s.statCell}>
                 <Text style={s.statCellLbl}>EV</Text>
                 <Text style={s.statCellVal}>${item.expectedReturn.toFixed(2)}</Text>
-              </View>
+              </Tooltip>
               <View style={s.statDivider} />
-              <View style={s.statCell}>
+              <Tooltip text={t('tip.roi')} style={s.statCell}>
                 <Text style={s.statCellLbl}>{t('common.roi')}</Text>
                 <Text style={[s.statCellVal, { color: item.roi >= 100 ? C.success : C.danger }]}>
                   %{(item.roi ?? 0).toFixed(0)}
                 </Text>
-              </View>
+              </Tooltip>
             </>
           ) : <View style={s.statCell} />}
         </View>
@@ -1005,7 +1016,12 @@ function AppShell() {
 
         {/* ============================================================
             2) CANLI ARAMA — yazdıkça altında dinamik sonuç listesi açılır
-            ============================================================ */}
+            ============================================================
+            ⚠️ KOLEKSİYONLAR SEKMESİNDE GİZLİ: bu arama kasa/eşya (yani "silah")
+            buluyor ve o sekmede işe yaramıyordu — kullanıcı koleksiyon adı
+            arıyor. Orada yerini CollectionsScreen'in kendi koleksiyon araması
+            alıyor. Diğer tüm sekmelerde davranış değişmedi. */}
+        {tab !== 'collections' && (
         <View style={[s.searchZone, compact && s.searchZoneCompact, isNarrow && s.searchZoneNarrow]}>
           <View style={[s.searchBox, (searchFocused || searchQuery) && s.searchBoxActive]}>
             {/* ⚠️ EMOJİ DEĞİL: renksiz, ince çizgili "scope" büyüteci
@@ -1060,6 +1076,7 @@ function AppShell() {
             </View>
           )}
         </View>
+        )}
 
         {/* ============================================================
             REKLAM ALANI (rezerve) — şimdilik yalnızca boşluk.
@@ -1260,6 +1277,14 @@ function AppShell() {
       <Disclaimer compact={compact} />
 
       <ToastBanner toast={toast} />
+
+      {/* ============================================================
+          HIZLI İLETİŞİM — sağ alt köşe
+          ============================================================
+          ⚠️ EN SONDA monte ediliyor: mutlak konumlu bir katman, kendisinden
+          SONRA gelen kardeşlerin altında kalabilir. Modal'ların da üstünde
+          olmaması için `zIndex` 900'de tutuluyor (modallar 1000+). */}
+      <ContactWidget />
 
       <ConfirmModal
         visible={clearInvConfirmOpen}

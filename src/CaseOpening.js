@@ -8,6 +8,7 @@ import {
 import { InlineContentsPanel } from './components/ContentsModal';
 import BatchResultPanel from './components/BatchResultPanel';
 import { IconCase, IconKey } from './components/Icons';
+import Tooltip from './components/Tooltip';
 import { useI18n } from './i18n';
 import { C, shadow, rarityGlowStyle, hexToRgba } from './theme';
 
@@ -674,20 +675,21 @@ export default function CaseOpening({ crate, onBack, balance, setBalance, invent
 
             {crate.expectedReturn != null && (
               <View style={styles.roiPanel}>
-                <View style={styles.roiBox}>
+                {/* Metriklerin ne anlama geldiği hover'da açıklanıyor. */}
+                <Tooltip text={t('tip.ev')} style={styles.roiBox}>
                   <Text style={styles.roiLbl}>{t('common.expectedValue')}</Text>
                   <Text style={styles.roiVal}>${crate.expectedReturn.toFixed(2)}</Text>
-                </View>
+                </Tooltip>
                 <View style={styles.roiDivider} />
-                <View style={styles.roiBox}>
+                <Tooltip text={t('tip.roi')} style={styles.roiBox}>
                   <Text style={styles.roiLbl}>{t('common.roi')}</Text>
                   <Text style={[styles.roiVal, { color: crate.roi >= 100 ? C.success : C.danger }]}>%{crate.roi.toFixed(1)}</Text>
-                </View>
+                </Tooltip>
                 <View style={styles.roiDivider} />
-                <View style={styles.roiBox}>
+                <Tooltip text={t('tip.maxWin')} style={styles.roiBox}>
                   <Text style={styles.roiLbl}>{t('common.maxWin')}</Text>
                   <Text style={[styles.roiVal, { color: C.gold }]}>${crate.maxProfit.toFixed(2)}</Text>
-                </View>
+                </Tooltip>
               </View>
             )}
           </>

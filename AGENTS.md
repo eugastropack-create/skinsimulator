@@ -97,7 +97,11 @@ Güncellenmesi gereken tipik bölümler:
 | `src/components/ItemInspectModal.js` | Envanter eşya inceleme | float/pattern yoksa (charm/sticker) o satırları gizle |
 | `src/components/SellConfirmModal.js` | Satış onayı + Sınırsız Mod yönlendirmesi | Satışı doğrudan yapma — `requestSell` → modal → `finalizeSell` yolunu kullan |
 | `src/armoryData.js` | Aktif Armory koleksiyonları **ve aktif drop havuzu** isimleri | Valve rotasyon yapınca **sadece burası** güncellenir. Bu iki liste API'de YOKTUR, elle bakımlıdır |
-| `src/CollectionsScreen.js` | Koleksiyon keşif ekranı (liste + detay + arama + sıralama) | **`setBalance`/`gameMode` PROP'U GEÇİRME** — burada hiçbir şey açılmaz. `numColumns` KULLANMA (bölüm başlığı satırın ortasına düşer). Ek `fetch` yazma — veri `allCollectionsRaw`'dan gelir |
+| `src/components/Tooltip.js` | Hover'da açıklama kutucuğu | Kapsayıcıda `overflow: hidden` OLMAMALI. Animasyon EKLEME (hayalet kutucuk bırakıyor). Native'de dokunmayla açılır |
+| `src/components/ImagePreviewModal.js` | Eşya görselinin büyük hâli | Ek "yüksek çözünürlük" uç noktası YOK — aynı URL, daha büyük kutu |
+| `src/components/ContactWidget.js` | Sağ alt köşedeki iletişim formu | Hedef adres formda GÖSTERİLMEZ. `fetch` yazma — `api.sendContactMessage` kullan. Başarısızlıkta `mailto` yedeği ve yazılan metin KORUNUR |
+| `src/contactConfig.js` | İletişim adresi + form aracısı servis | Sağlayıcı değiştirmek için TEK yer. İlk gönderimde servis aktivasyon maili yollar |
+| `src/CollectionsScreen.js` | Koleksiyon keşif ekranı (liste + arama + sıralama) | **`setBalance`/`gameMode` PROP'U GEÇİRME** — burada hiçbir şey açılmaz. `numColumns` KULLANMA (bölüm başlığı satırın ortasına düşer). Ek `fetch` yazma — veri `allCollectionsRaw`'dan gelir |
 
 ### ✅ Ölü Kod Temizlendi
 `src/TradeUp.js` ve `src/TradeUpAnalyzer.js` **silindi** (hiçbir yerden import
@@ -218,6 +222,8 @@ Bu durumda:
 | Emoji'yi arayüz simgesi olarak kullanmak | Her platformda farklı çizilir ve renklendirilemez. `components/Icons.js` (SVG) kullan |
 | `FlatList numColumns` + bölüm başlığı | Başlık bir HÜCREYİ kaplar ve satırın ortasına düşer. Satırları elle grupla, satır başına tek öğe ver |
 | `useWindowDimensions().width` = 0 | Gizli/ilk karede 0 gelebilir; kart genişliği negatif çıkıp ızgara çöker — `Math.max(taban, …)` koy |
+| Tooltip'i `overflow: hidden` bir kapsayıcıya koymak | Kutucuk kırpılır; kart stillerine `overflow` EKLEME |
+| İki arama kutusunu yan yana koymak | Kullanıcı hangisinin neyi aradığını bilemiyor — sekmeye göre birini gizle |
 | Yarım sözleşme/işlem üzerinden tahmin göstermek | Kullanıcı imzalayınca bambaşka bir sonuç görür (Trade-Up'ta 1/10'da %228, 10/10'da −%67 ölçüldü). Gösterimi tamamlanana kadar geciktir |
 | Farklı birimleri (yıldız / dolar) yan yana göstermek | "40★ harcadım, $8 kazandım" karşılaştırılamaz. Sabit dönüşümle ($0.40/yıldız) ikisini de yaz |
 | `src/content/guide.js` içinde kaçışlı kesme (`'`) | Dosyanın tamamı tipografik `’` kullanıyor; tek tırnaklı uzun Türkçe metinlerde kaçış eklemek hem gürültülü hem hataya açık — `’` yaz |
@@ -290,3 +296,4 @@ Bu durumda:
 | **2026-08-29** | Terminalde **zorunlu alım kaldırıldı**; ortak `BatchResultPanel`; kapsül yırtık çizgisi bug'ı; mobil klavye düzeltmesi |
 | **2026-08-29** | `public/index.html` (başlık + Google Analytics + viewport); **emoji → SVG simge seti** (`react-native-svg`); i18n yinelenen anahtar bug'ı |
 | **2026-08-30** | **Koleksiyonlar sekmesi** (sıralama + koleksiyon içi arama + Aktif Drop Havuzu rozeti); Trade-Up sonuçları sözleşme tamamlanana kadar gizlendi; Armory harcaması dolar karşılığıyla; "Send Selected" → "Send to Inventory" |
+| **2026-08-30** | Varsayılan mod **Sınırsız**; **Tooltip** ve **görsel önizleme** bileşenleri; **hızlı iletişim modülü**; Koleksiyonlar kartları küçültüldü ve arama listeye taşındı; `Contents` kapatma butonu sola alındı |

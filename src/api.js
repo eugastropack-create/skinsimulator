@@ -11,6 +11,8 @@
 // buradan gelir, dolayısıyla Valve yeni içerik eklediğinde uygulama kendiliğinden
 // günceller.
 
+import { CONTACT_ENDPOINT, buildPayload } from './contactConfig';
+
 const BASE = 'https://raw.githubusercontent.com/ByMykel/CSGO-API/main/public/api/en';
 
 // ============================================================
@@ -119,5 +121,32 @@ export const fetchKeychains = async () => {
   } catch (error) {
     console.error("Charm'lar çekilirken hata:", error);
     return [];
+  }
+};
+
+// ============================================================
+// İLETİŞİM FORMU GÖNDERİMİ
+// ============================================================
+// ⚠️ AĞ KATMANI KURALI: bileşenlerin içine `fetch` yazılmaz (bkz. dosya
+// başındaki kural). İletişim formu da bu helper'ı kullanır.
+//
+// Hedef adres ve servis `src/contactConfig.js` içindedir — sağlayıcı
+// değiştirmek için orada tek bir sabiti güncellemek yeterlidir.
+//
+// Dönüş: `{ ok: true }` veya `{ ok: false, reason }`. Hiçbir durumda
+// exception FIRLATMAZ — form, başarısızlıkta `mailto:` yedeğine düşer.
+export const sendContactMessage = async (fields) => {
+  if (!CONTACT_ENDPOINT) return { ok: false, reason: 'not-configured' };
+  try {
+    const res = await fetch(CONTACT_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(buildPayload(fields))
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return { ok: true };
+  } catch (error) {
+    console.log('⚠️ İletişim mesajı gönderilemedi, mailto yedeğine düşülüyor:', error.message);
+    return { ok: false, reason: 'network' };
   }
 };

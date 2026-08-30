@@ -1120,10 +1120,26 @@ ayrı bir bölüm başlığı altında, **vurgu renginde çerçeveli kartlarla**
 `collections.json`'daki **`release_date`** alanını kullanır (110 kaydın
 109'unda var; tarihi olmayan tek kayıt "Limited Edition Item" en sona düşer).
 
-#### Koleksiyon içi arama
-Bir koleksiyona girildiğinde arama çubuğu **yalnızca o koleksiyonun** eşyalarını
-süzer ve `{eşleşen} / {toplam}` sayacı gösterir. Eşyalar **en nadirden en
-sıradana**, kademe içinde de deterministik değere göre sıralanır.
+#### Arama — LİSTEDE, koleksiyonun içinde DEĞİL
+⚠️ **30 Ağu 2026 değişikliği.** Arama kutusu detay sayfasından **kaldırıldı**:
+bir koleksiyonda en fazla ~30 eşya var ve hepsi zaten tek ekranda listeleniyor,
+dolayısıyla süzme yer kaplamaktan başka işe yaramıyordu. Buna karşılık ana
+listede **110 koleksiyon** var — asıl arama ihtiyacı orada. Kutu artık sıralama
+çubuğunun altında ve `{eşleşen} / {toplam}` sayacı gösteriyor.
+
+⚠️ **Kabuk araması bu sekmede GİZLİ** (bkz. App.js `tab !== 'collections'`):
+o arama kasa/eşya (yani "silah") buluyor ve Koleksiyonlar sekmesinde kullanıcı
+koleksiyon adı arıyordu. İki arama kutusunun yan yana durması kafa karıştırıcıydı.
+
+Detaydaki eşyalar **en nadirden en sıradana**, kademe içinde de deterministik
+değere göre sıralanır; bir eşyaya tıklamak **büyük görsel önizlemesini** açar.
+
+#### ⚠️ KART YÜKSEKLİĞİ BİLEREK DÜŞÜK — kaydırma daveti
+Kullanıcı geri bildirimi: *"Aktif Drop Havuzu tüm ekranı kaplıyor, altında
+başka içerik olduğu anlaşılmıyor."* Kart yüksekliği **224 px → 154 px**
+indirildi (görsel 92→56 px, iç boşluk 12→9 px). Ölçüm (1280×820): "Tüm
+Koleksiyonlar" başlığı artık `y = 780`'de, altındaki beş kart da `y = 808`'de
+— yani ilk ekranda kısmen görünüyorlar ve kaydırmaya davet ediyorlar.
 
 #### ⚠️ FİYAT MOTORU TÜRE GÖRE SEÇİLİR
 `collections.json` içinde tür alanı **YOK**; silah, sticker, charm ve grafiti
@@ -1152,6 +1168,63 @@ liste satır başına tek öğe taşıyor.
 > sekmede **0** gelebiliyor (gizli panede ölçüldü: `innerWidth = 0`).
 > Korumasız bırakılırsa kart genişliği **negatif** çıkıp ızgara çöküyor —
 > `Math.max(280, …)` tabanı bu yüzden var.
+
+### 6.2.33 Bilgi Kutucukları (`components/Tooltip.js`)
+
+Kart altındaki ve açılış ekranlarındaki metrikler (EV · ROI · Maks. Kazanç ·
+Ort. Teklif · 5'te En İyi) hover'da ne anlama geldiklerini açıklar, fare
+çekilince kaybolur.
+
+| Anahtar | Nerede |
+|---|---|
+| `tip.ev` | Beklenen Değer — tek açılışın ortalama getirisi |
+| `tip.roi` | Getiri/maliyet; %100 altı uzun vadede kaybettirir |
+| `tip.maxWin` | Kutunun verebileceği en değerli eşya (çok nadir) |
+| `tip.avgOffer` | Tek terminal teklifinin ortalama değeri |
+| `tip.bestOffer` | 5 teklifin **en iyisinin** beklenen değeri |
+
+> ⚠️ **Animasyon YOK — bilinçli.** Gecikmeli bir fade, kullanıcı listede fareyle
+> gezerken arkada "hayalet" kutucuklar bırakıyordu.
+
+> ⚠️ **Kapsayıcıda `overflow: hidden` OLMAMALI** — kutucuk `position: absolute`
+> ve `zIndex: 999` ile kartın dışına taşar. App.js'teki `s.card` bu yüzden
+> yalnızca `position: relative` tanımlar.
+
+> ⚠️ Native'de hover yoktur; orada kutucuk **dokunmayla** açılıp kapanır.
+
+### 6.2.34 Görsel Önizleme (`components/ImagePreviewModal.js`)
+
+Kasa/terminal/souvenir/kapsül içerik listelerinde ve Koleksiyonlar detay
+ızgarasında bir eşyaya tıklanınca görselin büyük hâli açılır (nadirlik ışığı,
+nadirlik/aşınma/StatTrak rozetleri, varsa tam float).
+
+> ⚠️ **Ek bir "yüksek çözünürlük" uç noktası YOK.** ByMykel görselleri Steam
+> CDN'inden zaten büyük geliyor; kart içinde 50-80 px'e sıkıştırıldıkları için
+> bulanık görünüyorlardı. Aynı URL, sadece daha büyük kutu.
+
+> ⚠️ Çoklu açılış sonuç panelinde (`BatchResultPanel`) karta tıklamak **seçim**
+> yapar, önizleme açmaz — o ekranda tıklama zaten başka bir işe bağlı.
+
+### 6.2.35 Hızlı İletişim (`components/ContactWidget.js` + `contactConfig.js`)
+
+Sağ alt köşede sabit bir düğme; tıklanınca Ad · E-posta · Mesaj alanlı bir form
+açılır. Mesajlar arka planda `CONTACT_EMAIL` adresine iletilir; kullanıcı formda
+hedef adresi **görmez**. Adres yalnızca Rehber → İletişim bölümünde, manuel mail
+atmak isteyenler için yazılıdır.
+
+> ⚠️ **NEDEN BİR ÜÇÜNCÜ TARAF GEREKİYOR:** Proje tamamen istemci taraflıdır
+> (bkz. cloud.md §1). Tarayıcıdan doğrudan e-posta göndermek mümkün değildir —
+> SMTP için sunucu ve gizli parola gerekir, istemci koduna konulan parola
+> herkes tarafından okunabilir. Bu yüzden form bir "form aracısı" servise POST
+> eder. Sağlayıcı değiştirmek için **tek yer** `src/contactConfig.js`.
+
+> ⚠️ **İLK MESAJDA AKTİVASYON GEREKİR:** FormSubmit, adresin sahibi olduğunuzu
+> doğrulamak için ilk gönderimde `CONTACT_EMAIL`'e bir onay bağlantısı yollar.
+> O bağlantıya bir kez tıklanmadan mesajlar iletilmez.
+
+> ⚠️ **Ağ çağrısı bileşende değil:** gönderim `api.sendContactMessage` üzerinden
+> yapılır (Ağ Katmanı Kuralı). Başarısızlıkta form `mailto:` yedeğine düşer ve
+> kullanıcının yazdığı metin **kaybolmaz**.
 
 ### 6.3 Önemli UI Bileşenleri
 - **Satış akışı:** TÜM satışlar (hover hızlı satış, inceleme modalı, toplu satış)
@@ -1348,6 +1421,12 @@ npm run ios      # iOS
 
 | Tarih | Değişiklik |
 |---|---|
+| **2026-08-30** | **Varsayılan mod SINIRSIZ** — site artık cüzdan kısıtı olmadan açılıyor |
+| **2026-08-30** | **Bilgi kutucukları (Tooltip)**: EV · ROI · Maks. Kazanç · Ort. Teklif · 5'te En İyi |
+| **2026-08-30** | **Görsel önizleme modalı** — içerik listelerinde ve koleksiyon detayında eşyaya tıklayınca büyük görsel |
+| **2026-08-30** | **Hızlı iletişim modülü** (sağ alt) + `contactConfig.js`; Rehber'deki iletişim adresi gerçek adresle değiştirildi |
+| **2026-08-30** | Koleksiyonlar: kartlar küçültüldü (224→154 px, kaydırma daveti), arama detaydan **listeye** taşındı, kabuk araması bu sekmede gizlendi |
+| **2026-08-30** | `Contents` penceresinde kapatma butonu **sol üste** alındı |
 | **2026-08-30** | **Yeni "Koleksiyonlar" sekmesi** (`CollectionsScreen.js`): 110 koleksiyon, A-Z / yeni / eski sıralama, koleksiyon içi arama, **Aktif Drop Havuzu** vurgusu + rozeti. **Bug:** bölüm başlıkları `numColumns` ızgarasında bir hücreyi kaplayıp satırın ortasına düşüyordu → satırlar elle oluşturuluyor |
 | **2026-08-30** | **Trade-Up sonuçları sözleşme tamamlanana kadar gizli** — yarım sözleşmeye ait yanıltıcı kâr tahmini (ölçüldü: 1/10'da %228, 10/10'da −%67) kaldırıldı |
 | **2026-08-30** | **Armory harcaması artık dolar karşılığıyla** — "Spent -40★ (-$16.00)"; açma butonlarında da yıldızın $ karşılığı |

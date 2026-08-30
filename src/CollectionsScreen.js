@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, Image, TouchableOpacity, FlatList, TextInput, u
 import { getItemPriceRange, getStickerPrice, getCharmPrice, getStableSortValue } from './prices';
 import { ACTIVE_DROP_POOL_COLLECTION_NAMES } from './armoryData';
 import HoverCard from './components/HoverCard';
+import ImagePreviewModal from './components/ImagePreviewModal';
 import { IconSearch, IconClose, IconList, IconArrowDown, IconArrowUp } from './components/Icons';
 import { useI18n } from './i18n';
 import { C, shadow, webTransition, rarityTint } from './theme';
@@ -112,7 +113,7 @@ function CollectionCard({ col, width, onPress, t, lang }) {
 // ============================================================
 // KOLEKSİYON İÇİ EŞYA SATIRI
 // ============================================================
-function ItemCard({ item, kind, priceMap, width }) {
+function ItemCard({ item, kind, priceMap, width, onPress }) {
   const color = item.rarity?.color || C.borderStrong;
 
   // ⚠️ FİYAT MOTORU TÜRE GÖRE SEÇİLİR (bkz. kindOfCollection açıklaması).
@@ -127,15 +128,20 @@ function ItemCard({ item, kind, priceMap, width }) {
   }
   // grafitiler piyasada tek tek listelenmez -> fiyat gösterilmez ("—")
 
+  // Tıklanınca görselin büyük hâli açılır (bkz. ImagePreviewModal).
   return (
-    <View style={[cs.item, { width, borderLeftColor: color, backgroundColor: rarityTint(color) }]}>
+    <TouchableOpacity
+      activeOpacity={0.85}
+      onPress={onPress}
+      style={[cs.item, { width, borderLeftColor: color, backgroundColor: rarityTint(color) }]}
+    >
       <Image source={{ uri: item.image }} style={cs.itemImg} resizeMode="contain" />
       <View style={cs.itemInfo}>
         <Text style={[cs.itemName, { color }]} numberOfLines={2}>{item.name}</Text>
         <Text style={cs.itemRarity} numberOfLines={1}>{item.rarity?.name || '—'}</Text>
       </View>
       <Text style={cs.itemPrice}>{priceTxt}</Text>
-    </View>
+    </TouchableOpacity>
   );
 }
 
@@ -148,11 +154,20 @@ export default function CollectionsScreen({ collections, priceMap }) {
 
   const [sortMode, setSortMode] = useState('newest');
   const [selected, setSelected] = useState(null); // açık koleksiyon
-  const [itemQuery, setItemQuery] = useState(''); // koleksiyon İÇİ arama
+  const [preview, setPreview] = useState(null);   // büyük görsel önizlemesi
+
+  // ⚠️ ARAMA ARTIK LİSTEDE, KOLEKSİYONUN İÇİNDE DEĞİL (30 Ağu 2026).
+  // Detay sayfasındaki arama kaldırıldı: bir koleksiyonda en fazla ~30 eşya var
+  // ve hepsi zaten tek ekranda görünüyor, dolayısıyla süzmek bir işe yaramıyordu.
+  // Buna karşılık ANA LİSTEDE 110 koleksiyon var — asıl arama ihtiyacı orada.
+  const [query, setQuery] = useState('');
 
   // Izgara ölçüsü — ana liste sekmeleriyle aynı mantık (kaydırma çubuğu payı dahil).
   const GUTTER = 20;
-  const GAP = 12;
+  // ⚠️ Stil dosyasındaki `cardRow`/`listPad` boşluğuyla AYNI olmalı — iki yerde
+  // ayrı yazılırsa sapar ve son sütun satıra sığmaz (bu proje bunu bir kez yaşadı:
+  // Trade-Up'ta sidebar genişliği 320 vs 330 yazılmıştı).
+  const GAP = 10;
   // ⚠️ `Math.max(280, ...)`: `useWindowDimensions().width` ilk kare(ler)de veya
   // görünür olmayan bir sekmede 0 gelebiliyor. Korumasız bırakılırsa kart
   // genişliği NEGATİF çıkıyor ve ızgara çöküyor (ölçüldü: gizli panede
@@ -182,11 +197,14 @@ export default function CollectionsScreen({ collections, priceMap }) {
       if (!db) return -1;
       return sortMode === 'newest' ? db.localeCompare(da) : da.localeCompare(db);
     };
-    const list = [...(collections || [])];
+    // Arama önce uygulanır, sıralama/gruplama sonra — böylece "aktif havuz"
+    // bölümü de aramayla birlikte daralır ve boş başlık kalmaz.
+    const q = query.trim().toLowerCase();
+    const list = (collections || []).filter(c => !q || (c.name || '').toLowerCase().includes(q));
     const active = list.filter(isActiveDropPool).sort(cmp);
     const rest = list.filter(c => !isActiveDropPool(c)).sort(cmp);
     return { active, rest };
-  }, [collections, sortMode]);
+  }, [collections, sortMode, query]);
 
   // ------------------------------------------------------------
   // SATIR MODELİ — ⚠️ `numColumns` KULLANILMIYOR (bilinçli)
@@ -221,18 +239,16 @@ export default function CollectionsScreen({ collections, priceMap }) {
   const detailItems = useMemo(() => {
     if (!selected) return [];
     const kind = kindOfCollection(selected);
-    const q = itemQuery.trim().toLowerCase();
-    const filtered = (selected.contains || []).filter(i => !q || (i.name || '').toLowerCase().includes(q));
     // En nadirden en sıradana; kademe içinde deterministik değere göre.
-    return [...filtered].sort((a, b) => {
+    return [...(selected.contains || [])].sort((a, b) => {
       const dr = rarityRank(a.rarity?.name) - rarityRank(b.rarity?.name);
       if (dr !== 0) return dr;
       if (kind === 'weapon') return getStableSortValue(priceMap, b) - getStableSortValue(priceMap, a);
       return (a.name || '').localeCompare(b.name || '');
     });
-  }, [selected, itemQuery, priceMap]);
+  }, [selected, priceMap]);
 
-  const openCollection = (col) => { setSelected(col); setItemQuery(''); };
+  const openCollection = (col) => setSelected(col);
 
   // ============================================================
   // DETAY GÖRÜNÜMÜ
@@ -269,27 +285,10 @@ export default function CollectionsScreen({ collections, priceMap }) {
           </View>
         </View>
 
-        {/* KOLEKSİYON İÇİ ARAMA — yalnızca bu koleksiyonun eşyalarını süzer */}
-        <View style={cs.searchWrap}>
-          <View style={[cs.searchBox, itemQuery !== '' && cs.searchBoxActive]}>
-            <IconSearch size={16} color={itemQuery ? C.accentDeep : C.textDim} />
-            <TextInput
-              style={cs.searchInput}
-              placeholder={t('col.searchPlaceholder')}
-              placeholderTextColor={C.textFaint}
-              value={itemQuery}
-              onChangeText={setItemQuery}
-            />
-            {itemQuery !== '' && (
-              <TouchableOpacity style={cs.searchClear} onPress={() => setItemQuery('')}>
-                <IconClose size={14} color={C.textDim} strokeWidth={2.2} />
-              </TouchableOpacity>
-            )}
-          </View>
-          <Text style={cs.resultCount}>
-            {itemQuery ? t('col.matchCount', { n: detailItems.length, total }) : t('col.items', { n: total })}
-          </Text>
-        </View>
+        {/* ⚠️ KOLEKSİYON İÇİ ARAMA KALDIRILDI (30 Ağu 2026): bir koleksiyonda
+            en fazla ~30 eşya var ve hepsi zaten tek ekranda listeleniyor, bu
+            yüzden süzme kutusu yer kaplamaktan başka bir işe yaramıyordu.
+            Arama artık koleksiyon LİSTESİNDE (110 kayıt) — asıl ihtiyaç orada. */}
 
         <FlatList
           // ⚠️ `key` numColumns ile birlikte değişmeli — FlatList sütun sayısı
@@ -300,11 +299,19 @@ export default function CollectionsScreen({ collections, priceMap }) {
           numColumns={itemCols}
           columnWrapperStyle={itemCols > 1 ? cs.itemRow : undefined}
           contentContainerStyle={cs.listPad}
-          ListEmptyComponent={<Text style={cs.emptyTxt}>{t('col.searchEmpty')}</Text>}
+          ListEmptyComponent={<Text style={cs.emptyTxt}>{t('col.empty')}</Text>}
           renderItem={({ item }) => (
-            <ItemCard item={item} kind={kind} priceMap={priceMap} width={itemW} />
+            <ItemCard
+              item={item}
+              kind={kind}
+              priceMap={priceMap}
+              width={itemW}
+              onPress={() => setPreview(item)}
+            />
           )}
         />
+
+        <ImagePreviewModal item={preview} onClose={() => setPreview(null)} />
       </View>
     );
   }
@@ -328,14 +335,42 @@ export default function CollectionsScreen({ collections, priceMap }) {
             </TouchableOpacity>
           );
         })}
-        <Text style={cs.resultCount}>{t('col.total', { n: (collections || []).length })}</Text>
+        <Text style={cs.resultCount}>
+          {query
+            ? t('col.matchCount', { n: sortedCollections.active.length + sortedCollections.rest.length, total: (collections || []).length })
+            : t('col.total', { n: (collections || []).length })}
+        </Text>
+      </View>
+
+      {/* ============================================================
+          KOLEKSİYON ARAMASI
+          ============================================================
+          ⚠️ Bu, kabuktaki genel aramanın YERİNE geçer: o arama kasa/eşya
+          buluyor (yani "silah araması") ve Koleksiyonlar sekmesinde işe
+          yaramıyordu. Kabuk araması bu sekmede gizleniyor (bkz. App.js). */}
+      <View style={cs.searchWrap}>
+        <View style={[cs.searchBox, query !== '' && cs.searchBoxActive]}>
+          <IconSearch size={16} color={query ? C.accentDeep : C.textDim} />
+          <TextInput
+            style={cs.searchInput}
+            placeholder={t('col.searchCollections')}
+            placeholderTextColor={C.textFaint}
+            value={query}
+            onChangeText={setQuery}
+          />
+          {query !== '' && (
+            <TouchableOpacity style={cs.searchClear} onPress={() => setQuery('')}>
+              <IconClose size={14} color={C.textDim} strokeWidth={2.2} />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       <FlatList
         data={rows}
         keyExtractor={row => row.key}
         contentContainerStyle={cs.listPad}
-        ListEmptyComponent={<Text style={cs.emptyTxt}>{t('col.empty')}</Text>}
+        ListEmptyComponent={<Text style={cs.emptyTxt}>{query ? t('col.searchEmpty') : t('col.empty')}</Text>}
         renderItem={({ item: row }) => {
           if (row.type === 'header') {
             return (
@@ -370,8 +405,8 @@ export default function CollectionsScreen({ collections, priceMap }) {
 const MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
 
 const cs = StyleSheet.create({
-  listPad: { paddingHorizontal: 20, paddingBottom: 40, gap: 12 },
-  cardRow: { flexDirection: 'row', gap: 12 },
+  listPad: { paddingHorizontal: 20, paddingBottom: 40, gap: 10 },
+  cardRow: { flexDirection: 'row', gap: 10 },
   itemRow: { gap: 12 },
   emptyTxt: { color: C.textDim, fontSize: 13, textAlign: 'center', marginTop: 40 },
 
@@ -394,30 +429,35 @@ const cs = StyleSheet.create({
   sectionHint: { color: C.textDim, fontSize: 10.5, fontWeight: '600', marginTop: 3 },
 
   // --- KOLEKSİYON KARTI ---
+  // ⚠️ KART YÜKSEKLİĞİ BİLEREK DÜŞÜK (30 Ağu 2026 kullanıcı geri bildirimi):
+  // "Aktif Drop Havuzu tüm ekranı kaplıyor, altında başka içerik olduğu
+  // anlaşılmıyor." Kart yüksekliği ~224 px'ten ~150 px'e indirildi; böylece
+  // ilk ekranda aktif havuzun altındaki "Tüm Koleksiyonlar" bölümü kısmen
+  // görünüyor ve kaydırmaya davet ediyor.
   card: {
     backgroundColor: C.surface, borderRadius: 4,
     borderWidth: 1, borderColor: C.border,
-    padding: 12, alignItems: 'center', position: 'relative'
+    padding: 9, alignItems: 'center', position: 'relative'
   },
   // Aktif havuz kartı: vurgu rengiyle çerçevelenir ve zemini hafif maviye çalar.
   cardActive: { borderColor: C.accent, borderWidth: 2, backgroundColor: C.accentSoft },
   activeBadge: {
-    position: 'absolute', top: 8, left: 8, zIndex: 2,
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: C.accent, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 3
+    position: 'absolute', top: 6, left: 6, zIndex: 2,
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: C.accent, paddingHorizontal: 5, paddingVertical: 2, borderRadius: 3
   },
   activeBadgeInline: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
     backgroundColor: C.accent, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 3
   },
-  activeDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: C.onAccent },
-  activeBadgeTxt: { color: C.onAccent, fontSize: 9, fontWeight: '800', letterSpacing: 0.6 },
-  cardImg: { width: '78%', height: 92, marginTop: 14 },
-  cardName: { color: C.text, fontSize: 12.5, fontWeight: '800', textAlign: 'center', marginTop: 10, minHeight: 32 },
-  cardMeta: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
-  cardKind: { color: C.textSoft, fontSize: 10, fontWeight: '800', letterSpacing: 0.4, textTransform: 'uppercase' },
-  cardCount: { color: C.textDim, fontSize: 10.5, fontWeight: '700', fontFamily: MONO },
-  cardDate: { color: C.textFaint, fontSize: 10, fontWeight: '600', marginTop: 4, fontFamily: MONO },
+  activeDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: C.onAccent },
+  activeBadgeTxt: { color: C.onAccent, fontSize: 8, fontWeight: '800', letterSpacing: 0.5 },
+  cardImg: { width: '64%', height: 56, marginTop: 12 },
+  cardName: { color: C.text, fontSize: 11.5, fontWeight: '800', textAlign: 'center', marginTop: 7, minHeight: 28 },
+  cardMeta: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 4 },
+  cardKind: { color: C.textSoft, fontSize: 9, fontWeight: '800', letterSpacing: 0.4, textTransform: 'uppercase' },
+  cardCount: { color: C.textDim, fontSize: 9.5, fontWeight: '700', fontFamily: MONO },
+  cardDate: { color: C.textFaint, fontSize: 9, fontWeight: '600', marginTop: 3, fontFamily: MONO },
 
   // --- DETAY BAŞLIĞI ---
   detailHead: {

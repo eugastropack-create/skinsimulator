@@ -5,6 +5,7 @@ import {
   getSouvenirTiers, getCaseTiers, getCollectionTiers, getCapsuleTiers, getRealisticPrice
 } from '../prices';
 import { useI18n } from '../i18n';
+import ImagePreviewModal from './ImagePreviewModal';
 import { C, RARITY, shadow, rarityTint } from '../theme';
 
 // Altın (Bıçak/Eldiven) kademesinde varsayılan olarak kaç eşya gösterilecek.
@@ -104,6 +105,8 @@ export function ContentsList({ subject, kind, priceMap, compact = false }) {
   const { t } = useI18n();
   // Bıçak kademesi varsayılan olarak kırpılır; kullanıcı isterse açar.
   const [knivesExpanded, setKnivesExpanded] = useState(false);
+  // Eşyaya tıklanınca açılan büyük görsel önizlemesi.
+  const [preview, setPreview] = useState(null);
 
   const groups = useMemo(() => {
     if (!subject) return [];
@@ -169,12 +172,18 @@ export function ContentsList({ subject, kind, priceMap, compact = false }) {
             </View>
             <View style={s.itemGrid}>
               {shown.map(item => (
-                <View key={item.id || item.name} style={[s.itemCard, compact && s.itemCardCompact, { borderTopColor: group.color }]}>
+                // Tıklanınca görselin büyük hâli açılır (bkz. ImagePreviewModal).
+                <TouchableOpacity
+                  key={item.id || item.name}
+                  activeOpacity={0.85}
+                  onPress={() => setPreview(item)}
+                  style={[s.itemCard, compact && s.itemCardCompact, { borderTopColor: group.color }]}
+                >
                   <Image source={{ uri: item.image }} style={compact ? s.itemImgCompact : s.itemImg} resizeMode="contain" />
                   <Text style={s.itemName} numberOfLines={2}>{item.name}</Text>
                   <Text style={s.itemChance}>%{group.perItemChance.toFixed(3)}</Text>
                   <Text style={s.itemPrice}>{priceTextFor(kind, item, priceMap, group.label)}</Text>
-                </View>
+                </TouchableOpacity>
               ))}
             </View>
 
@@ -192,6 +201,8 @@ export function ContentsList({ subject, kind, priceMap, compact = false }) {
       {groups.length === 0 && (
         <Text style={s.empty}>{t('contents.unreadable')}</Text>
       )}
+
+      <ImagePreviewModal item={preview} onClose={() => setPreview(null)} />
     </View>
   );
 }
@@ -223,12 +234,16 @@ export default function ContentsModal({ visible, onClose, subject, kind, priceMa
   return (
     <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onClose}>
       <SafeAreaView style={s.container}>
+        {/* ⚠️ KAPATMA BUTONU SOLDA (30 Ağu 2026 — kullanıcı isteği):
+            genel web alışkanlığı geri/kapat eylemini sol üstte arar. */}
         <View style={s.header}>
+          <TouchableOpacity style={s.closeBtn} onPress={onClose}>
+            <Text style={s.closeTxt}>{t('contents.close')}</Text>
+          </TouchableOpacity>
           <View style={{ flex: 1 }}>
             <Text style={s.title} numberOfLines={1}>{subject.name}</Text>
             <Text style={s.subtitle}>{t('contents.title')}</Text>
           </View>
-          <TouchableOpacity style={s.closeBtn} onPress={onClose}><Text style={s.closeTxt}>{t('contents.close')}</Text></TouchableOpacity>
         </View>
         <ScrollView contentContainerStyle={s.scrollContent}>
           <ContentsList subject={subject} kind={kind} priceMap={priceMap} />
@@ -243,7 +258,7 @@ const s = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', padding: 18, backgroundColor: C.surface, gap: 10, ...shadow.bar },
   title: { color: C.text, fontSize: 17, fontWeight: '800' },
   subtitle: { color: C.textDim, fontSize: 11, marginTop: 2 },
-  closeBtn: { backgroundColor: C.surfaceAlt, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999 },
+  closeBtn: { backgroundColor: C.surfaceAlt, borderWidth: 1, borderColor: C.border, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 4 },
   closeTxt: { color: C.danger, fontSize: 13, fontWeight: '800' },
   scrollContent: { padding: 16, paddingBottom: 40 },
 
