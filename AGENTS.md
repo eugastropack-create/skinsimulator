@@ -90,13 +90,14 @@ Güncellenmesi gereken tipik bölümler:
 | `src/prices.js` | Canlı/mock fiyat çözümleme, EV/ROI, kararlı sıralama değeri | Altın kademe `contains_rare`'den gelir; sıralamada `getStableSortValue()` kullan |
 | `src/CaseOpening.js` | Kasa **ve Souvenir** açılışı (`mode` prop'u) | Gösterge KUTU değil OK (`WinnerPointer`) — kutuya geri dönme; `ITEM_PITCH`/`getRouletteWidth()` matematiğini bozma; jitter EKLEME; altın kademe `contains_rare`'den çekilir; **sekme (bounce)** ve **bekçi** mantığını kaldırma |
 | `src/ArmoryOpening.js` | Koleksiyon/charm çekilişi, Limited Edition basımı | `isSpecialItem` dalı kademeli çekiliş **kullanmaz**. **Sticker kapsülleri artık burada DEĞİL** (kendi sekmesinde) — ama `isSticker` dalı korunuyor, silme |
-| `src/TradeUpScreen.js` | 10 slot, canlı analiz, geçmiş, özel tarifler | **`setBalance`/`gameMode` PROP'U GEÇİRME** — ücretsizlik yapısal garantidir. Standart 10'lu akışı bozma; Covert tarifi 5 slot + kilit kullanır. Sıfırlama butonu girdi kutucuğunun başlığındadır |
+| `src/TradeUpScreen.js` | 10 slot, canlı analiz, geçmiş, özel tarifler | **`setBalance`/`gameMode` PROP'U GEÇİRME** — ücretsizlik yapısal garantidir. Standart 10'lu akışı bozma; Covert tarifi 5 slot + kilit kullanır. Sıfırlama butonu girdi kutucuğunun başlığındadır. Sonuç paneli **yuvalar dolmadan basılmaz** (`contractReady`); `analysis` yine de arka planda hesaplanır — yuva kilitleme ona bağlı |
 | `src/components/Toast.js` | Bildirim (Alert.alert yerine) | Bilerek **animasyonsuz** — geri ekleme |
 | `src/components/ConfirmModal.js` | Onay diyaloğu | `Modal` web'de güvenilir çalışır, `Alert` çalışmaz |
 | `src/components/ContentsModal.js` | İçerik/oran önizlemesi (`ContentsList` + `InlineContentsPanel` + modal) | Oran tabloları `gacas.md` §5 ile eşleşmeli; üç görünüm TEK kaynaktan beslenir. `kind='souvenir'` kademeleri **dinamik** (`getSouvenirTiers`) |
 | `src/components/ItemInspectModal.js` | Envanter eşya inceleme | float/pattern yoksa (charm/sticker) o satırları gizle |
 | `src/components/SellConfirmModal.js` | Satış onayı + Sınırsız Mod yönlendirmesi | Satışı doğrudan yapma — `requestSell` → modal → `finalizeSell` yolunu kullan |
-| `src/armoryData.js` | Aktif Armory koleksiyon isimleri | Valve rotasyon yapınca **sadece burası** güncellenir |
+| `src/armoryData.js` | Aktif Armory koleksiyonları **ve aktif drop havuzu** isimleri | Valve rotasyon yapınca **sadece burası** güncellenir. Bu iki liste API'de YOKTUR, elle bakımlıdır |
+| `src/CollectionsScreen.js` | Koleksiyon keşif ekranı (liste + detay + arama + sıralama) | **`setBalance`/`gameMode` PROP'U GEÇİRME** — burada hiçbir şey açılmaz. `numColumns` KULLANMA (bölüm başlığı satırın ortasına düşer). Ek `fetch` yazma — veri `allCollectionsRaw`'dan gelir |
 
 ### ✅ Ölü Kod Temizlendi
 `src/TradeUp.js` ve `src/TradeUpAnalyzer.js` **silindi** (hiçbir yerden import
@@ -107,7 +108,10 @@ geri alınabilirler.
 ### 🧭 Menü Sırası — DEĞİŞTİRME
 Ana navigasyon sırası kullanıcı brief'inde sabitlenmiştir:
 
-`Trade Up · Cases · Terminals · Armory · Souvenirs · Stickers`
+`Trade Up · Cases · Terminals · Armory · Souvenirs · Stickers · Collections`
+
+(İlk **altı** sekmenin sırası brief'te sabitlenmiştir; `Collections` 30 Ağu 2026'da
+kurala uygun şekilde **sona** eklendi.)
 
 Envanter **bilerek** bu menüde değil — sıra birebir korunsun diye üst yardımcı
 çubukta ayrı bir buton olarak duruyor. Yeni bir sekme eklenecekse **sona** ekle.
@@ -212,6 +216,10 @@ Bu durumda:
 | Klavye açılınca odaklanan alanın kaybolması | Varsayılan `resizes-visual` düzen viewport'unu küçültmez. `interactive-widget=resizes-content` + `scrollIntoView({block:'center'})` |
 | Aynı i18n anahtarını iki kez tanımlamak | JS'te **sonuncusu kazanır** — İngilizce blokta unutulmuş bir Türkçe satır tüm arayüzü bozar. Anahtar sayısı iki dilde eşit olmalı |
 | Emoji'yi arayüz simgesi olarak kullanmak | Her platformda farklı çizilir ve renklendirilemez. `components/Icons.js` (SVG) kullan |
+| `FlatList numColumns` + bölüm başlığı | Başlık bir HÜCREYİ kaplar ve satırın ortasına düşer. Satırları elle grupla, satır başına tek öğe ver |
+| `useWindowDimensions().width` = 0 | Gizli/ilk karede 0 gelebilir; kart genişliği negatif çıkıp ızgara çöker — `Math.max(taban, …)` koy |
+| Yarım sözleşme/işlem üzerinden tahmin göstermek | Kullanıcı imzalayınca bambaşka bir sonuç görür (Trade-Up'ta 1/10'da %228, 10/10'da −%67 ölçüldü). Gösterimi tamamlanana kadar geciktir |
+| Farklı birimleri (yıldız / dolar) yan yana göstermek | "40★ harcadım, $8 kazandım" karşılaştırılamaz. Sabit dönüşümle ($0.40/yıldız) ikisini de yaz |
 | `src/content/guide.js` içinde kaçışlı kesme (`'`) | Dosyanın tamamı tipografik `’` kullanıyor; tek tırnaklı uzun Türkçe metinlerde kaçış eklemek hem gürültülü hem hataya açık — `’` yaz |
 
 ---
@@ -281,3 +289,4 @@ Bu durumda:
 | **2026-08-29** | Sticker fiyat anahtarı (`Sticker \| <ad>`), kutu fiyatı tahmini (`resolveContainerCost`), terminal ROI kaldırıldı (`avgOffer`/`bestOffer`) |
 | **2026-08-29** | Terminalde **zorunlu alım kaldırıldı**; ortak `BatchResultPanel`; kapsül yırtık çizgisi bug'ı; mobil klavye düzeltmesi |
 | **2026-08-29** | `public/index.html` (başlık + Google Analytics + viewport); **emoji → SVG simge seti** (`react-native-svg`); i18n yinelenen anahtar bug'ı |
+| **2026-08-30** | **Koleksiyonlar sekmesi** (sıralama + koleksiyon içi arama + Aktif Drop Havuzu rozeti); Trade-Up sonuçları sözleşme tamamlanana kadar gizlendi; Armory harcaması dolar karşılığıyla; "Send Selected" → "Send to Inventory" |

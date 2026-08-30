@@ -1085,6 +1085,74 @@ single-page çıktı). Bu dosya üç şeyi taşıyor:
 > script etiketi **yorumun içine** gömülür ve uygulama hiç açılmaz.
 > (Bu bir kez yaşandı — 29 Ağu 2026.)
 
+### 6.2.32 Koleksiyonlar Sekmesi (`src/CollectionsScreen.js`)
+
+Oyundaki **bütün** koleksiyonlar (110 adet: 97 silah · 6 sticker · 4 charm ·
+3 grafiti) tek bir keşif ekranında. Referans: `case.oki.gg/collections`.
+
+> ⚠️ **BU BİR AÇILIŞ EKRANI DEĞİLDİR.** Burada hiçbir şey açılmaz, satın
+> alınmaz, bakiyeye dokunulmaz. `setBalance` / `gameMode` prop'ları **bilerek
+> geçilmez** — Trade-Up'takiyle aynı yapısal garanti.
+
+> ⚠️ **EK AĞ ÇAĞRISI YOK.** Veri, App.js'in Trade-Up için zaten indirdiği
+> `allCollectionsRaw`. Yeni bir `fetch` eklemeyin.
+
+#### Aktif Drop Havuzu (Active Drop Pool)
+Şu anda haftalık Care Package'ta düşen koleksiyonlar **listenin en üstünde**,
+ayrı bir bölüm başlığı altında, **vurgu renginde çerçeveli kartlarla** ve
+`AKTİF DROP HAVUZU` rozetiyle gösterilir.
+
+> ⚠️ **BU LİSTE ELLE BAKIMLIDIR — API'de böyle bir alan YOKTUR.**
+> `src/armoryData.js` → `ACTIVE_DROP_POOL_COLLECTION_NAMES`. Valve rotasyon
+> yaptığında **güncellenmesi gereken tek yer** orasıdır. Şu anki liste
+> (29 Ağu 2026'da derlendi): Harlequin · Achroma · Ascent · Boreal · Radiant ·
+> Genesis · Dead Hand. Kaynak: Valve'in 22 Oca 2026 rotasyonu (Harlequin ve
+> Achroma eklendi; Safehouse, Dust 2, 2018 Nuke, 2018 Inferno çıkarıldı) ve
+> aktif kapsayıcı olarak listelenen Genesis/Dead Hand terminalleri.
+
+> ⚠️ Aktif koleksiyonlar **seçilen sıralamadan bağımsız** olarak daima en üstte.
+> Kullanıcının bu ekranda aradığı ilk bilgi "şu an ne düşüyor?" — A-Z
+> sıralamasında bunu 110 kartın arasında aramak zorunda kalmamalı. Aktif grubun
+> kendi içinde de aynı sıralama uygulanır.
+
+#### Sıralama
+`A → Z` · `Yeniden Eskiye` · `Eskiden Yeniye` — tarih sıralaması
+`collections.json`'daki **`release_date`** alanını kullanır (110 kaydın
+109'unda var; tarihi olmayan tek kayıt "Limited Edition Item" en sona düşer).
+
+#### Koleksiyon içi arama
+Bir koleksiyona girildiğinde arama çubuğu **yalnızca o koleksiyonun** eşyalarını
+süzer ve `{eşleşen} / {toplam}` sayacı gösterir. Eşyalar **en nadirden en
+sıradana**, kademe içinde de deterministik değere göre sıralanır.
+
+#### ⚠️ FİYAT MOTORU TÜRE GÖRE SEÇİLİR
+`collections.json` içinde tür alanı **YOK**; silah, sticker, charm ve grafiti
+koleksiyonları aynı şemayla duruyor. Tür koleksiyonun **adından** çıkarılır
+(`kindOfCollection`) ve doğru fiyat motoruna yönlendirir:
+
+| Tür | Fiyat | Not |
+|---|---|---|
+| Silah | `getItemPriceRange` (aralık) | float + StatTrak aralığı |
+| Sticker | `getStickerPrice({stable:true})` | `Sticker \| <ad>` anahtarı |
+| Charm | `getCharmPrice({stable:true})` | `market_hash_name` var |
+| Grafiti | — | piyasada tek tek listelenmez |
+
+`stable: true` **zorunlu**: rastgele varyans listenin her render'da yeniden
+sıralanmasına yol açar.
+
+#### ⚠️ `numColumns` KULLANILMIYOR — bölüm başlığı tuzağı
+İlk sürüm bölüm başlıklarını normal ızgara öğesi olarak basıyordu. FlatList
+`numColumns` ile öğeleri N'li satırlara böldüğü için başlık **bir hücreyi**
+kaplıyor ve satırın **ortasında** kalıyordu: 5 sütunda ilk satır
+`[BAŞLIK, kart, kart, kart, kart]` oluyor, "Tüm Koleksiyonlar" başlığı da aktif
+kartların arasına düşüyordu (ölçüldü). Çözüm: satırlar **elle** oluşturuluyor;
+liste satır başına tek öğe taşıyor.
+
+> ⚠️ `useWindowDimensions().width` ilk karelerde veya görünür olmayan bir
+> sekmede **0** gelebiliyor (gizli panede ölçüldü: `innerWidth = 0`).
+> Korumasız bırakılırsa kart genişliği **negatif** çıkıp ızgara çöküyor —
+> `Math.max(280, …)` tabanı bu yüzden var.
+
 ### 6.3 Önemli UI Bileşenleri
 - **Satış akışı:** TÜM satışlar (hover hızlı satış, inceleme modalı, toplu satış)
   tek bir `requestSell` → `SellConfirmModal` → `finalizeSell` yolundan geçer.
@@ -1195,6 +1263,21 @@ single-page çıktı). Bu dosya üç şeyi taşıyor:
   köşesinde yeşil** bir aralık gösterilir (`getContainerValueRange`): bu kutudan
   çıkabilecek **en ucuz → en değerli** ödül.
 
+- **⚠️ SONUÇLAR YALNIZCA SÖZLEŞME TAMAMLANINCA GÖRÜNÜR (29 Ağu 2026):**
+  Olası çıktılar, ihtimaller ve kâr tahmini artık ancak **tüm yuvalar dolunca**
+  (standart tarif 10, Covert tarifi 5) ekrana gelir. O ana kadar panelde sadece
+  bir ilerleme göstergesi (`3 / 10`) durur.
+
+  > **Neden:** Eskiden 2. eşya konur konmaz tüm tablo açılıyordu, ama o rakamlar
+  > **yarım** bir sözleşmeye aitti. Ölçülen örnek: 1 adet AK-47 Redline ile panel
+  > **"+$96.18 (%228) kâr"** diyordu; aynı sözleşme 10 eşyayla tamamlandığında
+  > gerçek sonuç **−$282.72 (−%67)**. Kullanıcı imzalayınca göreceğinden tamamen
+  > farklı bir tablo görüyordu.
+  >
+  > `analysis` **arka planda hesaplanmaya devam eder** — yuva kilitleme
+  > (`isDeadEnd`) ve İmzala butonunun etkinliği ona bağlı; yalnızca GÖSTERİM
+  > geciktirilir.
+
 - **⚠️ Trade-Up ÜCRETSİZDİR — yapısal garanti:**
   Bu ekran bakiyeden **para düşmez**, envanterden **eşya silmez** ve bakiye
   yetersizliği diye bir ret durumu **yoktur**. Ücretsizlik bir `if` koşuluyla
@@ -1265,6 +1348,10 @@ npm run ios      # iOS
 
 | Tarih | Değişiklik |
 |---|---|
+| **2026-08-30** | **Yeni "Koleksiyonlar" sekmesi** (`CollectionsScreen.js`): 110 koleksiyon, A-Z / yeni / eski sıralama, koleksiyon içi arama, **Aktif Drop Havuzu** vurgusu + rozeti. **Bug:** bölüm başlıkları `numColumns` ızgarasında bir hücreyi kaplayıp satırın ortasına düşüyordu → satırlar elle oluşturuluyor |
+| **2026-08-30** | **Trade-Up sonuçları sözleşme tamamlanana kadar gizli** — yarım sözleşmeye ait yanıltıcı kâr tahmini (ölçüldü: 1/10'da %228, 10/10'da −%67) kaldırıldı |
+| **2026-08-30** | **Armory harcaması artık dolar karşılığıyla** — "Spent -40★ (-$16.00)"; açma butonlarında da yıldızın $ karşılığı |
+| **2026-08-30** | Toplu sonuç panelinde **"Send Selected" → "Send to Inventory"** (hedef belirsizdi) |
 | **2026-08-29** | **KRİTİK — Armory %1000+ ROI bug'ı:** çekiliş kodları boş kademede "tüm havuza düş" yedeğine giriyordu; Armory koleksiyonlarında Consumer Grade olmadığı için çekilişlerin %79.92'si düzgün dağılımlı seçim yapıyordu. Gerçek EV $15.83–$22.83 (maliyet $1.60). Oran tabloları artık içerikten türetiliyor (`getPresentTiers` / `rollTier` / `poolForTier`); ROI %45–68'e indi |
 | **2026-08-29** | **EV artık aşınma dağılımına göre:** sabit float 0.25 yerine ağırlıklı bantlar eşyanın kendi min/max aralığına ölçekleniyor — kart EV'si ile 400.000 çekilişlik simülasyon örtüşüyor |
 | **2026-08-29** | **Bug:** kasa içeriğindeki sticker'larda `market_hash_name` YOK; 1188 sticker'ın tamamı mock fiyata düşüyordu. `Sticker \| <ad>` anahtarı eklendi → eşleşme 0/1188 → 856/1188 |

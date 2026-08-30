@@ -346,11 +346,13 @@ export default function ArmoryOpening({ collection, onBack, balance, setBalance,
           <BatchResultPanel
             items={batch.items}
             title={t('armory.batchDone', { n: batch.count })}
-            /* ⚠️ Armory YILDIZ harcar, dolar değil: harcama etiketi yıldızla
-               yazılır ama kâr/zarar DOLARA çevrilerek hesaplanır (1 yıldız = $0.40),
-               yoksa "40★ harcadım, $8 kazandım" gibi karşılaştırılamaz iki birim
-               yan yana görünürdü. */
-            spendingLabel={`-${batch.starsSpent}★`}
+            /* ⚠️ HARCAMA HEM YILDIZ HEM DOLAR: Armory yıldız harcar ama kazanç
+               dolarla ölçülür. Yalnızca "-40★" yazıldığında kullanıcı
+               "40 yıldız harcadım, $8 kazandım" satırındaki iki birimi
+               karşılaştıramıyor ve gerçekte zarar ettiğini göremiyordu.
+               Dönüşüm sabit ve gerçek: Armory Pass 40 yıldız = $16.00,
+               yani yıldız başına $0.40 (STAR_VALUE_USD). */
+            spendingLabel={t('armory.spentStarsUsd', { n: batch.starsSpent, usd: (batch.starsSpent * STAR_VALUE_USD).toFixed(2) })}
             spendingUsd={batch.starsSpent * STAR_VALUE_USD}
             onSellOne={sellOneFromBatch}
             onSellAll={sellAllBatch}
@@ -364,8 +366,11 @@ export default function ArmoryOpening({ collection, onBack, balance, setBalance,
 
         {!opening && !wonItem && !batch && (
           <>
+            {/* Butonun altında yıldızın DOLAR karşılığı — kullanıcı ne kadar
+                gerçek değer harcadığını görmeden kâr/zararı yorumlayamıyor. */}
             <TouchableOpacity style={styles.openButton} onPress={openArmory}>
               <Text style={styles.openButtonText}>{isSpecialItem ? t('armory.mint', { n: ARMORY_PRICE }) : t('armory.spendStars', { n: ARMORY_PRICE })}</Text>
+              <Text style={styles.openButtonSub}>{t('armory.usdEquivalent', { usd: ARMORY_PRICE_USD.toFixed(2) })}</Text>
             </TouchableOpacity>
 
             {/* ÇOKLU AÇILIŞ: özel AK-47 basımı için de dahil (defalarca basıp
@@ -380,6 +385,8 @@ export default function ArmoryOpening({ collection, onBack, balance, setBalance,
                     <Text style={styles.multiBtnPrice}>{ARMORY_PRICE * n}</Text>
                     <StarIcon size={10} />
                   </View>
+                  {/* Yıldızın dolar karşılığı — 5x/10x'te toplam maliyet net görünsün */}
+                  <Text style={styles.multiBtnUsd}>${(ARMORY_PRICE_USD * n).toFixed(2)}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -418,6 +425,7 @@ const styles = StyleSheet.create({
   errorText: { color: C.danger, fontSize: 13, fontWeight: '700', marginBottom: 12, backgroundColor: C.dangerSoft, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10 },
   openButton: { backgroundColor: C.accent, paddingVertical: 15, paddingHorizontal: 42, borderRadius: 14, marginTop: 10, marginBottom: 12, ...shadow.card, shadowColor: C.accent, shadowOpacity: 0.4 },
   openButtonText: { color: C.onAccent, fontSize: 16, fontWeight: '800', letterSpacing: 0.5 },
+  openButtonSub: { color: C.onAccent, fontSize: 12, fontWeight: '600', opacity: 0.9, marginTop: 2, textAlign: 'center' },
   openingContainer: { alignItems: 'center', marginVertical: 40, paddingHorizontal: 34, paddingVertical: 28, backgroundColor: C.surface, borderRadius: 100, ...shadow.card },
   pulseText: { color: C.accentDeep, fontSize: 17, fontWeight: '800' },
   wonContainer: {
@@ -443,6 +451,7 @@ const styles = StyleSheet.create({
   multiBtn: { backgroundColor: C.surface, paddingVertical: 10, paddingHorizontal: 18, borderRadius: 12, alignItems: 'center', ...shadow.card },
   multiBtnTxt: { color: C.accentDeep, fontSize: 14, fontWeight: '800' },
   multiBtnPrice: { color: C.textDim, fontSize: 11, marginTop: 2, fontWeight: '600' },
+  multiBtnUsd: { color: C.success, fontSize: 11, fontWeight: '800', marginTop: 1 },
   batchContainer: { width: '100%', alignItems: 'center', marginTop: 10 },
   batchTitle: { color: C.text, fontSize: 15, fontWeight: '800', marginBottom: 12 },
   batchSummary: { flexDirection: 'row', backgroundColor: C.surface, borderRadius: 14, padding: 14, justifyContent: 'space-around', width: '100%', marginTop: 18, ...shadow.card },

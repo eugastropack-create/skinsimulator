@@ -318,6 +318,7 @@ yapılandırma veya polyfill **gerekmez**.
 |---|---|
 | **2026-08-29** | `public/index.html` şablonu eklendi: sekme başlığı `SkinSimulator.com`, Google Analytics (`G-C4JPXC4L64`), mobil klavye için `interactive-widget=resizes-content` |
 | **2026-08-29** | `react-native-svg` (15.15.4) bağımlılığı eklendi — arayüz simgeleri |
+| **2026-08-30** | Koleksiyonlar sekmesi eklendi — **yeni dış servis YOK**; zaten indirilen `collections.json` yeniden kullanılıyor. Aktif drop havuzu listesi elle bakımlı (`src/armoryData.js`) |
 
 | Tarih | Değişiklik |
 |---|---|

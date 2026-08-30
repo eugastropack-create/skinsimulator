@@ -8,6 +8,7 @@ import TradeUpScreen from './src/TradeUpScreen';
 import TerminalOpening from './src/TerminalOpening';
 import CapsuleOpening from './src/CapsuleOpening';
 import BlogScreen from './src/BlogScreen';
+import CollectionsScreen from './src/CollectionsScreen';
 import { fetchCrates, fetchKeychains, fetchCollections, fetchStickerCapsules, fetchSouvenirPackages, fetchTerminals } from './src/api';
 import {
   fetchLivePrices, calculateCaseStats, calculateArmoryStats, calculateCharmStats,
@@ -64,7 +65,10 @@ const NAV_TABS = [
   { key: 'terminals', labelKey: 'nav.terminals' },
   { key: 'armory',    labelKey: 'nav.armory' },
   { key: 'souvenirs', labelKey: 'nav.souvenirs' },
-  { key: 'stickers',  labelKey: 'nav.stickers' }
+  { key: 'stickers',  labelKey: 'nav.stickers' },
+  // ⚠️ YENİ SEKME SONA EKLENİR — ilk altı sekmenin sırası kullanıcı brief'inde
+  // sabitlenmiştir ve değiştirilmez (bkz. AGENTS.md §2 "Menü Sırası").
+  { key: 'collections', labelKey: 'nav.collections' }
 ];
 
 // Hangi sekme hangi veri listesini ve hangi açılış ekranını kullanıyor.
@@ -1107,6 +1111,15 @@ function AppShell() {
               )}
 
               {tab === 'blog' && <BlogScreen key={blogSection} initialSection={blogSection} />}
+
+              {/* KOLEKSİYONLAR — göz atma ekranı.
+                  ⚠️ `setBalance` / `gameMode` BİLEREK GEÇİLMEZ: burada hiçbir şey
+                  açılmaz veya satın alınmaz, dolayısıyla bakiyeye erişimi olmaması
+                  yapısal bir garantidir (Trade-Up ile aynı yaklaşım).
+                  Veri App.js'in zaten indirdiği `allCollectionsRaw` — EK AĞ ÇAĞRISI YOK. */}
+              {tab === 'collections' && (
+                <CollectionsScreen collections={allCollectionsRaw} priceMap={priceMap} />
+              )}
 
               {['cases', 'terminals', 'armory', 'souvenirs', 'stickers'].includes(tab) && renderListTab()}
 

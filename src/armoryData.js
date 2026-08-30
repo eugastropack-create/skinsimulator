@@ -44,3 +44,34 @@ export const ACTIVE_ARMORY_COLLECTION_NAMES = [
 // getirecek bir sonraki adım gerekiyor — istersen birlikte yaparız.
 export const PENDING_CASE_REWARDS_NOTE =
   'Fever Case Armory\'de aktif ama kasa mekaniği farklı olduğu için henüz eklenmedi.';
+
+// ============================================================
+// AKTİF DROP HAVUZU (Active Drop Pool)
+// ============================================================
+// ⚠️ BU LİSTE ELLE BAKIMLIDIR — API'de böyle bir alan YOKTUR.
+// CS2'de haftalık "Care Package" yalnızca Valve'in o dönem aktif tuttuğu
+// koleksiyonlardan düşer. ByMykel verisi bunu işaretlemez, dolayısıyla
+// koleksiyon listesinde "şu an gerçekten düşüyor" bilgisini ancak buradan
+// verebiliyoruz.
+//
+// KAYNAK (29 Ağustos 2026'da derlendi):
+//   • Valve, 22 Ocak 2026'da Harlequin ve Achroma koleksiyonlarını haftalık
+//     düşüş listesine EKLEDİ; aynı gün Safehouse, Dust 2, 2018 Nuke ve
+//     2018 Inferno listeden ÇIKARILDI.
+//   • 31 Mart 2025'te gelen Ascent / Boreal / Radiant koleksiyonları henüz
+//     havuzda.
+//   • Genesis (Eyl 2025) ve Dead Hand (Mar 2026) terminal koleksiyonları
+//     aktif kapsayıcılar olarak listelenmiş durumda.
+//
+// ⚠️ Valve rotasyon yaptığında GÜNCELLENMESİ GEREKEN TEK YER BURASIDIR.
+// Eşleştirme küçük harfe çevrilip `.includes()` ile yapılır, bu yüzden
+// "The ... Collection" gibi başlık farkları sorun olmaz.
+export const ACTIVE_DROP_POOL_COLLECTION_NAMES = [
+  'harlequin',
+  'achroma',
+  'ascent',
+  'boreal',
+  'radiant',
+  'genesis',
+  'dead hand'
+];

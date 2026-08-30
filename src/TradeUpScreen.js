@@ -215,9 +215,32 @@ const card = StyleSheet.create({
 
 // SAĞ PANEL / ALT PANEL İÇERİĞİ (geniş ekranda sticky sidebar, dar ekranda
 // grid'in altında) — TEK bir yerden render edilip iki layout'ta da kullanılır.
-function SummaryContent({ analysis, filledCount, profitAmount, profitPct, t }) {
+// ⚠️ SONUÇLAR YALNIZCA SÖZLEŞME TAMAMLANINCA GÖRÜNÜR (29 Ağu 2026)
+// ============================================================
+// Eskiden 2. eşya konur konmaz olası çıktılar, yüzdeler ve kâr tahmini
+// ekrana geliyordu. İki sorunu vardı:
+//   1) O rakamlar YARIM bir sözleşmeye aitti — 2 eşyalık girdi değerine göre
+//      hesaplanan "%228 kâr" gerçek (10'lu) sözleşmede hiçbir zaman oluşmuyordu.
+//      Kullanıcı, imzalayınca göreceğinden tamamen farklı bir tablo görüyordu.
+//   2) Sürpriz kalmıyordu: çıktı havuzu daha yuvalar dolmadan açılıyordu.
+//
+// Artık panel `ready` (filledCount === requiredCount) olana kadar yalnızca bir
+// ilerleme göstergesi basar. `analysis` ARKA PLANDA hesaplanmaya devam eder —
+// yuva kilitleme (isDeadEnd) ve İmzala butonunun etkinliği ona bağlı.
+function SummaryContent({ analysis, filledCount, requiredCount, ready, profitAmount, profitPct, t }) {
   if (!analysis) {
     return <Text style={ts.emptyHint}>{t('tradeup.emptyHint')}</Text>;
+  }
+  if (!ready) {
+    return (
+      <View style={ts.lockedWrap}>
+        <View style={ts.progressTrack}>
+          <View style={[ts.progressFill, { width: `${Math.round((filledCount / requiredCount) * 100)}%` }]} />
+        </View>
+        <Text style={ts.progressCount}>{filledCount} / {requiredCount}</Text>
+        <Text style={ts.lockedTxt}>{t('tradeup.lockedUntilFull', { n: requiredCount, done: filledCount })}</Text>
+      </View>
+    );
   }
   return (
     <>
@@ -737,7 +760,19 @@ export default function TradeUpScreen({ inventory, setInventory, priceMap, allCo
     </View>
   );
 
-  const summaryElement = <SummaryContent analysis={analysis} filledCount={filledCount} profitAmount={profitAmount} profitPct={profitPct} t={t} />;
+  // Sözleşme tamam mı? Covert (bıçak) tarifi 5, standart tarif 10 eşya ister.
+  const contractReady = filledCount === requiredCount;
+  const summaryElement = (
+    <SummaryContent
+      analysis={analysis}
+      filledCount={filledCount}
+      requiredCount={requiredCount}
+      ready={contractReady}
+      profitAmount={profitAmount}
+      profitPct={profitPct}
+      t={t}
+    />
+  );
 
   return (
     <SafeAreaView style={ts.container}>
@@ -974,6 +1009,13 @@ const ts = StyleSheet.create({
   outcomePct: { color: C.textDim, fontSize: 9.5, fontWeight: '700', marginTop: 1 },
   outcomePrice: { color: C.success, fontSize: 11.5, fontWeight: '800', fontFamily: TU_MONO },
   outcomeMore: { color: C.textDim, fontSize: 10, fontWeight: '700', textAlign: 'center', paddingVertical: 6 },
+
+  // --- SÖZLEŞME TAMAMLANANA KADAR GÖSTERİLEN İLERLEME ---
+  lockedWrap: { alignItems: 'center', paddingVertical: 22, paddingHorizontal: 8 },
+  progressTrack: { width: '100%', maxWidth: 260, height: 6, backgroundColor: C.surfaceSunken, borderRadius: 3, overflow: 'hidden' },
+  progressFill: { height: '100%', backgroundColor: C.accent, borderRadius: 3 },
+  progressCount: { color: C.text, fontSize: 22, fontWeight: '800', fontFamily: TU_MONO, marginTop: 10 },
+  lockedTxt: { color: C.textDim, fontSize: 11.5, fontWeight: '600', textAlign: 'center', marginTop: 6, lineHeight: 17, maxWidth: 280 },
   knifeBanner: { backgroundColor: '#fdf6dd', borderLeftWidth: 4, borderLeftColor: C.gold, borderRadius: 6, padding: 12, marginTop: 14 },
   knifeBannerTxt: { color: '#8a6d08', fontSize: 10, lineHeight: 16, fontWeight: '600' },
   footer: { padding: 14, paddingBottom: 22, backgroundColor: C.surface, ...shadow.bar },
