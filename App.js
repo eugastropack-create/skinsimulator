@@ -11,7 +11,7 @@ import BlogScreen from './src/BlogScreen';
 import CollectionsScreen from './src/CollectionsScreen';
 import ContactWidget from './src/components/ContactWidget';
 import Tooltip from './src/components/Tooltip';
-import { fetchCrates, fetchKeychains, fetchCollections, fetchStickerCapsules, fetchSouvenirPackages, fetchTerminals } from './src/api';
+import { fetchCrates, fetchKeychains, fetchCollections, fetchStickerCapsules, fetchSouvenirPackages, fetchTerminals, fetchSkins } from './src/api';
 import {
   fetchLivePrices, calculateCaseStats, calculateArmoryStats, calculateCharmStats,
   calculateStickerStats, calculateSouvenirStats, calculateTerminalStats,
@@ -33,6 +33,7 @@ import {
 } from './src/components/Icons';
 import LanguageSwitcher from './src/components/LanguageSwitcher';
 import Disclaimer from './src/components/Disclaimer';
+import ItemLookupModal from './src/components/ItemLookupModal';
 import { I18nProvider, useI18n } from './src/i18n';
 import { C, shadow, webTransition, R, displayType, activeIndicator, clipCut, buildThemeCss, getStoredTheme, applyTheme } from './src/theme';
 
@@ -110,6 +111,38 @@ const LIST_SORT_OPTIONS = [
 ];
 
 // En fazla kaç canlı arama sonucu gösterilecek (liste uzayınca kullanılamaz olur).
+// ============================================================
+// EŞYA ARAMA SIRALAMASI
+// ============================================================
+// ⚠️ SADECE "eşleşme konumu" YETMİYOR. CS2 adları "Silah | Desen" biçiminde:
+// "Dragon Lore" araması yapıldığında ham konum sıralaması "Dragon Lore (Foil)"
+// adlı STICKER'ı 0. karakterden eşleştiği için başa koyuyor, kullanıcının
+// aradığı "AWP | Dragon Lore" ise 6. karakterden eşleştiği için altta kalıyordu.
+//
+// Bu yüzden iki düzeltme yapılıyor:
+//   1. `|` ayıracından SONRA baştan eşleşme de "baştan eşleşme" sayılır.
+//   2. Silah skinleri (`skin-` öneki) sticker/grafiti/agent'ın ÖNÜNE geçer —
+//      kullanıcı bir silah adı yazdığında aradığı şey silahtır.
+const rankScore = (rec, q, idx) => {
+  const name = rec.lower;
+  const bar = name.indexOf('| ');
+  // Desen kısmının başında eşleşiyorsa konumu 0 kabul et.
+  const pos = (bar >= 0 && idx === bar + 2) ? 0 : idx;
+  const isSkin = typeof rec.item?.id === 'string' && rec.item.id.startsWith('skin-');
+  return pos + (isSkin ? 0 : 40);
+};
+
+// Arama açılır listesinde kaç EŞYA gösterilecek ve tarama kaç eşleşmede
+// duracak. Tarama sınırı olmadan "a" gibi tek harfli bir sorgu 20.000 kaydı
+// da toplayıp arayüzü kilitler.
+const ITEM_RESULT_LIMIT = 8;
+const ITEM_RESULT_SCAN_CAP = 400;
+
+// Arama kutusunun (ve altındaki reklam boşluğunun) GİZLENDİĞİ sekmeler.
+//   collections → kendi koleksiyon araması var, iki kutu kafa karıştırıyordu
+//   tradeup     → dikey alana en çok ihtiyaç duyan ekran; arama işe yaramıyor
+const HIDE_SEARCH_TABS = new Set(['collections', 'tradeup']);
+
 const SEARCH_RESULT_LIMIT = 8;
 
 // ============================================================
@@ -205,6 +238,8 @@ function AppShell() {
   // üç seçenek sunuyor (cüzdana geç / sanal sat / vazgeç), davranış doğru kalıyor.
   const [gameMode, setGameMode] = useState('unlimited');
   const [searchQuery, setSearchQuery] = useState('');
+  // Aramadan tıklanan KATALOG eşyası (envanter eşyası değil — bkz. ItemLookupModal).
+  const [lookupItem, setLookupItem] = useState(null);
   const [searchFocused, setSearchFocused] = useState(false);
 
   const [balance, setBalance] = useState(150.00);
@@ -217,6 +252,8 @@ function AppShell() {
   const [stickers, setStickers] = useState([]);
   const [collections, setCollections] = useState([]);
   const [allCollectionsRaw, setAllCollectionsRaw] = useState([]);
+  // skins.json — YALNIZCA burada `min_float`/`max_float` var (arama kartı için).
+  const [skinMeta, setSkinMeta] = useState([]);
   const [priceMap, setPriceMap] = useState(null);
   const [loadingData, setLoadingData] = useState(true);
 
@@ -384,12 +421,6 @@ function AppShell() {
   }, [width, tab, loadingData, compact, measureHeader, paintHeader]);
 
   // Mini markaya tıklayınca listeyi en üste al.
-  const scrollListToTop = useCallback(() => {
-    listRef.current?.scrollToOffset?.({ offset: 0, animated: true });
-    pendingYRef.current = 0;
-    paintHeader(0);
-  }, [paintHeader]);
-
   // Blog/Rehber ekranı hangi bölümle açılacak (footer bağlantıları doğrudan
   // "Gizlilik Politikası" / "İletişim" bölümüne atlayabilsin diye).
   const [blogSection, setBlogSection] = useState('about');
@@ -400,15 +431,21 @@ function AppShell() {
         // Kasa/terminal/souvenir/sticker listelerinin HEPSİ tek bir crates.json
         // dosyasından gelir; api.js bu dosyayı ÖNBELLEĞE alır, dolayısıyla
         // aşağıdaki dört çağrı ağa yalnızca BİR kez çıkar (bkz. api.js).
-        const [cratesData, terminalData, souvenirData, stickerData, collectionsData, keychainsData, livePrices] = await Promise.all([
+        // ⚠️ `fetchSkins` BURADA DA ÇAĞRILIYOR ama EK İNDİRME DEĞİL: api.js
+        // skins.json'u önbelleğe alıyor ve TradeUpScreen zaten aynı promise'i
+        // paylaşıyor. Buradaki tek amaç `min_float`/`max_float` — bu alanlar
+        // crates.json ve collections.json'da HİÇ YOK (ölçüldü).
+        const [cratesData, terminalData, souvenirData, stickerData, collectionsData, keychainsData, skinsData, livePrices] = await Promise.all([
           fetchCrates(),
           fetchTerminals(),
           fetchSouvenirPackages(),
           fetchStickerCapsules(),
           fetchCollections(),
           fetchKeychains(),
+          fetchSkins(),
           fetchLivePrices() // null dönerse tüm ekranlar otomatik simülasyon moduna düşer
         ]);
+        setSkinMeta(skinsData || []);
 
         setPriceMap(livePrices);
         setCrates(cratesData.map(c => ({ ...c, ...calculateCaseStats(c, livePrices) })));
@@ -527,6 +564,80 @@ function AppShell() {
     ];
   }, [crates, terminals, collections, souvenirs, stickers]);
 
+  // ============================================================
+  // EŞYA İNDEKSİ — ARAMA ARTIK KUTU DEĞİL, EŞYA DA BULUR
+  // ============================================================
+  // ÖNCEDEN: arama yalnızca KUTU döndürüyordu. "AK-47 | Redline" yazan
+  // kullanıcı, o skini İÇEREN kasaları görüyordu ama skinin kendisini,
+  // fiyatını veya nadirliğini göremiyordu.
+  //
+  // ARTIK: her eşya kendi başına bir sonuç. Tıklanınca fiyat/nadirlik ve
+  // "hangi kutulardan çıkar" bilgisini veren bir kart açılıyor.
+  //
+  // KAPSAM: kasa + souvenir + sticker kapsülü + terminal içerikleri,
+  // Armory koleksiyonları VE `allCollectionsRaw` (tüm silah koleksiyonları).
+  // Sonuncusu kritik: bir skin hiçbir kasada olmasa bile koleksiyonunda var.
+  //
+  // ⚠️ EK AĞ ÇAĞRISI YOK — bu listelerin hepsi zaten indirilmiş durumda.
+  //
+  // ⚠️ PERFORMANS: ~20.000 eşya kimliğe göre tekilleştiriliyor ve bu YALNIZCA
+  // veri değişince yapılıyor (`useMemo`), her tuş vuruşunda değil.
+  const itemIndex = useMemo(() => {
+    // Kimlik -> { min_float, max_float } — yalnızca skins.json'da var.
+    const floatById = new Map();
+    (skinMeta || []).forEach(sk => {
+      if (sk?.id) floatById.set(sk.id, { min_float: sk.min_float, max_float: sk.max_float });
+    });
+
+    const byId = new Map();
+    const add = (item, container, kind) => {
+      if (!item?.name) return;
+      const key = item.id || item.name;
+      let rec = byId.get(key);
+      if (!rec) {
+        // Aşınma aralığını skins.json'dan tamamla; yoksa alanlar undefined
+        // kalır ve kart "aralık bilinmiyor" olarak davranır (0-1 UYDURMAZ).
+        const fl = floatById.get(item.id);
+        rec = {
+          item: fl ? { ...item, ...fl } : item,
+          name: item.name, lower: item.name.toLowerCase(), sources: []
+        };
+        byId.set(key, rec);
+      }
+      // Aynı kutu iki kez eklenmesin (contains + contains_rare çakışması).
+      if (container && !rec.sources.some(s2 => s2.subject?.id === container.id)) {
+        rec.sources.push({ subject: container, kind });
+      }
+    };
+    const sweep = (list, kind) => (list || []).forEach(c => {
+      [...(c.contains || []), ...(c.contains_rare || [])].forEach(i => add(i, c, kind));
+    });
+    sweep(crates, 'case');
+    sweep(terminals, 'terminal');
+    sweep(souvenirs, 'souvenir');
+    sweep(stickers, 'sticker');
+    sweep(collections, 'armory');
+    // Koleksiyonlar açılabilir bir kutu DEĞİL — kaynak olarak eklenmez,
+    // yalnızca eşyanın var olduğunu bilmek için taranır.
+    (allCollectionsRaw || []).forEach(col => (col.contains || []).forEach(i => add(i, null, null)));
+    return [...byId.values()];
+  }, [crates, terminals, souvenirs, stickers, collections, allCollectionsRaw, skinMeta]);
+
+  // Eşya sonuçları: ad eşleşmesi, en iyi eşleşme üstte.
+  const itemResults = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (q.length < 2) return [];
+    const out = [];
+    for (const rec of itemIndex) {
+      const idx = rec.lower.indexOf(q);
+      if (idx < 0) continue;
+      out.push({ ...rec, score: rankScore(rec, q, idx) });
+      if (out.length >= ITEM_RESULT_SCAN_CAP) break;
+    }
+    out.sort((a, b) => a.score - b.score || a.name.length - b.name.length);
+    return out.slice(0, ITEM_RESULT_LIMIT);
+  }, [searchQuery, itemIndex]);
+
   const searchResults = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (q.length < 2) return [];
@@ -555,6 +666,17 @@ function AppShell() {
     setOpenTarget({ kind: entry.kind, subject: entry.subject });
     setSearchQuery('');
     setSearchFocused(false);
+  };
+
+  // Eşya sonucuna tıklandığında kutu AÇILMAZ — önce katalog kartı gösterilir.
+  // Kullanıcı oradan bir kutuya tıklarsa o zaman açılış ekranına gidilir.
+  const openItemLookup = (rec) => {
+    setLookupItem(rec);
+    setSearchFocused(false);
+  };
+  const openContainerFromLookup = (src) => {
+    setLookupItem(null);
+    openFromSearch(src);
   };
 
   const buyArmoryPass = () => {
@@ -690,12 +812,26 @@ function AppShell() {
     setOpenCounts(prev => ({ ...prev, [id]: (prev[id] || 0) + count }));
   };
 
+  // ============================================================
+  // LOGOYA TIKLAMA -> ANA MENÜ
+  // ============================================================
+  // ⚠️ HEM büyük logo HEM de daralmış çubuktaki mini logo bunu kullanır.
+  // Eskiden mini logo yalnızca `scrollListToTop` çağırıyordu: kullanıcı
+  // Trade-Up'tayken mini logoya bastığında sayfa başa kayıyor ama sekme
+  // değişmiyordu — "ana sayfaya döndüm" beklentisi karşılanmıyordu.
+  //
+  // Açık bir modal/açılış ekranı varsa onlar da kapatılır, aksi hâlde
+  // ana ekran arkalarında kalırdı.
   const goHome = () => {
     setTab('cases');
-    pendingYRef.current = 0; paintHeader(0);
     setOpenTarget(null);
     setSearchQuery('');
     setSearchFocused(false);
+    setLookupItem(null);
+    setSelectMode(false);
+    // Liste başa sarılır ve başlık tam boya döner (aynı anda).
+    listRef.current?.scrollToOffset?.({ offset: 0, animated: false });
+    pendingYRef.current = 0; paintHeader(0);
   };
 
   const switchTab = (key) => {
@@ -964,7 +1100,7 @@ function AppShell() {
           <TouchableOpacity
             style={s.miniLogoBtn}
             activeOpacity={0.7}
-            onPress={scrollListToTop}
+            onPress={goHome}
           >
             <Image
               source={LOGO_SRC}
@@ -1127,7 +1263,12 @@ function AppShell() {
             buluyor ve o sekmede işe yaramıyordu — kullanıcı koleksiyon adı
             arıyor. Orada yerini CollectionsScreen'in kendi koleksiyon araması
             alıyor. Diğer tüm sekmelerde davranış değişmedi. */}
-        {tab !== 'collections' && (
+        {/* ⚠️ TRADE-UP'TA DA GİZLİ (1 Eyl 2026, kullanıcı isteği): Trade-Up
+            ekranı 10 yuva + canlı analiz paneli taşıyor ve dikey alana en çok
+            ihtiyaç duyan ekran. Orada arama kutusu ne işe yarıyordu: hiçbir
+            şeye — eşya seçimi kendi arama modalıyla yapılıyor. Kutuyu ve
+            altındaki reklam boşluğunu kaldırmak ~150 px kazandırıyor. */}
+        {!HIDE_SEARCH_TABS.has(tab) && (
         <View style={[s.searchZone, compact && s.searchZoneCompact, isNarrow && s.searchZoneNarrow]}>
           <View style={[s.searchBox, (searchFocused || searchQuery) && s.searchBoxActive]}>
             {/* ⚠️ EMOJİ DEĞİL: renksiz, ince çizgili "scope" büyüteci
@@ -1154,7 +1295,38 @@ function AppShell() {
 
           {searchQuery.trim().length >= 2 && (
             <View style={s.searchDropdown}>
-              {searchResults.length === 0 ? (
+              {/* ---------- EŞYALAR (silah / charm / sticker / agent) ----------
+                  ⚠️ KUTULARDAN ÖNCE: kullanıcı bir silah adı yazdıysa aradığı
+                  şey silahın kendisidir, onu içeren kasa değil. */}
+              {itemResults.length > 0 && (
+                <>
+                  <Text style={s.searchGroupLbl}>{t('search.items')}</Text>
+                  {itemResults.map(rec => (
+                    <TouchableOpacity
+                      key={`item-${rec.item.id || rec.name}`}
+                      style={s.searchRow}
+                      onPress={() => openItemLookup(rec)}
+                    >
+                      <Image source={{ uri: rec.item.image }} style={s.searchRowImg} resizeMode="contain" />
+                      <View style={{ flex: 1 }}>
+                        <Text style={[s.searchRowName, { color: rec.item.rarity?.color || C.text }]} numberOfLines={1}>
+                          {rec.name}
+                        </Text>
+                        <Text style={s.searchRowVia} numberOfLines={1}>
+                          {rec.item.rarity?.name || ''}
+                          {rec.sources.length > 0 ? ` · ${t('lookup.dropsFrom', { n: rec.sources.length })}` : ''}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </>
+              )}
+
+              {/* ---------- KUTULAR ---------- */}
+              {searchResults.length > 0 && itemResults.length > 0 && (
+                <Text style={s.searchGroupLbl}>{t('search.containers')}</Text>
+              )}
+              {searchResults.length === 0 && itemResults.length === 0 ? (
                 <Text style={s.searchEmpty}>{t('search.empty')}</Text>
               ) : (
                 searchResults.map(entry => {
@@ -1189,7 +1361,9 @@ function AppShell() {
             Buraya ileride bir banner yerleştirildiğinde menünün konumu
             KAYMASIN diye alan şimdiden ayrıldı.
             ============================================================ */}
-        {!compact && <View style={[s.adSlot, isNarrow && s.adSlotNarrow]} />}
+        {/* Reklam boşluğu da Trade-Up'ta gizli — kazanılan alan sözleşme
+            ızgarasına gidiyor. */}
+        {!compact && !HIDE_SEARCH_TABS.has(tab) && <View style={[s.adSlot, isNarrow && s.adSlotNarrow]} />}
 
         {/* ============================================================
             3) ANA NAVİGASYON — yatay
@@ -1396,6 +1570,15 @@ function AppShell() {
           olmaması için `zIndex` 900'de tutuluyor (modallar 1000+). */}
       <ContactWidget />
 
+      {/* Aramadan tıklanan katalog eşyasının kartı — fiyat/nadirlik + nereden çıkar */}
+      <ItemLookupModal
+        visible={!!lookupItem}
+        record={lookupItem}
+        priceMap={priceMap}
+        onOpenContainer={openContainerFromLookup}
+        onClose={() => setLookupItem(null)}
+      />
+
       <ConfirmModal
         visible={clearInvConfirmOpen}
         title={t('modal.clearInvTitle')}
@@ -1558,6 +1741,10 @@ const s = StyleSheet.create({
   searchRowName: { color: C.text, fontSize: 13, fontWeight: '700' },
   searchRowVia: { color: C.textDim, fontSize: 11, marginTop: 2 },
   searchRowBadge: { paddingHorizontal: 9, paddingVertical: 4, borderRadius: R.pill },
+  searchGroupLbl: {
+    color: C.textDim, fontSize: 9.5, fontWeight: '800',
+    paddingHorizontal: 12, paddingTop: 9, paddingBottom: 4, ...displayType(0.7)
+  },
   searchEmpty: { color: C.textDim, fontSize: 13, textAlign: 'center', paddingVertical: 18 },
 
   // --- REKLAM ALANI (rezerve boşluk) ---

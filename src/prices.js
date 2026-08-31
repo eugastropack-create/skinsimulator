@@ -164,6 +164,14 @@ const lookupLivePrice = (priceMap, item, wear, isStatTrak, isSouvenir) => {
   );
 };
 
+// Bir eşyanın belirli bir aşınmada GERÇEK piyasa fiyatı var mı?
+// ⚠️ Arayüzde "gerçek fiyat" ile "simüle fiyat" ayırt edilebilsin diye var.
+// Simüle bir sayıyı piyasa fiyatıymış gibi göstermek yanıltıcıdır: örneğin
+// AWP | Dragon Lore ham ByMykel tablosunda HİÇ YOK; simülasyon $103 üretiyor,
+// gerçek değeri ~$17.800 (ölçüldü, 1 Eyl 2026).
+export const hasLivePrice = (priceMap, item, wear, isStatTrak = false, isSouvenir = false) =>
+  lookupLivePrice(priceMap, item, wear, isStatTrak, isSouvenir) != null;
+
 // Ana fiyat çözümleyici: önce canlı fiyata bakar, bulamazsa simülasyona düşer
 // Simüle fiyatın VARYANSSIZ karşılığı.
 // ⚠️ NEDEN GEREKLİ: `generateMockPrice` içinde `0.85 + Math.random() * 0.30`

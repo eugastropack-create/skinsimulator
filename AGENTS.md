@@ -85,7 +85,7 @@ Güncellenmesi gereken tipik bölümler:
 | `src/content/guide.js` | Rehber metinleri (EN + TR, uzun biçim) | Oranlar `gacas.md` §5 ile **aynı** olmalı. Kısa arayüz etiketlerini buraya koyma (onlar `i18n.js`'te) |
 | `src/components/LanguageSwitcher.js` | Globe ikonlu EN/TR değiştirici | Menü `Modal` ile açılır (RN-Web'de mutlak konumlu menü kırpılıyor) |
 | `src/components/Disclaimer.js` | Yasal sorumluluk reddi (footer) — **kapatılabilir** | **Üç maddeyi de kaldırma** — yasal bilgilendirme. `compact` tek satıra iner. Kapatma `localStorage`'a yazılır; `Platform` + `try/catch` korumalarını **silme** |
-| `src/api.js` | **Tüm** ByMykel CSGO-API çağrıları + `crates.json` önbelleği | Bileşen içine doğrudan `fetch` yazma. Önbelleği kaldırma — 8 MB'lık dosya 4 kez inerdi |
+| `src/api.js` | **Tüm** ByMykel CSGO-API çağrıları + `crates.json` ve `skins.json` önbelleği | Bileşen içine doğrudan `fetch` yazma. Önbellekleri kaldırma — `crates.json` 4 kez, `skins.json` 2 kez inerdi |
 | `scripts/update-prices.mjs` | Fiyat boru hattı: Skinport + Steam birleştirme, güven puanı, **aşınma eğrisi onarımı** | GitHub Actions'ta 2 saatte bir çalışır. Skinport FİYAT kaynağı DEĞİL, **likidite** kaynağıdır. Onarım eşiklerini değiştirmeden önce ölçüm yap |
 | `.github/workflows/update-prices.yml` | Cron (2 saat) + `prices-data` yetim dalına push | Dalı `master`'a taşıma — Cloudflare Pages her fiyat güncellemesinde site build'i tetikler |
 | `src/TerminalOpening.js` | Armory terminali — **adım adım teklif seçimi** (1/5 → 5/5, %5 ile 6.) | **Çark KULLANMAZ, kasa DEĞİLDİR.** **DOLAR** kullanır (kredi değil). Teklif geçişine **animasyon EKLEME** — anında olmalı. Son seçenekte Pas Geç devre dışı |
@@ -101,7 +101,8 @@ Güncellenmesi gereken tipik bölümler:
 | `src/components/Toast.js` | Bildirim (Alert.alert yerine) | Bilerek **animasyonsuz** — geri ekleme |
 | `src/components/ConfirmModal.js` | Onay diyaloğu | `Modal` web'de güvenilir çalışır, `Alert` çalışmaz |
 | `src/components/ContentsModal.js` | İçerik/oran önizlemesi (`ContentsList` + `InlineContentsPanel` + modal) | Oran tabloları `gacas.md` §5 ile eşleşmeli; üç görünüm TEK kaynaktan beslenir. `kind='souvenir'` kademeleri **dinamik** (`getSouvenirTiers`) |
-| `src/components/ItemInspectModal.js` | Envanter eşya inceleme | float/pattern yoksa (charm/sticker) o satırları gizle |
+| `src/components/ItemInspectModal.js` | **ENVANTERDEKİ** eşyanın incelemesi (float/pattern/satış) | float/pattern yoksa (charm/sticker) o satırları gizle |
+| `src/components/ItemLookupModal.js` | **KATALOG** eşya kartı — aramadan açılır (aşınmaya göre fiyat + nereden çıkar) | `ItemInspectModal` ile karıştırma: burada kullanıcı eşyaya SAHİP DEĞİL. Aralık bilinmiyorsa 0–1 UYDURMA; canlı fiyat yoksa `~` ve uyarı göster |
 | `src/components/SellConfirmModal.js` | Satış onayı + Sınırsız Mod yönlendirmesi | Satışı doğrudan yapma — `requestSell` → modal → `finalizeSell` yolunu kullan |
 | `src/armoryData.js` | Aktif Armory koleksiyonları **ve aktif drop havuzu** isimleri | Valve rotasyon yapınca **sadece burası** güncellenir. Bu iki liste API'de YOKTUR, elle bakımlıdır |
 | `src/components/Tooltip.js` | Hover'da açıklama kutucuğu | Kapsayıcıda `overflow: hidden` OLMAMALI. Animasyon EKLEME (hayalet kutucuk bırakıyor). Native'de dokunmayla açılır |
@@ -250,6 +251,10 @@ Bu durumda:
 | Piyasa fiyatını tek kaynaktan, sorgusuz almak | Steam `sell_price` = o anki EN UCUZ LİSTELEME. İnce aşınma bantlarında (1-3 listeleme) tek kişinin fiyatıdır; skinlerin **%42'sinin** aşınma eğrisi kırıktı. Likiditeye bak, eğriyi onar |
 | Aşınma süzgecinin oranları da değiştirmesine izin vermek | Kullanıcı "AK" yazınca %100 AK çıkacağını sanır. Yüzdeler DAİMA tam listeden, süzme yalnızca hangi kartın basılacağından sorumlu |
 | Ekran bileşenini `key` olmadan monte etmek | Kasa A'dan B'ye geçince React AYNI örneği kullanır ve oturum sayaçları devreder. `key={subject.id}` sıfırlamayı YAPISAL yapar |
+| `min_float` / `max_float`'ı kasa veya koleksiyon verisinde aramak | O alanlar `crates.json` (17.583 öge) ve `collections.json` (1.455 skin) kayıtlarının **HİÇBİRİNDE** yok. Tek kaynak `skins.json` — kimlikle eşleştir |
+| Bilinmeyen float aralığı yerine 0.00–1.00 yazmak | Kullanıcıya var olmayan aşınmalar ve fiyatlar gösterilir (Dragon Lore gerçekte 0.00–0.70). Bilinmiyorsa satırı HİÇ basma |
+| Simüle fiyatı piyasa fiyatıymış gibi göstermek | AWP \| Dragon Lore ham ByMykel'de yok: simülasyon $103 diyor, gerçeği ~$17.800. `hasLivePrice` ile ayır, `~` ve uyarı bas |
+| Arama sıralamasını yalnızca eşleşme konumuna dayandırmak | CS2 adları "Silah \| Desen" biçiminde; "Dragon Lore" araması sticker'ı başa, AWP'yi alta koyuyordu. `\|` sonrası eşleşmeyi de baştan say ve silahı öne al |
 | Emoji'yi arayüz simgesi olarak kullanmak | Her platformda farklı çizilir ve renklendirilemez. `components/Icons.js` (SVG) kullan |
 | `FlatList numColumns` + bölüm başlığı | Başlık bir HÜCREYİ kaplar ve satırın ortasına düşer. Satırları elle grupla, satır başına tek öğe ver |
 | `useWindowDimensions().width` = 0 | Gizli/ilk karede 0 gelebilir; kart genişliği negatif çıkıp ızgara çöker — `Math.max(taban, …)` koy |
@@ -331,6 +336,9 @@ Bu durumda:
 | **2026-09-01** | **Otomatik fiyat güncelleme** — GitHub Actions cron (2 saat) → `prices-data` yetim dalı; uygulama kendi beslemesini çeker, ByMykel'e düşer |
 | **2026-09-01** | **Kümülatif kasa istatistikleri** (Toplam Açılan/Harcanan/Gelen) + elle sıfırlama + kutu değişince `key` ile otomatik sıfırlama |
 | **2026-09-01** | **Kategori içi arama** (`ContentsList`) — oranları DEĞİŞTİRMEZ; **Sınırsız Mod** butonuna takas ikonu + tooltip + `cursor:pointer` |
+| **2026-09-01** | **Global arama** — artık kutuların yanı sıra EŞYALAR da bulunuyor (silah/charm/sticker/agent); tıklanınca aşınmaya göre fiyat + "nereden çıkar" kartı açılıyor (`ItemLookupModal`). Sıralama silahı öne alıyor |
+| **2026-09-01** | **Trade-Up'ta arama ve reklam boşluğu gizlendi** — ~169 px kazanıldı, sözleşme ızgarası kaydırmasız görünüyor |
+| **2026-09-01** | **Logo → ana menü**: mini logo da artık `goHome` çağırıyor (eskiden yalnızca başa kaydırıyordu) |
 | **2026-09-01** | **Yeni ejderha logosu** — JPEG arka planı ölçülen eşiklerle saydamlaştırıldı (900×244, oran 3.6885), un-premultiply ile hale bırakmadan; favicon ejderha kafasından türetildi; logo ölçüsü yükseklik güdümlü hâle getirildi |
 | **2026-09-01** | **Logo paleti** — vurgu rengi mavi/sarıdan logonun kiremit-kor turuncusuna geçti (aydınlık `#c8431a` / karanlık `#f4641e`); tüm kontrastlar WCAG AA ölçüldü |
 | **2026-08-31** | **Karanlık/Aydınlık mod düğmesi** — tokenlar CSS değişkenine çevrildi; geçiş yeniden yükleme YAPMAZ (bakiye/envanter/geçmiş korunur), tercih `localStorage`'da |

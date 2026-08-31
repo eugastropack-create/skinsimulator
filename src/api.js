@@ -90,15 +90,31 @@ export const fetchTerminals = async () => {
 };
 
 // ---------- SKİNLER / KOLEKSİYONLAR / CHARM'LAR ----------
+// ⚠️ ÖNBELLEKLİ (crates.json ile aynı gerekçe): `skins.json` artık İKİ yerden
+// isteniyor — TradeUpScreen (çıktı havuzu) ve App (arama için float aralığı).
+// Önbelleksiz bırakmak aynı ~4 MB'ı iki kez indirirdi. Paralel çağrılar AYNI
+// promise'i paylaşır, yani yarış durumu yok.
+//
+// ⚠️ `min_float` / `max_float` YALNIZCA BURADA VAR: `crates.json` (17.583 öge)
+// ve `collections.json` (1.455 skin) kayıtlarının HİÇBİRİNDE bu alanlar yok
+// (ölçüldü, 1 Eyl 2026). Bir eşyanın gerçek aşınma aralığı gerekiyorsa
+// kaynak bu dosyadır.
+let skinsPromise = null;
+
 export const fetchSkins = async () => {
-  try {
-    const response = await fetch(`${BASE}/skins.json`);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return await response.json();
-  } catch (error) {
-    console.error('Skinler çekilirken hata:', error);
-    return [];
+  if (!skinsPromise) {
+    skinsPromise = fetch(`${BASE}/skins.json`)
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .catch(error => {
+        console.error('Skinler çekilirken hata:', error);
+        skinsPromise = null;   // başarısız denemeyi önbellekte TUTMA
+        return [];
+      });
   }
+  return skinsPromise;
 };
 
 export const fetchCollections = async () => {
