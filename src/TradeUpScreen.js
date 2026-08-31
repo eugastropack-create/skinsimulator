@@ -40,11 +40,43 @@ const isGloves = (item) => item?.category?.name === 'Gloves' || /(Gloves|Hand Wr
 // kullanıcı 5 Covert birleştirip Bıçak/Eldiven çekilişi yapabilsin (bkz. COVERT->KNIFE
 // özel tarifi, aşağıda). Bıçak/eldivenin KENDİSİ hâlâ girdi olamaz — aksi halde
 // sonsuz bıçak->bıçak döngüsü oluşurdu.
+// ============================================================
+// ⚠️ EŞYA TÜRÜ ADDAN DEĞİL, KİMLİKTEN (id) ANLAŞILIR — 30 AĞU 2026 KRİTİK BUG
+// ============================================================
+// KÖK NEDEN: Eski kod silah olmayan eşyaları (sticker/charm/patch/pin) ADIN
+// İÇİNDE ARAYARAK eliyordu:
+//
+//     if (/(Charm|Sticker|Patch|Pin)/i.test(item.name)) return false;   // ← BUG
+//
+// Bu regex SABİTLENMEMİŞ (unanchored) olduğu için parçayı kelimenin ORTASINDA
+// da yakalıyordu:
+//
+//     "USP-S | Slee[pin]g Potion"  → "Pin" eşleşti → ELENDİ
+//     "P2000 | Dis[patch]"         → "Patch" eşleşti → ELENDİ
+//
+// SONUÇ (doğrulandı): 1456 silah skininden 10 tanesi hem GİRDİ hem ÇIKTI
+// havuzundan siliniyordu. Kullanıcının bildirdiği örnek tam olarak buydu:
+// The Harlequin Collection'da Restricted kademesinde İKİ eşya var
+// (AWP | Exothermic + USP-S | Sleeping Potion) ama USP-S elendiği için
+// 10x Mil-Spec trade-up %100 AWP veriyordu — yani tek tip sonuç ve
+// çarpıtılmış kâr beklentisi.
+//
+// ÇÖZÜM: ByMykel verisinde her eşyanın kimliği türünü zaten söylüyor:
+//   skin-…  keychain-…  sticker-…  graffiti-…  agent-…  patch-…
+// Doğrulandı: koleksiyonlardaki 1455 `skin-` ögesinin %100'ü skins.json ile
+// birebir eşleşiyor. Ada bakmak gereksiz ve hataya açıktı.
+const isWeaponSkinItem = (item) => {
+  const id = item?.id;
+  // id yoksa (elde üretilmiş bir obje) eski davranışa güven — eleme yapma.
+  if (typeof id !== 'string' || id.length === 0) return true;
+  return id.startsWith('skin-');
+};
+
 const isValidTradeUpInput = (item) => {
-  const r = item.rarity?.name || ''; const n = item.name || '';
+  const r = item.rarity?.name || '';
   if (isKnife(item) || isGloves(item)) return false;
   if (['Contraband', 'Rare Special'].includes(r)) return false;
-  if (/(Charm|Sticker|Patch|Pin)/i.test(n)) return false;
+  if (!isWeaponSkinItem(item)) return false;
   return true; // 'Covert' ARTIK İZİNLİ (simülatöre özel kural)
 };
 
@@ -54,7 +86,10 @@ const isValidTradeUpInput = (item) => {
 // (Bıçaklar yalnızca aşağıdaki Covert->Knife özel tarifiyle çıkabilir.)
 const isValidTradeUpOutput = (item) => {
   if (isKnife(item) || isGloves(item)) return false;
-  if (/(Charm|Sticker|Patch|Pin)/i.test(item.name || '')) return false;
+  // ⚠️ Ada göre süzme YOK (bkz. isWeaponSkinItem açıklaması). Bu filtre
+  // koleksiyonlardaki agent/sticker/grafiti ögelerini de doğru şekilde eler —
+  // eski regex onları ZATEN yakalamıyordu.
+  if (!isWeaponSkinItem(item)) return false;
   return true;
 };
 
@@ -432,17 +467,30 @@ export default function TradeUpScreen({ inventory, setInventory, priceMap, allCo
   // ÇIKTISI, girdi eşyalarının ait olduğu koleksiyondan gelir (rastgele tüm
   // veritabanından değil!). Bu harita, "10 tane MP5 Piknik koysam bambaşka bir
   // koleksiyondan eşya çıkıyor" bug'ının kökten çözümü için gerekli.
+  // ⚠️ ANAHTAR AD DEĞİL, KİMLİK (30 Ağu 2026). İsim çakışabiliyor: "Recoil AK-47"
+  // hem bir grafiti hem de bir silah adı olarak 19 ayrı koleksiyonda geçiyor.
+  // Kimlikler benzersiz ve skins.json ile %100 eşleşiyor (doğrulandı).
+  // Ada göre yedek arama, kimliği olmayan eski/elde üretilmiş objeler için korunur.
+  //
+  // ⚠️ AYNI KOLEKSİYON İKİ KEZ EKLENMEZ: eklenirse o koleksiyon çekilişte
+  // iki kat ağırlık kazanırdı.
   const skinToCollections = useMemo(() => {
     const map = {};
     (allCollections || []).forEach(col => {
       (col.contains || []).forEach(item => {
-        if (!item?.name) return;
-        if (!map[item.name]) map[item.name] = [];
-        map[item.name].push(col);
+        const keys = [item?.id, item?.name].filter(Boolean);
+        keys.forEach(key => {
+          if (!map[key]) map[key] = [];
+          if (!map[key].some(c => c.id === col.id)) map[key].push(col);
+        });
       });
     });
     return map;
   }, [allCollections]);
+
+  // Bir girdi eşyasının ait olduğu koleksiyonlar (önce kimlik, sonra ad).
+  const collectionsOf = (skin) =>
+    skinToCollections[skin?.id] || skinToCollections[skin?.name] || [];
 
   // SARI (ÖZEL) HAVUZ: Covert->Bıçak/Eldiven özel tarifinin çıktı havuzu.
   // Veritabanındaki TÜM bıçaklar (576) ve eldivenler (94) eşit ihtimalle çıkabilir.
@@ -482,12 +530,20 @@ export default function TradeUpScreen({ inventory, setInventory, priceMap, allCo
     // belirlenir. Her girdi kendi koleksiyonuna "oy" verir; 10 eşya farklı
     // koleksiyonlardan geliyorsa çıktı havuzu bu oranlarla ağırlıklandırılır
     // (tıpkı gerçek oyunda olduğu gibi).
-    const collectionVotes = {};   // collectionId -> kaç girdi bu koleksiyondan
+    // ⚠️ HER GİRDİ TOPLAM **1** OY KULLANIR (30 Ağu 2026 düzeltmesi).
+    // Eski kod, eşya birden fazla koleksiyonda geçiyorsa her koleksiyona AYRI
+    // bir tam oy veriyordu; 5 koleksiyonda geçen bir skinden 10 tane koyunca
+    // toplam oy 10 yerine 50 oluyor ve o eşyanın ağırlığı yapay olarak 5 katına
+    // çıkıyordu (doğrulandı: 1788 eşyanın 53'ü birden fazla koleksiyonda).
+    // Artık oy, eşyanın koleksiyonları arasında EŞİT BÖLÜNÜYOR.
+    const collectionVotes = {};   // collectionId -> toplam oy ağırlığı
     const collectionById = {};
     validSlots.forEach(entry => {
-      const cols = skinToCollections[entry.skin.name] || [];
+      const cols = collectionsOf(entry.skin);
+      if (cols.length === 0) return;
+      const weight = 1 / cols.length;
       cols.forEach(col => {
-        collectionVotes[col.id] = (collectionVotes[col.id] || 0) + 1;
+        collectionVotes[col.id] = (collectionVotes[col.id] || 0) + weight;
         collectionById[col.id] = col;
       });
     });
@@ -517,15 +573,39 @@ export default function TradeUpScreen({ inventory, setInventory, priceMap, allCo
         knifePool.forEach(k => possibleOutcomes.push({ ...buildOutcome(k, 'Rare Special'), chance: per }));
       }
     } else if (totalVotes > 0) {
+      // ============================================================
+      // GERÇEK CS2 FORMÜLÜ
+      // ============================================================
+      // Bir koleksiyondan gelen her girdi o koleksiyona bir "bilet" verir.
+      // Çekilişte önce bilet seçilir (koleksiyon belirlenir), sonra o
+      // koleksiyonun bir ÜST kademesindeki eşyalar arasından EŞİT ihtimalle
+      // biri seçilir. Yani:
+      //
+      //     P(eşya) = (o koleksiyonun oyu / toplam oy) / (o kademedeki eşya sayısı)
+      //
+      // ⚠️ HAVUZ TEK EŞYAYA İNDİRGENMEZ: `eligible` o koleksiyonun hedef
+      // kademesindeki TÜM uygun eşyaları taşır. Örnek (doğrulandı):
+      // The Harlequin Collection'da Restricted kademesi 2 eşya içeriyor →
+      // AWP | Exothermic %50, USP-S | Sleeping Potion %50.
+      //
+      // ⚠️ Aynı eşya iki koleksiyonda birden geçiyorsa ihtimalleri TOPLANIR
+      // (iki ayrı satır olarak listelenmez) — aksi hâlde kullanıcı aynı eşyayı
+      // listede iki kez görür ve yüzdeler tek tek yanlış görünür.
+      const byId = new Map();
       Object.keys(collectionVotes).forEach(colId => {
         const col = collectionById[colId];
         const voteShare = collectionVotes[colId] / totalVotes;
         const eligible = (col.contains || []).filter(s => s.rarity?.name === targetRarity && isValidTradeUpOutput(s));
-        if (eligible.length > 0) {
-          const perItemChance = (voteShare * 100) / eligible.length;
-          eligible.forEach(t => possibleOutcomes.push({ ...buildOutcome(t), chance: perItemChance }));
-        }
+        if (eligible.length === 0) return;
+        const perItemChance = (voteShare * 100) / eligible.length;
+        eligible.forEach(t => {
+          const key = t.id || t.name;
+          const existing = byId.get(key);
+          if (existing) existing.chance += perItemChance;
+          else byId.set(key, { ...buildOutcome(t), chance: perItemChance });
+        });
       });
+      possibleOutcomes = [...byId.values()];
     }
 
     // Yedek yol: girdi eşyaların koleksiyonu haritada bulunamazsa (veri eksikse)

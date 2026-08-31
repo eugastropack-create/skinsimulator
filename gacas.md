@@ -392,8 +392,77 @@ Doğrulanan sonuç (200.000 örnek, 0.00–1.00 skin):
 2. Çıktı nadirliği bir üst kademedir:
    `Consumer → Industrial → Mil-Spec → Restricted → Classified → Covert`
 3. **Çıktı havuzu, girdilerin ait olduğu koleksiyon(lar)dan** belirlenir. Her girdi
-   kendi koleksiyonuna "oy" verir; havuz bu oylarla ağırlıklandırılır.
+   kendi koleksiyonuna **toplam 1 oy** verir; havuz bu oylarla ağırlıklandırılır.
 4. Çıktı float'ı: `hedefMin + ortalamaFloat × (hedefMax − hedefMin)`
+
+#### Olasılık formülü
+
+```
+P(eşya) = (koleksiyonun oyu / toplam oy) ÷ (o koleksiyonun hedef kademesindeki eşya sayısı)
+```
+
+Yani önce bir "bilet" (koleksiyon) seçilir, sonra o koleksiyonun bir üst
+kademesindeki **TÜM** uygun eşyalar arasından eşit ihtimalle biri gelir.
+⚠️ Aynı eşya iki koleksiyonda birden geçiyorsa ihtimalleri **toplanır**, iki ayrı
+satır olarak listelenmez.
+
+⚠️ **EV ile çekiliş AYNI diziyi kullanır** (`analysis.outcomes`): `executeTradeUp`
+o dizide kümülatif zar atar. Ayrışmaları matematiksel olarak imkânsız.
+
+#### ⚠️ 30 AĞU 2026 — KRİTİK BUG: ÇIKTI HAVUZU TEK EŞYAYA DÜŞÜYORDU
+
+> **Kullanıcı şikâyeti:** *"Kontrata 10 adet UMP-45 | Warm Blooded koyduğumda
+> sistem sadece AWP veriyor; aynı koleksiyondaki USP-S de %50 ile listelenmeliydi."*
+
+**KÖK NEDEN — havuz döngüsü değil, bir REGEX.** Silah olmayan eşyalar (sticker /
+charm / patch / pin) eşyanın **ADI İÇİNDE ARANARAK** eleniyordu:
+
+```js
+if (/(Charm|Sticker|Patch|Pin)/i.test(item.name)) return false;   // ← BUG
+```
+
+Regex **sabitlenmemiş** olduğu için parçayı kelimenin ORTASINDA da yakalıyordu:
+
+| Eşya | Eşleşen parça | Sonuç |
+|---|---|---|
+| `USP-S \| Slee**pin**g Potion` | `Pin` | elendi |
+| `P2000 \| Dis**patch**` | `Patch` | elendi |
+
+**ÖLÇÜM:** 1456 silah skininden **10 tanesi** hem girdi hem çıktı havuzundan
+siliniyordu (9'u `pin`, 1'i `patch`). Kullanıcının örneği tam olarak buydu:
+*The Harlequin Collection*'ın Restricted kademesinde **iki** eşya var
+(`AWP | Exothermic` + `USP-S | Sleeping Potion`); USP-S elendiği için 10'lu
+Mil-Spec sözleşmesi **%100 AWP** veriyor, EV $4.07 ve **+%45 kâr** gösteriyordu.
+Doğrusu: **%50 / %50**, EV **$2.85**, **+%2**.
+
+**ÇÖZÜM:** Tür artık **kimlikten** anlaşılıyor (`isWeaponSkinItem`). ByMykel
+verisinde her eşyanın id'si türünü zaten söylüyor:
+`skin-` · `sticker-` · `keychain-` · `graffiti-` · `agent-`
+Doğrulandı: koleksiyonlardaki **1455 `skin-` ögesinin %100'ü** skins.json ile
+birebir eşleşiyor. Ada bakmak hem gereksiz hem hataya açıktı.
+
+> Bonus: eski regex koleksiyonlardaki **agent** (63) ve **grafiti** (971)
+> ögelerini zaten hiç yakalamıyordu; kimlik kuralı onları da doğru eliyor.
+
+#### ⚠️ AYNI TARİHTE İKİNCİ BUG: OY ŞİŞMESİ
+
+Bir eşya birden fazla koleksiyonda geçiyorsa eski kod **her koleksiyona ayrı bir
+TAM oy** veriyordu. 5 koleksiyonda geçen bir skinden 10 tane konunca toplam oy
+10 yerine **50** oluyor ve o eşyanın ağırlığı yapay olarak 5 katına çıkıyordu.
+(1788 eşyanın **53'ü** birden fazla koleksiyonda.) Artık her girdi **toplam 1 oy**
+kullanıyor ve oy, koleksiyonları arasında eşit bölünüyor.
+
+#### Doğrulama (gerçek veriyle)
+
+| Senaryo | Sonuç |
+|---|---|
+| 10× UMP-45 \| Warm Blooded | AWP %50.00 · USP-S %50.00 — toplam %100 |
+| 5× Harlequin + 5× Achroma | 4 çıktı, her biri %25 — toplam %100 |
+| Eskiden elenen 10 skin | 10/10 artık geçiyor |
+| Tüm koleksiyon × kademe | 262 kombinasyonda 2+ çıktı, 53'ünde gerçekten tek çıktı var |
+
+> Arayüzde imzalandı ve çıkan eşya **USP-S | Sleeping Potion** oldu — düzeltmeden
+> önce çıkması **imkânsız** olan eşya.
 
 **🔪 SİMÜLATÖRE ÖZEL TARİF — 5x Covert → Sarı (Bıçak/Eldiven):**
 - Gerçek CS2'de Covert eşyalar trade-up **girdisi olamaz** (hiyerarşinin en üstüdür).
@@ -1516,6 +1585,9 @@ npm run ios      # iOS
 
 | Tarih | Değişiklik |
 |---|---|
+| **2026-08-31** | **KRİTİK — Trade-Up çıktı havuzu tek eşyaya düşüyordu:** sabitlenmemiş `/(Charm\|Sticker\|Patch\|Pin)/i` regex'i "Slee**pin**g Potion" gibi 10 gerçek silah skinini eliyordu. Tür artık kimlikten (`skin-`) anlaşılıyor. 10× UMP-45 → %100 AWP yerine doğru %50/%50 |
+| **2026-08-31** | **Trade-Up oy şişmesi:** birden fazla koleksiyonda geçen eşya her koleksiyona ayrı tam oy veriyordu (10 girdi → 50 oy). Artık her girdi toplam 1 oy kullanır |
+| **2026-08-31** | Aynı eşya iki koleksiyondan da geliyorsa ihtimaller **toplanıyor**, listede iki kez görünmüyor |
 | **2026-08-30** | **CS2 TAKTİKSEL KOYU TEMA** — antrasit/gunmetal palet, taktiksel sarı vurgu, Chakra Petch + Rajdhani, keskin köşeler (68 yarıçap tokenlandı), butonlarda `clip-path` kesik köşe. **Tek satırlık geri alma:** `theme.js → THEME` |
 | **2026-08-30** | **Aktif durum kutuyu boyamıyor:** mat gri zemin + ince parlak sarı vurgu çizgisi (`activeIndicator`) |
 | **2026-08-30** | **Bug:** global font kuralı monospace sayıları da eziyordu (`[style*='monospace']` hiç eşleşmiyor — RN-Web sınıf basıyor). `:not([class*='r-fontFamily-'])` ile çözüldü |

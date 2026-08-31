@@ -90,7 +90,7 @@ Güncellenmesi gereken tipik bölümler:
 | `src/prices.js` | Canlı/mock fiyat çözümleme, EV/ROI, kararlı sıralama değeri | Altın kademe `contains_rare`'den gelir; sıralamada `getStableSortValue()` kullan |
 | `src/CaseOpening.js` | Kasa **ve Souvenir** açılışı (`mode` prop'u) | Gösterge KUTU değil OK (`WinnerPointer`) — kutuya geri dönme; `ITEM_PITCH`/`getRouletteWidth()` matematiğini bozma; jitter EKLEME; altın kademe `contains_rare`'den çekilir; **sekme (bounce)** ve **bekçi** mantığını kaldırma |
 | `src/ArmoryOpening.js` | Koleksiyon/charm çekilişi, Limited Edition basımı | `isSpecialItem` dalı kademeli çekiliş **kullanmaz**. **Sticker kapsülleri artık burada DEĞİL** (kendi sekmesinde) — ama `isSticker` dalı korunuyor, silme |
-| `src/TradeUpScreen.js` | 10 slot, canlı analiz, geçmiş, özel tarifler | **`setBalance`/`gameMode` PROP'U GEÇİRME** — ücretsizlik yapısal garantidir. Standart 10'lu akışı bozma; Covert tarifi 5 slot + kilit kullanır. Sıfırlama butonu girdi kutucuğunun başlığındadır. Sonuç paneli **yuvalar dolmadan basılmaz** (`contractReady`); `analysis` yine de arka planda hesaplanır — yuva kilitleme ona bağlı |
+| `src/TradeUpScreen.js` | 10 slot, canlı analiz, geçmiş, özel tarifler | **`setBalance`/`gameMode` PROP'U GEÇİRME** — ücretsizlik yapısal garantidir. Standart 10'lu akışı bozma; Covert tarifi 5 slot + kilit kullanır. Sıfırlama butonu girdi kutucuğunun başlığındadır. Sonuç paneli **yuvalar dolmadan basılmaz** (`contractReady`); `analysis` yine de arka planda hesaplanır — yuva kilitleme ona bağlı Eşya türünü ADDAN süzme — `isWeaponSkinItem` (id öneki) kullan; koleksiyon eşlemesi KİMLİKLE; her girdi TOPLAM 1 oy |
 | `src/components/Toast.js` | Bildirim (Alert.alert yerine) | Bilerek **animasyonsuz** — geri ekleme |
 | `src/components/ConfirmModal.js` | Onay diyaloğu | `Modal` web'de güvenilir çalışır, `Alert` çalışmaz |
 | `src/components/ContentsModal.js` | İçerik/oran önizlemesi (`ContentsList` + `InlineContentsPanel` + modal) | Oran tabloları `gacas.md` §5 ile eşleşmeli; üç görünüm TEK kaynaktan beslenir. `kind='souvenir'` kademeleri **dinamik** (`getSouvenirTiers`) |
@@ -223,6 +223,9 @@ Bu durumda:
 | `clip-path`'i içeriği taşan bir kaba uygulamak | Tooltip, açılır liste ve nadirlik ışığı KESİLİR. Yalnızca butonlarda kullan |
 | Global CSS font kuralının monospace'i ezmesi | RN-Web `fontFamily`'yi sınıfla basar, inline stille değil. `:not([class*='r-fontFamily-'])` ile hariç tut |
 | Yarıçap toplu değiştirirken daireleri unutmak | `width: N, height: N, borderRadius: N/2` bir DAİREDİR; token'a çevirmek kareye dönüştürür |
+| Eşya türünü ADINDAN regex'le anlamaya çalışmak | Sabitlenmemiş `/(Charm\|Sticker\|Patch\|Pin)/i` "Slee**pin**g Potion" ve "Dis**patch**"i eledi → 10 skin havuzdan düştü. Türü **id önekinden** oku (`skin-` / `sticker-` / `keychain-` / `graffiti-` / `agent-`) |
+| Bir eşyanın koleksiyonlarını ADIYLA eşlemek | "Recoil AK-47" hem grafiti hem silah adı olarak 19 koleksiyonda geçiyor. Kimlikle eşle — koleksiyonlardaki `skin-` ögelerinin %100'ü skins.json ile tutuyor |
+| Çok koleksiyonlu eşyada her koleksiyona tam oy vermek | Toplam oy şişer (10 girdi → 50 oy) ve o eşyanın ağırlığı katlanır. Her girdi TOPLAM 1 oy kullanmalı, koleksiyonları arasında bölünmeli |
 | Emoji'yi arayüz simgesi olarak kullanmak | Her platformda farklı çizilir ve renklendirilemez. `components/Icons.js` (SVG) kullan |
 | `FlatList numColumns` + bölüm başlığı | Başlık bir HÜCREYİ kaplar ve satırın ortasına düşer. Satırları elle grupla, satır başına tek öğe ver |
 | `useWindowDimensions().width` = 0 | Gizli/ilk karede 0 gelebilir; kart genişliği negatif çıkıp ızgara çöker — `Math.max(taban, …)` koy |
@@ -300,5 +303,6 @@ Bu durumda:
 | **2026-08-29** | Terminalde **zorunlu alım kaldırıldı**; ortak `BatchResultPanel`; kapsül yırtık çizgisi bug'ı; mobil klavye düzeltmesi |
 | **2026-08-29** | `public/index.html` (başlık + Google Analytics + viewport); **emoji → SVG simge seti** (`react-native-svg`); i18n yinelenen anahtar bug'ı |
 | **2026-08-30** | **Koleksiyonlar sekmesi** (sıralama + koleksiyon içi arama + Aktif Drop Havuzu rozeti); Trade-Up sonuçları sözleşme tamamlanana kadar gizlendi; Armory harcaması dolar karşılığıyla; "Send Selected" → "Send to Inventory" |
+| **2026-08-31** | **KRİTİK:** Trade-Up çıktı havuzu tek eşyaya düşüyordu (ada göre süzen sabitlenmemiş regex 10 skini eliyordu); tür artık id önekinden okunuyor. Oy şişmesi de giderildi |
 | **2026-08-30** | **CS2 taktiksel koyu tema** (`theme.js` → `THEME` tek satırlık geri alma); aktif durum vurgu çizgisiyle; Chakra Petch/Rajdhani; keskin köşeler; Tooltip genişlik bug'ı |
 | **2026-08-30** | Varsayılan mod **Sınırsız**; **Tooltip** ve **görsel önizleme** bileşenleri; **hızlı iletişim modülü**; Koleksiyonlar kartları küçültüldü ve arama listeye taşındı; `Contents` kapatma butonu sola alındı |
