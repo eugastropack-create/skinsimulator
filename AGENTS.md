@@ -79,7 +79,7 @@ Güncellenmesi gereken tipik bölümler:
 |---|---|---|
 | `App.js` | Global state, kabuk (logo/arama/menü), veri yükleme, modal montajı | Tüm state buradan prop'lanır. Dış `ScrollView` **ekleme**. Başlık animasyonu **DOM sürücülüdür** (`paintHeader`): `transition` ekleme, rAF'a taşıma, ve **p=0'da stil yazma** (kırpma yapar) |
 | `src/theme.js` | **TEK renk/köşe/font/gölge kaynağı** — iki tema (`cs-dark` / `light`), **çalışma anında değiştirilebilir** | Web'de `C`/`R`/`shadow()` artık **CSS değişkeni dizesi** döndürür (`var(--c-bg)`) — `hexToRgba(C.x, …)` YAPMA, hex değil. `DEFAULT_THEME` varsayılanı belirler; `LIGHT_*` bloklarını SİLME. Aktif durum METNİ için `onAccent` DEĞİL **`activeTxt`**. `RARITY` Valve paleti, temadan bağımsız |
-| `assets/logo-skinsimulator.png` | Saydam zeminli logo (ana + mini çubuk) | En/boy oranı **9.82** — yüksekliği genişlikten türet, ikisini birden sabitleme |
+| `assets/logo-skinsimulator.png` | Saydam zeminli ejderha logosu (ana + mini çubuk) + `assets/favicon.png` (kafa kırpımı) | En/boy **3.6885** (900×244). ⚠️ Ölçü artık **YÜKSEKLİKTEN** türetilir (`LOGO_MAX_H`) — genişlikten türetmek logoyu değiştirince başlığı şişirir. Logo değişirse `LOGO_ASPECT`'i ölç ve güncelle |
 | `src/i18n.js` | **TEK metin kaynağı** (EN varsayılan / TR) | Arayüze sabit metin gömme — `t('anahtar')` kullan. Yeni metni **her iki dile** ekle |
 | `src/BlogScreen.js` | Rehber/Blog — **semantik HTML** (AdSense) | `role` prop'ları DOM etiketine çevrilir; `role="section"` diye bir eşleme YOK. Rolleri değiştirme |
 | `src/content/guide.js` | Rehber metinleri (EN + TR, uzun biçim) | Oranlar `gacas.md` §5 ile **aynı** olmalı. Kısa arayüz etiketlerini buraya koyma (onlar `i18n.js`'te) |
@@ -234,6 +234,9 @@ Bu durumda:
 | Mutlak konumlu kutuya `maxWidth` verip genişlemesini beklemek | "Shrink-to-fit" genişliği KAPSAYICIYLA sınırlıdır; `maxWidth` bunu kaldırmaz. Tooltip 86×284 px'lik dikey şerit oldu — açık `width` ver |
 | `clip-path`'i içeriği taşan bir kaba uygulamak | Tooltip, açılır liste ve nadirlik ışığı KESİLİR. Yalnızca butonlarda kullan |
 | Global CSS font kuralının monospace'i ezmesi | RN-Web `fontFamily`'yi sınıfla basar, inline stille değil. `:not([class*='r-fontFamily-'])` ile hariç tut |
+| Logo ölçüsünü genişlikten türetmek | Oran logoya göre değişir: 9.82:1 wordmark'ta 440px → 45px yüksekti, 3.69:1 ejderha logosunda aynı kod **119px** verir ve başlık 74px şişer. Yüksekliği sabitle, genişliği türet |
+| JPEG'i saydamlaştırırken eşiği çok düşük tutmak | Halkalanma logonun çevresindeki beyazı alfa 5-13'e taşır; kırpma kutusu bunu içerik sanar (oran 3.77 yerine 2.04 çıktı). Eşiği ölç, tahmin etme |
+| Saydamlaştırmada beyazı geri çıkarmayı unutmak | Kenar pikselleri beyazla harmanlıdır; düz yapıştırılırsa koyu zeminde açık hale kalır. `(P − 255(1−a)) / a` ile un-premultiply yap |
 | Yarıçap toplu değiştirirken daireleri unutmak | `width: N, height: N, borderRadius: N/2` bir DAİREDİR; token'a çevirmek kareye dönüştürür |
 | Eşya türünü ADINDAN regex'le anlamaya çalışmak | Sabitlenmemiş `/(Charm\|Sticker\|Patch\|Pin)/i` "Slee**pin**g Potion" ve "Dis**patch**"i eledi → 10 skin havuzdan düştü. Türü **id önekinden** oku (`skin-` / `sticker-` / `keychain-` / `graffiti-` / `agent-`) |
 | Bir eşyanın koleksiyonlarını ADIYLA eşlemek | "Recoil AK-47" hem grafiti hem silah adı olarak 19 koleksiyonda geçiyor. Kimlikle eşle — koleksiyonlardaki `skin-` ögelerinin %100'ü skins.json ile tutuyor |
@@ -328,6 +331,7 @@ Bu durumda:
 | **2026-09-01** | **Otomatik fiyat güncelleme** — GitHub Actions cron (2 saat) → `prices-data` yetim dalı; uygulama kendi beslemesini çeker, ByMykel'e düşer |
 | **2026-09-01** | **Kümülatif kasa istatistikleri** (Toplam Açılan/Harcanan/Gelen) + elle sıfırlama + kutu değişince `key` ile otomatik sıfırlama |
 | **2026-09-01** | **Kategori içi arama** (`ContentsList`) — oranları DEĞİŞTİRMEZ; **Sınırsız Mod** butonuna takas ikonu + tooltip + `cursor:pointer` |
+| **2026-09-01** | **Yeni ejderha logosu** — JPEG arka planı ölçülen eşiklerle saydamlaştırıldı (900×244, oran 3.6885), un-premultiply ile hale bırakmadan; favicon ejderha kafasından türetildi; logo ölçüsü yükseklik güdümlü hâle getirildi |
 | **2026-09-01** | **Logo paleti** — vurgu rengi mavi/sarıdan logonun kiremit-kor turuncusuna geçti (aydınlık `#c8431a` / karanlık `#f4641e`); tüm kontrastlar WCAG AA ölçüldü |
 | **2026-08-31** | **Karanlık/Aydınlık mod düğmesi** — tokenlar CSS değişkenine çevrildi; geçiş yeniden yükleme YAPMAZ (bakiye/envanter/geçmiş korunur), tercih `localStorage`'da |
 | **2026-08-31** | **Trade-Up float'ı gerçek CS2 formülüne geçti** (normalize ortalama); çıktı fiyatları deterministik (`stable: true`); satırlarda aşınma+float gösteriliyor |

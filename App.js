@@ -122,7 +122,23 @@ const SEARCH_RESULT_LIMIT = 8;
 // ⚠️ EN/BOY ORANI SABIT: Gorsel cok genis bir serit (1100x112). Yuksekligi
 // genislikten TURETIYORUZ; ikisini birden sabit vermek gorseli ezer.
 const LOGO_SRC = require('./assets/logo-skinsimulator.png');
-const LOGO_ASPECT = 9.82; // 1100 / 112
+// ============================================================
+// LOGO ÖLÇÜLERİ
+// ============================================================
+// ⚠️ ORAN LOGOYA GÖRE DEĞİŞİR — DEĞİŞTİRİRKEN YÜKSEKLİK BÜTÇESİNE BAKIN.
+// Eski ince yazı logosu 9.82:1 idi; ejderhalı yeni logo 3.69:1 (ölçüldü:
+// 900×244 px). Eskiden yükseklik GENİŞLİKTEN türetiliyordu (440 / 9.82 =
+// 45 px). Aynı kod yeni logoda 440 / 3.69 = **119 px** verir; başlık bir
+// anda 74 px şişer ve daralan menü animasyonunun eşikleri kayar.
+//
+// ÇÖZÜM: artık YÜKSEKLİK sabitlenip genişlik ondan türetiliyor, ayrıca
+// kullanılabilir genişlikle sınırlanıyor. Böylece ileride logo yine
+// değişse bile başlığın dikey yükü SABİT kalır — tek yapılması gereken
+// aşağıdaki oranı güncellemek.
+const LOGO_ASPECT = 3.6885;   // 900 / 244
+const LOGO_MAX_H = 92;        // masaüstü başlık yükseklik bütçesi
+const LOGO_MAX_H_NARROW = 62; // dar ekran
+const MINI_LOGO_H = 26;       // daralmış çubuktaki mini logo
 
 // ============================================================
 // KÖK BİLEŞEN
@@ -264,9 +280,14 @@ function AppShell() {
   const SHRINK_RANGE = 170;
   const SCALE_DROP = 0.12;
   const MINI_BAR_H = 46;
-  // Mobilde logo oranı düşürülüyor — başlığın dikey yükü azalsın.
-  const logoW = Math.min(440, Math.round(width * (width < 720 ? 0.62 : 0.78)));
-  const MINI_LOGO_W = 170;
+  // ⚠️ ÖNCE YÜKSEKLİK, SONRA GENİŞLİK (bkz. LOGO_ASPECT açıklaması).
+  // İki sınırın küçüğü alınır: yükseklik bütçesi ve kullanılabilir genişlik.
+  const logoMaxH = width < 720 ? LOGO_MAX_H_NARROW : LOGO_MAX_H;
+  const logoW = Math.min(
+    Math.round(logoMaxH * LOGO_ASPECT),
+    Math.round(width * (width < 720 ? 0.62 : 0.78))
+  );
+  const MINI_LOGO_W = Math.round(MINI_LOGO_H * LOGO_ASPECT);
 
   const listRef = useRef(null);
   const headerRef = useRef(null);   // yardımcı çubuk + kabuk (tek blok)
