@@ -3,7 +3,7 @@ import { StyleSheet, Text, View, TextInput, TouchableOpacity, Platform, Linking 
 import { sendContactMessage } from '../api';
 import { CONTACT_EMAIL, buildMailtoUrl } from '../contactConfig';
 import { useI18n } from '../i18n';
-import { C, shadow, webTransition } from '../theme';
+import { C, shadow, webTransition, R } from '../theme';
 import { IconClose, IconCheck } from './Icons';
 import Svg, { Path, Rect } from 'react-native-svg';
 
@@ -185,7 +185,7 @@ const w = StyleSheet.create({
     position: Platform.OS === 'web' ? 'fixed' : 'absolute',
     right: 18, bottom: 18, zIndex: 900,
     width: 320, maxWidth: '92%',
-    backgroundColor: C.surface, borderRadius: 6,
+    backgroundColor: C.surface, borderRadius: R.md,
     borderWidth: 1, borderColor: C.border, ...shadow.modal
   },
   head: {

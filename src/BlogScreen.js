@@ -3,7 +3,7 @@ import { StyleSheet, Text, View, TouchableOpacity, ScrollView, useWindowDimensio
 import { useI18n } from './i18n';
 import { GUIDE, GUIDE_SECTIONS } from './content/guide';
 import { IconBook, IconList, IconGem, IconRefresh, IconLock, IconGlobe } from './components/Icons';
-import { C, shadow, webTransition } from './theme';
+import { C, shadow, webTransition, R, activeIndicator, displayType } from './theme';
 
 // Bölüm anahtarı -> çizgi ikon eşlemesi (guide.js artık emoji tutmaz, anahtar tutar).
 const SECTION_ICONS = { book: IconBook, list: IconList, gem: IconGem, refresh: IconRefresh, lock: IconLock, globe: IconGlobe };
@@ -125,8 +125,8 @@ const s = StyleSheet.create({
   nav: { gap: 4 },
   navSide: { width: 250, padding: 16, borderRightWidth: 1, borderRightColor: C.border, backgroundColor: C.surfaceAlt },
   navTop: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 22 },
-  navBtn: { flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8 },
-  navBtnOn: { backgroundColor: C.accentSoft },
+  navBtn: { flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 12, paddingVertical: 10, borderRadius: R.sm },
+  navBtnOn: { backgroundColor: C.activeBg, ...activeIndicator('left', 3) },
   navIcon: { fontSize: 14 },
   navTxt: { color: C.textSoft, fontSize: 12.5, fontWeight: '700', flexShrink: 1 },
   navTxtOn: { color: C.accentDeep, fontWeight: '800' },
@@ -138,7 +138,7 @@ const s = StyleSheet.create({
   lead: { color: C.textSoft, fontSize: 15, lineHeight: 24 },
   updated: { color: C.textFaint, fontSize: 11, marginTop: 10, marginBottom: 26 },
 
-  article: { backgroundColor: C.surface, borderRadius: 10, borderWidth: 1, borderColor: C.border, padding: 26 },
+  article: { backgroundColor: C.surface, borderRadius: R.md, borderWidth: 1, borderColor: C.border, padding: 26 },
   h2: { color: C.text, fontSize: 22, fontWeight: '800', letterSpacing: -0.3, marginBottom: 16 },
   h3: { color: C.text, fontSize: 15, fontWeight: '800', marginTop: 22, marginBottom: 8 },
   // lineHeight uzun paragraflarda kritik: 1.7 civarı satır aralığı, ekranda

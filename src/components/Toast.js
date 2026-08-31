@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { C, shadow } from '../theme';
+import { C, shadow, R } from '../theme';
 
 // KÖK NEDEN: React Native'in `Alert.alert()` fonksiyonu react-native-web'de
 // GERÇEK BİR DİYALOG GÖSTERMEZ (web için implemente edilmemiş) — bu yüzden
@@ -72,7 +72,7 @@ const t = StyleSheet.create({
     alignItems: 'center'
   },
   wrap: {
-    borderRadius: 14,
+    borderRadius: R.md,
     paddingVertical: 13,
     paddingHorizontal: 22,
     maxWidth: 520,

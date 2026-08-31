@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Modal } from 'react-native';
-import { C, shadow } from '../theme';
+import { C, shadow, R } from '../theme';
 
 // `Alert.alert()`'ün web'de çalışmaması yüzünden (bkz. Toast.js açıklaması) tüm
 // onay gerektiren aksiyonlar (Envanteri Sıfırla, Tüm Verileri Sıfırla vb.) için
@@ -29,13 +29,13 @@ export default function ConfirmModal({ visible, title, message, confirmLabel = '
 
 const s = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(38, 48, 61, 0.45)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  box: { backgroundColor: C.surface, borderRadius: 20, padding: 26, width: '100%', maxWidth: 400, ...shadow.modal },
+  box: { backgroundColor: C.surface, borderRadius: R.lg, padding: 26, width: '100%', maxWidth: 400, ...shadow.modal },
   title: { color: C.text, fontSize: 18, fontWeight: '800', textAlign: 'center' },
   message: { color: C.textSoft, fontSize: 13, textAlign: 'center', marginTop: 12, lineHeight: 20 },
   row: { flexDirection: 'row', gap: 10, marginTop: 22 },
-  cancelBtn: { flex: 1, backgroundColor: C.surfaceAlt, paddingVertical: 13, borderRadius: 12, alignItems: 'center' },
+  cancelBtn: { flex: 1, backgroundColor: C.surfaceAlt, paddingVertical: 13, borderRadius: R.md, alignItems: 'center' },
   cancelTxt: { color: C.textSoft, fontWeight: '800', fontSize: 13 },
-  confirmBtn: { flex: 1, backgroundColor: C.accent, paddingVertical: 13, borderRadius: 12, alignItems: 'center' },
+  confirmBtn: { flex: 1, backgroundColor: C.accent, paddingVertical: 13, borderRadius: R.md, alignItems: 'center' },
   dangerBtn: { backgroundColor: C.danger },
   confirmTxt: { color: C.onAccent, fontWeight: '800', fontSize: 13 }
 });

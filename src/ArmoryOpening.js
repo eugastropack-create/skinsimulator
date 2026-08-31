@@ -12,7 +12,7 @@ import { StarIcon, STAR_GREEN } from './components/Icons';
 import Tooltip from './components/Tooltip';
 import BatchResultPanel from './components/BatchResultPanel';
 import { useI18n } from './i18n';
-import { C, shadow, rarityGlowStyle } from './theme';
+import { C, shadow, rarityGlowStyle, R, clipCut } from './theme';
 
 // ⚠️ SABİT ORAN TABLOSU KALDIRILDI — 29 AĞU 2026 KRİTİK BUG DÜZELTMESİ.
 //
@@ -62,7 +62,7 @@ function RevealCard({ item, delay = 0, isCharm }) {
 
 const batchStyles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10, width: '100%' },
-  card: { width: 80, backgroundColor: C.surface, borderRadius: 12, borderBottomWidth: 3, alignItems: 'center', padding: 7, position: 'relative', overflow: 'hidden', ...shadow.card },
+  card: { width: 80, backgroundColor: C.surface, borderRadius: R.md, borderBottomWidth: 3, alignItems: 'center', padding: 7, position: 'relative', overflow: 'hidden', ...shadow.card },
   img: { width: 62, height: 48, marginTop: 4 },
   price: { color: C.success, fontSize: 10, fontWeight: '800', marginTop: 4 },
   wear: { color: C.textDim, fontSize: 8, marginTop: 2 }
@@ -408,29 +408,33 @@ export default function ArmoryOpening({ collection, onBack, balance, setBalance,
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 18, paddingVertical: 12 },
-  backBtn: { backgroundColor: C.surface, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, ...shadow.card },
+  backBtn: { backgroundColor: C.surface, paddingHorizontal: 14, paddingVertical: 8, borderRadius: R.pill, ...shadow.card },
   backText: { color: C.accentDeep, fontSize: 14, fontWeight: '800' },
   balanceText: { color: STAR_GREEN, fontSize: 15, fontWeight: '800' },
   starRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   unlimitedText: { color: C.accentDeep, fontSize: 15, fontWeight: '800' },
   content: { alignItems: 'center', padding: 20, paddingBottom: 60 },
-  imageFrame: { width: 168, height: 168, alignItems: 'center', justifyContent: 'center', backgroundColor: C.surface, borderRadius: 26, ...shadow.card },
+  imageFrame: { width: 168, height: 168, alignItems: 'center', justifyContent: 'center', backgroundColor: C.surface, borderRadius: R.lg, ...shadow.card },
   crateImage: { width: '78%', height: '78%' },
   crateName: { color: C.text, fontSize: 21, fontWeight: '800', marginTop: 16, marginBottom: 6, textAlign: 'center' },
   charmTag: { color: C.accentDeep, fontSize: 11, fontWeight: '800', marginBottom: 12 },
   akTag: { color: C.danger, fontSize: 11, fontWeight: '800', marginBottom: 12, textAlign: 'center' },
-  roiPanel: { flexDirection: 'row', backgroundColor: C.surface, borderRadius: 14, paddingVertical: 12, paddingHorizontal: 18, marginTop: 6, marginBottom: 18, gap: 22, ...shadow.card },
+  roiPanel: { flexDirection: 'row', backgroundColor: C.surface, borderRadius: R.md, paddingVertical: 12, paddingHorizontal: 18, marginTop: 6, marginBottom: 18, gap: 22, ...shadow.card },
   roiBox: { alignItems: 'center' },
   roiLbl: { color: C.textDim, fontSize: 9, fontWeight: '700' },
   roiVal: { color: C.text, fontSize: 14, fontWeight: '800', marginTop: 3 },
-  errorText: { color: C.danger, fontSize: 13, fontWeight: '700', marginBottom: 12, backgroundColor: C.dangerSoft, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10 },
-  openButton: { backgroundColor: C.accent, paddingVertical: 15, paddingHorizontal: 42, borderRadius: 14, marginTop: 10, marginBottom: 12, ...shadow.card, shadowColor: C.accent, shadowOpacity: 0.4 },
+  errorText: { color: C.danger, fontSize: 13, fontWeight: '700', marginBottom: 12, backgroundColor: C.dangerSoft, paddingHorizontal: 14, paddingVertical: 8, borderRadius: R.md },
+  // ⚠️ KESİK KÖŞE (clip-path): yalnızca web + taktiksel temada. `clipCut`
+  // kutunun DIŞINA taşan her şeyi keser, bu yüzden SADECE içeriği kendi içinde
+  // kapalı öğelerde (butonlar) kullanılır — tooltip veya açılır liste barındıran
+  // kaplara UYGULANMAZ.
+  openButton: { backgroundColor: C.accent, paddingVertical: 15, paddingHorizontal: 42, borderRadius: R.md, marginTop: 10, marginBottom: 12, ...shadow.card, shadowColor: C.accent, shadowOpacity: 0.4, ...clipCut(12) },
   openButtonText: { color: C.onAccent, fontSize: 16, fontWeight: '800', letterSpacing: 0.5 },
   openButtonSub: { color: C.onAccent, fontSize: 12, fontWeight: '600', opacity: 0.9, marginTop: 2, textAlign: 'center' },
-  openingContainer: { alignItems: 'center', marginVertical: 40, paddingHorizontal: 34, paddingVertical: 28, backgroundColor: C.surface, borderRadius: 100, ...shadow.card },
+  openingContainer: { alignItems: 'center', marginVertical: 40, paddingHorizontal: 34, paddingVertical: 28, backgroundColor: C.surface, borderRadius: R.lg, ...shadow.card },
   pulseText: { color: C.accentDeep, fontSize: 17, fontWeight: '800' },
   wonContainer: {
-    alignItems: 'center', marginVertical: 12, padding: 28, backgroundColor: C.surface, borderRadius: 22, minWidth: 280, width: '100%', maxWidth: 360, overflow: 'hidden',
+    alignItems: 'center', marginVertical: 12, padding: 28, backgroundColor: C.surface, borderRadius: R.lg, minWidth: 280, width: '100%', maxWidth: 360, overflow: 'hidden',
     shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.35, shadowRadius: 30, elevation: 16
   },
   wonTitle: { color: C.success, fontSize: 20, fontWeight: '800', marginBottom: 12 },
@@ -439,23 +443,23 @@ const styles = StyleSheet.create({
   wonImage: { width: '100%', height: '100%' },
   wonItemName: { fontSize: 17, fontWeight: '800', marginTop: 14, textAlign: 'center' },
   wearText: { color: C.textDim, fontSize: 13, marginTop: 6, fontWeight: '600' },
-  akRoiPanel: { width: '100%', backgroundColor: C.surfaceAlt, borderRadius: 12, padding: 14, marginTop: 16 },
+  akRoiPanel: { width: '100%', backgroundColor: C.surfaceAlt, borderRadius: R.md, padding: 14, marginTop: 16 },
   akRoiRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 3 },
   akRoiLbl: { color: C.textDim, fontSize: 11, fontWeight: '600' },
   akRoiVal: { color: C.text, fontSize: 12, fontWeight: '800' },
   actionRow: { flexDirection: 'row', gap: 10, marginTop: 18, flexWrap: 'wrap', justifyContent: 'center' },
-  sellBtn: { backgroundColor: C.success, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 10 },
-  keepBtn: { backgroundColor: C.accent, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 10 },
+  sellBtn: { backgroundColor: C.success, paddingHorizontal: 18, paddingVertical: 12, borderRadius: R.md },
+  keepBtn: { backgroundColor: C.accent, paddingHorizontal: 18, paddingVertical: 12, borderRadius: R.md },
   btnTxt: { color: C.onAccent, fontWeight: '800', fontSize: 13 },
   multiLabel: { color: C.textDim, fontSize: 11, fontWeight: '700', marginTop: 6, marginBottom: 8 },
   multiRow: { flexDirection: 'row', gap: 10, marginBottom: 10 },
-  multiBtn: { backgroundColor: C.surface, paddingVertical: 10, paddingHorizontal: 18, borderRadius: 12, alignItems: 'center', ...shadow.card },
+  multiBtn: { backgroundColor: C.surface, paddingVertical: 10, paddingHorizontal: 18, borderRadius: R.md, alignItems: 'center', ...shadow.card },
   multiBtnTxt: { color: C.accentDeep, fontSize: 14, fontWeight: '800' },
   multiBtnPrice: { color: C.textDim, fontSize: 11, marginTop: 2, fontWeight: '600' },
   multiBtnUsd: { color: C.success, fontSize: 11, fontWeight: '800', marginTop: 1 },
   batchContainer: { width: '100%', alignItems: 'center', marginTop: 10 },
   batchTitle: { color: C.text, fontSize: 15, fontWeight: '800', marginBottom: 12 },
-  batchSummary: { flexDirection: 'row', backgroundColor: C.surface, borderRadius: 14, padding: 14, justifyContent: 'space-around', width: '100%', marginTop: 18, ...shadow.card },
+  batchSummary: { flexDirection: 'row', backgroundColor: C.surface, borderRadius: R.md, padding: 14, justifyContent: 'space-around', width: '100%', marginTop: 18, ...shadow.card },
   batchStatBox: { alignItems: 'center' },
   batchCloseTxt: { color: C.textDim, fontSize: 12, marginTop: 14, textDecorationLine: 'underline' }
 });

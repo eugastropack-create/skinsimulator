@@ -5,7 +5,7 @@ import { getStickerPrice, getContainerPrice, getCapsuleTiers, rollTier } from '.
 import { InlineContentsPanel } from './components/ContentsModal';
 import BatchResultPanel from './components/BatchResultPanel';
 import { useI18n } from './i18n';
-import { C, shadow, rarityGlowStyle, webTransition, hexToRgba } from './theme';
+import { C, shadow, rarityGlowStyle, webTransition, hexToRgba, R } from './theme';
 
 // ============================================================
 // STICKER KAPSÜLÜ AÇILIŞI — "kâğıt yırtılma / kapsül patlama"
@@ -356,7 +356,7 @@ export default function CapsuleOpening({ capsule, onBack, balance, setBalance, s
 }
 
 const cap = StyleSheet.create({
-  stage: { width: '100%', maxWidth: 460, height: 250, alignItems: 'center', justifyContent: 'center', backgroundColor: C.surface, borderRadius: 22, position: 'relative', overflow: 'hidden', ...shadow.card },
+  stage: { width: '100%', maxWidth: 460, height: 250, alignItems: 'center', justifyContent: 'center', backgroundColor: C.surface, borderRadius: R.lg, position: 'relative', overflow: 'hidden', ...shadow.card },
   capsuleWrap: { width: CAPSULE_SIZE, height: CAPSULE_SIZE, position: 'relative' },
   half: { position: 'absolute', top: 0, width: HALF, height: CAPSULE_SIZE, overflow: 'hidden' },
   halfImg: { position: 'absolute', top: 0, width: CAPSULE_SIZE, height: CAPSULE_SIZE },
@@ -375,20 +375,20 @@ const cap = StyleSheet.create({
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 18, paddingVertical: 12 },
-  backBtn: { backgroundColor: C.surface, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, ...shadow.card },
+  backBtn: { backgroundColor: C.surface, paddingHorizontal: 14, paddingVertical: 8, borderRadius: R.pill, ...shadow.card },
   backText: { color: C.accentDeep, fontSize: 14, fontWeight: '800' },
   balanceText: { color: C.success, fontSize: 15, fontWeight: '800' },
   unlimitedText: { color: C.accentDeep, fontSize: 15, fontWeight: '800' },
-  statsPanel: { flexDirection: 'row', backgroundColor: C.surface, marginHorizontal: 18, borderRadius: 14, padding: 14, justifyContent: 'space-between', ...shadow.card },
+  statsPanel: { flexDirection: 'row', backgroundColor: C.surface, marginHorizontal: 18, borderRadius: R.md, padding: 14, justifyContent: 'space-between', ...shadow.card },
   statBox: { alignItems: 'center' },
   statLbl: { color: C.textDim, fontSize: 10, fontWeight: '700' },
   statVal: { color: C.text, fontSize: 14, fontWeight: '800', marginTop: 4 },
   content: { alignItems: 'center', padding: 20, paddingBottom: 60 },
   capsuleName: { color: C.text, fontSize: 20, fontWeight: '800', textAlign: 'center' },
   capsuleSub: { color: C.textDim, fontSize: 12, marginTop: 6, marginBottom: 16 },
-  errorText: { color: C.danger, fontSize: 13, fontWeight: '700', marginBottom: 12, backgroundColor: C.dangerSoft, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10 },
+  errorText: { color: C.danger, fontSize: 13, fontWeight: '700', marginBottom: 12, backgroundColor: C.dangerSoft, paddingHorizontal: 14, paddingVertical: 8, borderRadius: R.md },
   wonContainer: {
-    alignItems: 'center', marginTop: 4, padding: 24, backgroundColor: C.surface, borderRadius: 20, width: '100%', maxWidth: 400, overflow: 'hidden',
+    alignItems: 'center', marginTop: 4, padding: 24, backgroundColor: C.surface, borderRadius: R.lg, width: '100%', maxWidth: 400, overflow: 'hidden',
     shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.35, shadowRadius: 30, elevation: 16
   },
   priceTag: { position: 'absolute', top: 14, right: 16, color: C.success, fontSize: 17, fontWeight: '800' },
@@ -396,21 +396,21 @@ const styles = StyleSheet.create({
   wonItemName: { fontSize: 16, fontWeight: '800', marginTop: 12, textAlign: 'center' },
   wearText: { color: C.textDim, fontSize: 12, marginTop: 6, fontWeight: '600' },
   actionRow: { flexDirection: 'row', gap: 10, marginTop: 18, flexWrap: 'wrap', justifyContent: 'center' },
-  sellBtn: { backgroundColor: C.success, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 10 },
-  keepBtn: { backgroundColor: C.accent, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 10 },
+  sellBtn: { backgroundColor: C.success, paddingHorizontal: 18, paddingVertical: 12, borderRadius: R.md },
+  keepBtn: { backgroundColor: C.accent, paddingHorizontal: 18, paddingVertical: 12, borderRadius: R.md },
   btnTxt: { color: C.onAccent, fontWeight: '800', fontSize: 13 },
-  openBtn: { backgroundColor: C.accent, paddingVertical: 14, paddingHorizontal: 44, borderRadius: 14, alignItems: 'center', marginTop: 22, ...shadow.card, shadowColor: C.accent, shadowOpacity: 0.4 },
+  openBtn: { backgroundColor: C.accent, paddingVertical: 14, paddingHorizontal: 44, borderRadius: R.md, alignItems: 'center', marginTop: 22, ...shadow.card, shadowColor: C.accent, shadowOpacity: 0.4 },
   openBtnTxt: { color: C.onAccent, fontSize: 15, fontWeight: '800', letterSpacing: 0.6 },
   openBtnPrice: { color: C.onAccent, fontSize: 13, marginTop: 3, opacity: 0.9, fontWeight: '600' },
   multiLabel: { color: C.textDim, fontSize: 11, fontWeight: '700', marginTop: 20, marginBottom: 8 },
   multiRow: { flexDirection: 'row', gap: 10 },
-  multiBtn: { backgroundColor: C.surface, paddingVertical: 10, paddingHorizontal: 18, borderRadius: 12, alignItems: 'center', ...shadow.card },
+  multiBtn: { backgroundColor: C.surface, paddingVertical: 10, paddingHorizontal: 18, borderRadius: R.md, alignItems: 'center', ...shadow.card },
   multiBtnTxt: { color: C.accentDeep, fontSize: 14, fontWeight: '800' },
   multiBtnPrice: { color: C.textDim, fontSize: 11, marginTop: 2, fontWeight: '600' },
   batchContainer: { width: '100%', alignItems: 'center', marginTop: 4 },
   batchGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10, width: '100%' },
-  batchCard: { width: 76, backgroundColor: C.surface, borderRadius: 12, borderBottomWidth: 3, alignItems: 'center', padding: 6, position: 'relative', overflow: 'hidden', ...shadow.card },
+  batchCard: { width: 76, backgroundColor: C.surface, borderRadius: R.md, borderBottomWidth: 3, alignItems: 'center', padding: 6, position: 'relative', overflow: 'hidden', ...shadow.card },
   batchImg: { width: 58, height: 46, marginTop: 6 },
   batchPrice: { color: C.success, fontSize: 10, fontWeight: '800', marginTop: 4 },
-  batchSummary: { flexDirection: 'row', backgroundColor: C.surface, borderRadius: 14, padding: 14, justifyContent: 'space-around', width: '100%', marginTop: 18, ...shadow.card }
+  batchSummary: { flexDirection: 'row', backgroundColor: C.surface, borderRadius: R.md, padding: 14, justifyContent: 'space-around', width: '100%', marginTop: 18, ...shadow.card }
 });

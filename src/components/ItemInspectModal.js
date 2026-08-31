@@ -1,7 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, View, Image, TouchableOpacity, SafeAreaView, Modal, ScrollView } from 'react-native';
 import { useI18n } from '../i18n';
-import { C, shadow, rarityGlowStyle } from '../theme';
+import { C, shadow, rarityGlowStyle, R } from '../theme';
 
 // ============================================================
 // EŞYA İNCELEME (Inspect) MODALI
@@ -119,14 +119,14 @@ export default function ItemInspectModal({ visible, item, onClose, onSell, onAdd
 
 const s = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(38, 48, 61, 0.5)', justifyContent: 'center', alignItems: 'center', padding: 16 },
-  sheet: { backgroundColor: C.surface, borderRadius: 22, width: '100%', maxWidth: 470, maxHeight: '92%', overflow: 'hidden', ...shadow.modal },
+  sheet: { backgroundColor: C.surface, borderRadius: R.lg, width: '100%', maxWidth: 470, maxHeight: '92%', overflow: 'hidden', ...shadow.modal },
   header: { flexDirection: 'row', alignItems: 'flex-start', padding: 18, backgroundColor: C.surface, gap: 10, ...shadow.bar },
   title: { flex: 1, fontSize: 16, fontWeight: '800' },
   closeBtn: { width: 30, height: 30, borderRadius: 15, backgroundColor: C.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   closeTxt: { color: C.danger, fontSize: 13, fontWeight: '800' },
   body: { padding: 18, alignItems: 'center' },
   imageStage: {
-    width: '100%', height: 196, backgroundColor: C.surfaceAlt, borderRadius: 16,
+    width: '100%', height: 196, backgroundColor: C.surfaceAlt, borderRadius: R.md,
     alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden',
     shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 24, elevation: 10
   },
@@ -136,18 +136,18 @@ const s = StyleSheet.create({
   priceLbl: { color: C.textDim, fontSize: 10, marginTop: 2 },
   sectionLbl: { color: C.textDim, fontSize: 10, fontWeight: '800', alignSelf: 'flex-start', marginTop: 20, marginBottom: 8 },
   floatBarWrap: { width: '100%' },
-  floatBar: { flexDirection: 'row', height: 12, borderRadius: 6, overflow: 'hidden', position: 'relative', backgroundColor: C.surfaceSunken },
+  floatBar: { flexDirection: 'row', height: 12, borderRadius: R.md, overflow: 'hidden', position: 'relative', backgroundColor: C.surfaceSunken },
   floatMarker: { position: 'absolute', top: -4, width: 3, height: 20, backgroundColor: C.text, marginLeft: -1.5, borderRadius: 2 },
   floatScale: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 5 },
   floatScaleTxt: { color: C.textFaint, fontSize: 9 },
-  table: { width: '100%', marginTop: 20, backgroundColor: C.surfaceAlt, borderRadius: 14, padding: 14 },
+  table: { width: '100%', marginTop: 20, backgroundColor: C.surfaceAlt, borderRadius: R.md, padding: 14 },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 7, gap: 12 },
   rowLbl: { color: C.textDim, fontSize: 12, fontWeight: '600' },
   rowVal: { color: C.text, fontSize: 12, fontWeight: '800', flexShrink: 1, textAlign: 'right' },
   mono: { fontFamily: Platform_monospace() },
   actions: { flexDirection: 'row', gap: 10, padding: 16, backgroundColor: C.surface },
-  sellBtn: { flex: 1, backgroundColor: C.success, paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
-  tradeBtn: { flex: 1, backgroundColor: C.accent, paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  sellBtn: { flex: 1, backgroundColor: C.success, paddingVertical: 14, borderRadius: R.md, alignItems: 'center' },
+  tradeBtn: { flex: 1, backgroundColor: C.accent, paddingVertical: 14, borderRadius: R.md, alignItems: 'center' },
   actionTxt: { color: C.onAccent, fontWeight: '800', fontSize: 13 }
 });
 

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Modal, Pressable } from 'react-native';
 import { useI18n, LANGUAGES } from '../i18n';
-import { C, shadow, webTransition } from '../theme';
+import { C, shadow, webTransition, R } from '../theme';
 import { IconGlobe } from './Icons';
 
 // ============================================================
@@ -64,15 +64,15 @@ export default function LanguageSwitcher() {
 const s = StyleSheet.create({
   btn: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: C.surfaceAlt, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999
+    backgroundColor: C.surfaceAlt, paddingHorizontal: 12, paddingVertical: 8, borderRadius: R.pill
   },
   globe: { fontSize: 14 },
   code: { color: C.textSoft, fontSize: 12, fontWeight: '800', letterSpacing: 0.5 },
 
   backdrop: { flex: 1, backgroundColor: 'rgba(38, 48, 61, 0.35)', alignItems: 'center', justifyContent: 'center', padding: 20 },
-  sheet: { backgroundColor: C.surface, borderRadius: 18, padding: 14, width: '100%', maxWidth: 300, ...shadow.modal },
+  sheet: { backgroundColor: C.surface, borderRadius: R.lg, padding: 14, width: '100%', maxWidth: 300, ...shadow.modal },
   sheetTitle: { color: C.textDim, fontSize: 11, fontWeight: '800', letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 10, marginLeft: 6 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 12, borderRadius: 12 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 14, paddingVertical: 12, borderRadius: R.md },
   rowActive: { backgroundColor: C.accentSoft },
   flag: { fontSize: 18 },
   rowTxt: { flex: 1, color: C.text, fontSize: 14, fontWeight: '700' },

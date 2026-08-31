@@ -10,7 +10,7 @@ import BatchResultPanel from './components/BatchResultPanel';
 import { IconCase, IconKey } from './components/Icons';
 import Tooltip from './components/Tooltip';
 import { useI18n } from './i18n';
-import { C, shadow, rarityGlowStyle, hexToRgba } from './theme';
+import { C, shadow, rarityGlowStyle, hexToRgba, R, clipCut } from './theme';
 
 // react-native-web'de `useNativeDriver: true` desteklenmiyor (konsola "native
 // animated module missing" uyarısı basıp JS'e düşüyor) — bu geçiş bazı
@@ -182,7 +182,7 @@ const mini = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', width: '100%', marginBottom: 8 },
   rowLabel: { width: 26, alignItems: 'center' },
   rowLabelTxt: { color: C.textDim, fontSize: 11, fontWeight: 'bold' },
-  container: { height: MINI_ROW_HEIGHT, backgroundColor: C.bgAlt, overflow: 'hidden', borderRadius: 10, position: 'relative' },
+  container: { height: MINI_ROW_HEIGHT, backgroundColor: C.bgAlt, overflow: 'hidden', borderRadius: R.md, position: 'relative' },
   strip: { flexDirection: 'row', height: '100%', alignItems: 'center' },
   item: { width: MINI_ITEM_WIDTH, height: MINI_ROW_HEIGHT - 10, justifyContent: 'center', alignItems: 'center' },
   itemImg: { width: 52, height: 52 }
@@ -855,17 +855,17 @@ const CASE_MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 18, paddingVertical: 12 },
-  backBtn: { backgroundColor: C.surface, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, ...shadow.card },
+  backBtn: { backgroundColor: C.surface, paddingHorizontal: 14, paddingVertical: 8, borderRadius: R.pill, ...shadow.card },
   backText: { color: C.accentDeep, fontSize: 14, fontWeight: '800' },
   balanceText: { color: C.success, fontSize: 15, fontWeight: '800' },
   unlimitedText: { color: C.accentDeep, fontSize: 15, fontWeight: '800' },
-  statsPanel: { flexDirection: 'row', backgroundColor: C.surface, marginHorizontal: 18, borderRadius: 14, padding: 14, justifyContent: 'space-between', ...shadow.card },
+  statsPanel: { flexDirection: 'row', backgroundColor: C.surface, marginHorizontal: 18, borderRadius: R.md, padding: 14, justifyContent: 'space-between', ...shadow.card },
   statBox: { alignItems: 'center' },
   statLbl: { color: C.textDim, fontSize: 10, fontWeight: '700', letterSpacing: 0.3 },
   statVal: { color: C.text, fontSize: 14, fontWeight: '800', marginTop: 4 },
   content: { alignItems: 'center', padding: 20, paddingBottom: 60 },
   contentCompact: { paddingTop: 12 },
-  crateStage: { width: 140, height: 140, alignItems: 'center', justifyContent: 'center', backgroundColor: C.surface, borderRadius: 24, marginTop: 6, ...shadow.card },
+  crateStage: { width: 140, height: 140, alignItems: 'center', justifyContent: 'center', backgroundColor: C.surface, borderRadius: R.lg, marginTop: 6, ...shadow.card },
   crateImage: { width: 110, height: 110 },
   crateName: { color: C.text, fontSize: 20, fontWeight: '800', marginTop: 14, textAlign: 'center' },
   // --- FİYAT DÖKÜMÜ (kasa + anahtar) ---
@@ -878,21 +878,21 @@ const styles = StyleSheet.create({
   priceLbl: { color: C.textSoft, fontSize: 12.5, fontWeight: '700' },
   priceVal: { color: C.success, fontSize: 14, fontWeight: '800', fontFamily: CASE_MONO },
   priceSep: { width: 1, height: 20, backgroundColor: C.border },
-  compactHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10, backgroundColor: C.surface, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, ...shadow.card },
+  compactHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10, backgroundColor: C.surface, paddingHorizontal: 14, paddingVertical: 8, borderRadius: R.pill, ...shadow.card },
   compactCrateImg: { width: 32, height: 32 },
   compactCrateName: { color: C.text, fontSize: 13, fontWeight: '700', flexShrink: 1 },
-  roiPanel: { flexDirection: 'row', backgroundColor: C.surface, borderRadius: 14, paddingVertical: 12, paddingHorizontal: 18, marginBottom: 18, alignItems: 'center', gap: 18, ...shadow.card },
+  roiPanel: { flexDirection: 'row', backgroundColor: C.surface, borderRadius: R.md, paddingVertical: 12, paddingHorizontal: 18, marginBottom: 18, alignItems: 'center', gap: 18, ...shadow.card },
   roiBox: { alignItems: 'center' },
   roiDivider: { width: 1, height: 26, backgroundColor: C.border },
   roiLbl: { color: C.textDim, fontSize: 9, fontWeight: '700' },
   roiVal: { color: C.text, fontSize: 14, fontWeight: '800', marginTop: 3 },
-  errorText: { color: C.danger, fontSize: 13, fontWeight: '700', marginBottom: 10, backgroundColor: C.dangerSoft, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10 },
-  rouletteContainer: { width: '100%', height: 128, backgroundColor: C.bgAlt, overflow: 'hidden', marginVertical: 20, borderRadius: 16, position: 'relative' },
+  errorText: { color: C.danger, fontSize: 13, fontWeight: '700', marginBottom: 10, backgroundColor: C.dangerSoft, paddingHorizontal: 14, paddingVertical: 8, borderRadius: R.md },
+  rouletteContainer: { width: '100%', height: 128, backgroundColor: C.bgAlt, overflow: 'hidden', marginVertical: 20, borderRadius: R.md, position: 'relative' },
   rouletteSlider: { flexDirection: 'row', height: '100%', alignItems: 'center' },
-  rouletteItem: { width: ITEM_WIDTH, height: 102, justifyContent: 'center', alignItems: 'center', backgroundColor: C.surface, marginHorizontal: ITEM_MARGIN, borderRadius: 12, borderBottomWidth: 4, overflow: 'hidden', ...shadow.card },
+  rouletteItem: { width: ITEM_WIDTH, height: 102, justifyContent: 'center', alignItems: 'center', backgroundColor: C.surface, marginHorizontal: ITEM_MARGIN, borderRadius: R.md, borderBottomWidth: 4, overflow: 'hidden', ...shadow.card },
   rouletteImage: { width: 80, height: 78 },
   wonContainer: {
-    alignItems: 'center', marginVertical: 12, padding: 24, backgroundColor: C.surface, borderRadius: 20, minWidth: 260, overflow: 'hidden',
+    alignItems: 'center', marginVertical: 12, padding: 24, backgroundColor: C.surface, borderRadius: R.lg, minWidth: 260, overflow: 'hidden',
     shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.35, shadowRadius: 30, elevation: 16
   },
   priceTag: { position: 'absolute', top: 14, right: 16, color: C.success, fontSize: 17, fontWeight: '800' },
@@ -901,17 +901,21 @@ const styles = StyleSheet.create({
   wonItemName: { fontSize: 17, fontWeight: '800', marginTop: 12, textAlign: 'center' },
   wearText: { color: C.textDim, fontSize: 12, marginTop: 6, fontWeight: '600' },
   actionRow: { flexDirection: 'row', gap: 10, marginTop: 18, flexWrap: 'wrap', justifyContent: 'center' },
-  sellBtn: { backgroundColor: C.success, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 10 },
-  keepBtn: { backgroundColor: C.accent, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 10 },
+  sellBtn: { backgroundColor: C.success, paddingHorizontal: 18, paddingVertical: 12, borderRadius: R.md },
+  keepBtn: { backgroundColor: C.accent, paddingHorizontal: 18, paddingVertical: 12, borderRadius: R.md },
   btnTxt: { color: C.onAccent, fontWeight: '800', fontSize: 13 },
-  openBtn: { backgroundColor: C.accent, paddingVertical: 14, paddingHorizontal: 46, borderRadius: 14, alignItems: 'center', marginTop: 8, ...shadow.card, shadowColor: C.accent, shadowOpacity: 0.4 },
+  // ⚠️ KESİK KÖŞE (clip-path): yalnızca web + taktiksel temada. `clipCut`
+  // kutunun DIŞINA taşan her şeyi keser, bu yüzden SADECE içeriği kendi içinde
+  // kapalı öğelerde (butonlar) kullanılır — tooltip veya açılır liste barındıran
+  // kaplara UYGULANMAZ.
+  openBtn: { backgroundColor: C.accent, paddingVertical: 14, paddingHorizontal: 46, borderRadius: R.md, alignItems: 'center', marginTop: 8, ...shadow.card, shadowColor: C.accent, shadowOpacity: 0.4, ...clipCut(12) },
   openBtnTxt: { color: C.onAccent, fontSize: 16, fontWeight: '800', letterSpacing: 0.6 },
   openBtnPrice: { color: C.onAccent, fontSize: 13, marginTop: 3, opacity: 0.9, fontWeight: '600' },
   // --- ANİMASYONU GEÇ ---
   skipRow: {
     flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 16,
     backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
-    borderRadius: 6, paddingHorizontal: 14, paddingVertical: 10, maxWidth: 340
+    borderRadius: R.md, paddingHorizontal: 14, paddingVertical: 10, maxWidth: 340
   },
   checkbox: {
     width: 20, height: 20, borderRadius: 4,
@@ -925,21 +929,21 @@ const styles = StyleSheet.create({
 
   multiLabel: { color: C.textDim, fontSize: 11, fontWeight: '700', marginTop: 20, marginBottom: 8 },
   multiRow: { flexDirection: 'row', gap: 10, flexWrap: 'wrap', justifyContent: 'center' },
-  multiBtn: { backgroundColor: C.surface, paddingVertical: 10, paddingHorizontal: 18, borderRadius: 12, alignItems: 'center', ...shadow.card },
+  multiBtn: { backgroundColor: C.surface, paddingVertical: 10, paddingHorizontal: 18, borderRadius: R.md, alignItems: 'center', ...shadow.card },
   multiBtnTxt: { color: C.accentDeep, fontSize: 14, fontWeight: '800' },
   multiBtnPrice: { color: C.textDim, fontSize: 11, marginTop: 2, fontWeight: '600' },
   batchContainer: { width: '100%', alignItems: 'center', marginTop: 6 },
   batchHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', marginBottom: 12, gap: 8 },
   batchTitle: { color: C.text, fontSize: 14, fontWeight: '800', flexShrink: 1 },
-  instantShowBtn: { backgroundColor: C.accentSoft, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999 },
+  instantShowBtn: { backgroundColor: C.accentSoft, paddingHorizontal: 12, paddingVertical: 7, borderRadius: R.pill },
   instantShowTxt: { color: C.accentDeep, fontSize: 11, fontWeight: '800' },
   miniGrid: { flexDirection: 'column', alignItems: 'center', width: '100%' },
   batchGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10, width: '100%' },
-  batchCard: { width: 76, backgroundColor: C.surface, borderRadius: 12, borderBottomWidth: 3, alignItems: 'center', padding: 6, position: 'relative', overflow: 'hidden', ...shadow.card },
-  batchPlaceholder: { width: 76, height: 82, borderRadius: 12, backgroundColor: C.surfaceSunken },
+  batchCard: { width: 76, backgroundColor: C.surface, borderRadius: R.md, borderBottomWidth: 3, alignItems: 'center', padding: 6, position: 'relative', overflow: 'hidden', ...shadow.card },
+  batchPlaceholder: { width: 76, height: 82, borderRadius: R.md, backgroundColor: C.surfaceSunken },
   batchImg: { width: 58, height: 46, marginTop: 6 },
   batchPrice: { color: C.success, fontSize: 10, fontWeight: '800', marginTop: 4 },
   stTagSmall: { position: 'absolute', top: 4, left: 5, color: C.warn, fontSize: 8, fontWeight: '800', zIndex: 2 },
-  batchSummary: { flexDirection: 'row', backgroundColor: C.surface, borderRadius: 14, padding: 14, justifyContent: 'space-around', width: '100%', marginTop: 18, ...shadow.card },
+  batchSummary: { flexDirection: 'row', backgroundColor: C.surface, borderRadius: R.md, padding: 14, justifyContent: 'space-around', width: '100%', marginTop: 18, ...shadow.card },
   batchCloseTxt: { color: C.textDim, fontSize: 12, marginTop: 14, textDecorationLine: 'underline' }
 });

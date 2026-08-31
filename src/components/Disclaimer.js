@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Platform } from 'react-native';
 import { useI18n } from '../i18n';
-import { C, webTransition } from '../theme';
+import { C, webTransition, R } from '../theme';
 
 // ============================================================
 // SORUMLULUK REDDİ (DISCLAIMER) — kompakt, kapatılabilir
@@ -134,7 +134,7 @@ const s = StyleSheet.create({
 
   closeBtn: {
     position: 'absolute', top: 6, right: 6,
-    width: 22, height: 22, borderRadius: 6,
+    width: 22, height: 22, borderRadius: R.md,
     backgroundColor: C.surface, borderWidth: 1, borderColor: C.borderStrong,
     alignItems: 'center', justifyContent: 'center', zIndex: 2
   },

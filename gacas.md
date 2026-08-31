@@ -1229,6 +1229,86 @@ atmak isteyenler için yazılıdır.
 > yapılır (Ağ Katmanı Kuralı). Başarısızlıkta form `mailto:` yedeğine düşer ve
 > kullanıcının yazdığı metin **kaybolmaz**.
 
+### 6.2.36 CS2 / TAKTİKSEL KOYU TEMA (`src/theme.js`)
+
+> **Kullanıcı brief'i (30 Ağu 2026):** *"Ana iskeleti, layout yapısını ve menü
+> dizilimini KESİNLİKLE bozmadan sadece CSS ve UI/UX tarafında görsel
+> güncelleme."* — Bu yüzden hiçbir bileşenin JSX ağacı, hiçbir `flex` düzeni
+> ve menü sırası değişmedi; yalnızca **token değerleri** değişti.
+
+#### ⚠️ TEK SATIRLIK GERİ ALMA
+`src/theme.js` → `export const THEME = 'cs-dark' | 'light'`.
+Bu **tek sabit** paleti, köşe yarıçaplarını, fontları, aktif-durum görünümünü,
+gölgeleri ve gövde zeminini birlikte belirler. Eski açık tema **silinmedi**:
+`LIGHT_C` / `LIGHT_R` / `LIGHT_F` / `LIGHT_SHADOW` blokları olduğu gibi duruyor.
+
+`App.js` temayı DOM'a köprüler (`<html data-cs-theme="...">` + gövde zemini),
+böylece `public/index.html`'deki font kuralı da aynı anahtara bağlanır.
+
+> **Doğrulandı:** `THEME='light'` → gövde `#f4f7fb`, kart beyaz + 10 px yarıçap,
+> aktif sekme yeniden dolu mavi, Chakra Petch kullanan öğe sayısı **0**.
+> `THEME='cs-dark'` → gövde `#14181c`, aktif sekme mat gri + 2 px sarı çizgi,
+> 81 öğe Chakra Petch, 30 öğe monospace.
+
+#### Palet
+| Token | Açık tema | Taktiksel tema |
+|---|---|---|
+| `bg` | `#f4f7fb` | `#14181c` (antrasit) |
+| `surface` | `#ffffff` | `#21262c` (gunmetal) |
+| `surfaceAlt` | `#f2f6fb` | `#2a3037` (aktif durum zemini) |
+| `text` | `#26303d` | `#e8ecef` |
+| `accent` | `#38a3f1` (açık mavi) | `#f2c94c` (taktiksel sarı) |
+| `accentLine` | `transparent` | `#f2c94c` |
+
+⚠️ **NADİRLİK RENKLERİ (`RARITY`) TEMADAN BAĞIMSIZ.** Valve'in resmi paleti;
+kullanıcılar bu renkleri oyundan tanıyor.
+
+#### Aktif/seçili durum — kutu BOYANMAZ
+Kullanıcı isteği: *"aktif sekmelerde kutunun tamamını boyamak yerine ince
+parlak bir vurgu çizgisi."* `activeIndicator(side, width)` bunu tek yerden verir;
+**açık temada `null` döner**, yani eski "dolu mavi" görünüm kayıpsız korunur.
+
+| Yer | Görünüm |
+|---|---|
+| Ana menü sekmesi | mat gri zemin + **alta** 2 px sarı çizgi |
+| Sıralama çipleri | aynı |
+| Aktif drop havuzu kartı | **sola** 3 px sarı çizgi + hafif ton |
+| Rehber bölüm menüsü | **sola** 3 px çizgi |
+
+#### Köşeler
+`R` tokenları: açık temada `4/6/10/14/20/999`, taktiksel temada
+`0/2/3/4/4/3`. Sitedeki **68 sabit yarıçap** tokenlara bağlandı.
+⚠️ Otomatik dönüşüm **daireleri atladı**: `width: N, height: N, borderRadius: N/2`
+kalıbı bir dairedir (nokta, yuvarlak rozet, patlama halkası) — token'a çevirmek
+onları kareye dönüştürürdü.
+
+#### Kesik köşe (`clipCut`)
+⚠️ **YALNIZCA butonlarda.** `clip-path` kutunun DIŞINA taşan her şeyi keser;
+bilgi kutucuğu, açılır arama listesi veya nadirlik ışığı barındıran kaplara
+uygulanırsa onları da keser. Şu an: "KASAYI AÇ", Armory harcama butonu ve
+"START TERMINAL".
+
+#### Fontlar
+`Chakra Petch` (gövde) + `Rajdhani` (başlık/menü), Google Fonts'tan.
+⚠️ **MONOSPACE İSTİSNASI:** bakiye/sayaç rakamları tabular kalmalı, yoksa rakam
+genişliği değişince rozet yerinden oynar. RN-Web, stilde açıkça `fontFamily`
+verilen öğelere `r-fontFamily-<hash>` sınıfı basar; global font kuralı bu
+sınıfa sahip öğeleri `:not()` ile dışarıda bırakır.
+> **Bug (ölçüldü):** ilk denemede `[style*='monospace']` seçicisi kullanılmıştı;
+> RN-Web font-family'yi inline stille DEĞİL sınıfla verdiği için hiç eşleşmedi
+> ve tüm monospace sayılar Chakra Petch'e döndü.
+
+#### ⚠️ ROI bilgi kutusu (Tooltip) — `maxWidth` DEĞİL, açık `width`
+> **Kullanıcı:** *"ROI bilgilendirme kutusu çok dikey, tamamen siyah ve ekranın
+> büyük bir kısmını kaplıyor."*
+
+KÖK NEDEN: Baloncuk mutlak konumlu ve kapsayıcısı **çapa öğesi** (kart altındaki
+`statCell`, ~52 px). Mutlak konumlu bir kutunun "shrink-to-fit" genişliği
+kapsayıcının genişliğiyle **sınırlıdır**; `maxWidth` bu sınırı kaldırmaz.
+Ölçüldü: baloncuk **86 × 284 px** — metin neredeyse harf harf alt alta düşüyordu.
+Sabit `width: 280` verilince **280 × 82 px** oldu. Zemin de simsiyah yerine
+`rgba(11,15,19,0.92)` + ince kenarlık.
+
 ### 6.3 Önemli UI Bileşenleri
 - **Satış akışı:** TÜM satışlar (hover hızlı satış, inceleme modalı, toplu satış)
   tek bir `requestSell` → `SellConfirmModal` → `finalizeSell` yolundan geçer.
@@ -1339,6 +1419,18 @@ atmak isteyenler için yazılıdır.
   köşesinde yeşil** bir aralık gösterilir (`getContainerValueRange`): bu kutudan
   çıkabilecek **en ucuz → en değerli** ödül.
 
+- **⚠️ "Ücretsiz simülatör" ROZETİ KALDIRILDI (30 Ağu 2026):** Ücretsizlik
+  hâlâ **yapısal** bir garantidir (bu ekrana `setBalance`/`gameMode` hiç
+  geçirilmez); rozet yalnızca görsel bir bilgilendirmeydi. Metin `i18n.js`'te
+  `tradeup.freeBadge` olarak DURUYOR — geri isterseniz tek blok geri eklenir.
+
+- **⚠️ SONUÇ YER TUTUCUSU (30 Ağu 2026):** "Olası Çıktılar" başlığının altında,
+  sözleşme dolmadan da çıktıların NEREDE belireceğini gösteren şeffaf çerçeveli
+  boş kutucuklar var. Alanı fiziksel olarak rezerve ediyorlar, böylece sözleşme
+  tamamlanınca panel "zıplamıyor". **0/10'da da görünür** — kullanıcı ilk eşyayı
+  koymadan da alanı görmeli. `pointerEvents="none"`: tıklanabilir görünüp hiçbir
+  şey yapmamaları yanıltıcı olurdu.
+
 - **⚠️ SONUÇLAR YALNIZCA SÖZLEŞME TAMAMLANINCA GÖRÜNÜR (29 Ağu 2026):**
   Olası çıktılar, ihtimaller ve kâr tahmini artık ancak **tüm yuvalar dolunca**
   (standart tarif 10, Covert tarifi 5) ekrana gelir. O ana kadar panelde sadece
@@ -1424,6 +1516,11 @@ npm run ios      # iOS
 
 | Tarih | Değişiklik |
 |---|---|
+| **2026-08-30** | **CS2 TAKTİKSEL KOYU TEMA** — antrasit/gunmetal palet, taktiksel sarı vurgu, Chakra Petch + Rajdhani, keskin köşeler (68 yarıçap tokenlandı), butonlarda `clip-path` kesik köşe. **Tek satırlık geri alma:** `theme.js → THEME` |
+| **2026-08-30** | **Aktif durum kutuyu boyamıyor:** mat gri zemin + ince parlak sarı vurgu çizgisi (`activeIndicator`) |
+| **2026-08-30** | **Bug:** global font kuralı monospace sayıları da eziyordu (`[style*='monospace']` hiç eşleşmiyor — RN-Web sınıf basıyor). `:not([class*='r-fontFamily-'])` ile çözüldü |
+| **2026-08-30** | **Bug:** Tooltip `maxWidth` ile 86×284 px'lik dikey şerit oluyordu (mutlak konumlu kutu çapanın genişliğine sıkışıyor). Açık `width` ile 280×82 |
+| **2026-08-30** | Trade-Up: "ücretsiz simülatör" rozeti kaldırıldı, sonuç yer tutucusu eklendi |
 | **2026-08-30** | **Varsayılan mod SINIRSIZ** — site artık cüzdan kısıtı olmadan açılıyor |
 | **2026-08-30** | **Bilgi kutucukları (Tooltip)**: EV · ROI · Maks. Kazanç · Ort. Teklif · 5'te En İyi |
 | **2026-08-30** | **Görsel önizleme modalı** — içerik listelerinde ve koleksiyon detayında eşyaya tıklayınca büyük görsel |

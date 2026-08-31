@@ -33,7 +33,7 @@ import {
 import LanguageSwitcher from './src/components/LanguageSwitcher';
 import Disclaimer from './src/components/Disclaimer';
 import { I18nProvider, useI18n } from './src/i18n';
-import { C, shadow, webTransition } from './src/theme';
+import { C, shadow, webTransition, R, displayType, activeIndicator, clipCut, THEME } from './src/theme';
 
 // ============================================================
 // ARMORY ÖZEL EŞYASI (Limited Edition Item)
@@ -129,6 +129,23 @@ const LOGO_ASPECT = 9.82; // 1100 / 112
 // `App` yalnızca i18n sağlayıcısını kurar; asıl uygulama `AppShell` içindedir.
 // Bunun sebebi teknik: `useI18n()` ancak <I18nProvider> ALTINDA çalışır — aynı
 // bileşen hem sağlayıcı olup hem de kendi context'ini tüketemez.
+// ============================================================
+// TEMAYI DOM'A BİLDİR — tek satırlık geri alma anahtarını tamamlar
+// ============================================================
+// `src/theme.js` içindeki `THEME` sabiti JS tarafını yönetiyor; gövde zemini
+// ve font ise CSS'te (public/index.html). Bu kod ikisini BAĞLAR:
+//   • `<html data-cs-theme="...">` → index.html'deki font kuralı bu seçiciye
+//     bağlı, yani THEME 'light' olunca font da sistem fontuna döner.
+//   • gövde zemini doğrudan paletten yazılır.
+// Böylece temayı geri almak için GERÇEKTEN tek satır yetiyor.
+//
+// ⚠️ Yalnızca web: native'de `document` yoktur.
+if (Platform.OS === 'web' && typeof document !== 'undefined') {
+  document.documentElement.setAttribute('data-cs-theme', THEME);
+  document.documentElement.style.backgroundColor = C.bg;
+  document.body.style.backgroundColor = C.bg;
+}
+
 export default function App() {
   return (
     <I18nProvider>
@@ -1389,9 +1406,9 @@ const s = StyleSheet.create({
   sandboxTxt: { color: '#8b6ce0', fontSize: 10, fontWeight: '700', marginTop: 2 },
 
   ghostBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: C.surfaceAlt, borderWidth: 1, borderColor: C.border, paddingHorizontal: 11, paddingVertical: 6, borderRadius: 4 },
-  ghostBtnActive: { backgroundColor: C.accent, borderColor: C.accent },
+  ghostBtnActive: { backgroundColor: C.activeBg, borderColor: C.activeBorder, ...activeIndicator('bottom', 2) },
   ghostBtnTxt: { color: C.textSoft, fontSize: 11, fontWeight: '800', letterSpacing: 0.3 },
-  ghostBtnTxtActive: { color: C.onAccent },
+  ghostBtnTxtActive: { color: C.activeTxt },
   dangerGhostBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: C.dangerSoft, borderWidth: 1, borderColor: '#f3cfcf', paddingHorizontal: 11, paddingVertical: 6, borderRadius: 4 },
   dangerGhostTxt: { color: C.danger, fontSize: 11, fontWeight: '800', letterSpacing: 0.3 },
 
@@ -1428,21 +1445,21 @@ const s = StyleSheet.create({
   searchBox: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     width: '100%', maxWidth: 640, backgroundColor: C.surface,
-    paddingHorizontal: 18, paddingVertical: 13, borderRadius: 999, ...shadow.card
+    paddingHorizontal: 18, paddingVertical: 13, borderRadius: R.pill, ...shadow.card
   },
   searchBoxActive: { ...shadow.cardHover },
 
   searchInput: { flex: 1, color: C.text, fontSize: 15, outlineStyle: 'none', fontWeight: '500' },
   searchClearBtn: { paddingHorizontal: 4, paddingVertical: 2 },
   searchDropdown: {
-    width: '100%', maxWidth: 640, backgroundColor: C.surface, borderRadius: 18,
+    width: '100%', maxWidth: 640, backgroundColor: C.surface, borderRadius: R.lg,
     marginTop: 10, paddingVertical: 8, ...shadow.modal
   },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 10 },
   searchRowImg: { width: 40, height: 34 },
   searchRowName: { color: C.text, fontSize: 13, fontWeight: '700' },
   searchRowVia: { color: C.textDim, fontSize: 11, marginTop: 2 },
-  searchRowBadge: { paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999 },
+  searchRowBadge: { paddingHorizontal: 9, paddingVertical: 4, borderRadius: R.pill },
   searchEmpty: { color: C.textDim, fontSize: 13, textAlign: 'center', paddingVertical: 18 },
 
   // --- REKLAM ALANI (rezerve boşluk) ---
@@ -1454,16 +1471,19 @@ const s = StyleSheet.create({
   navWrapCompact: { marginTop: 12 },
   navRow: {
     flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 3,
-    backgroundColor: C.surface, padding: 5, borderRadius: 6,
+    backgroundColor: C.surface, padding: 5, borderRadius: R.md,
     borderWidth: 1, borderColor: C.border, ...shadow.card
   },
   navBtn: { paddingVertical: 9, paddingHorizontal: 18, borderRadius: 4 },
   navBtnNarrow: { paddingVertical: 7, paddingHorizontal: 11 },
-  navBtnActive: { backgroundColor: C.accent },
+  // ⚠️ AKTİF SEKME KUTUYU BOYAMAZ (30 Ağu 2026 — kullanıcı isteği).
+  // Koyu mat gri zemin + altta ince parlak vurgu çizgisi. Açık temada
+  // `activeIndicator()` null döner ve eski "dolu mavi" görünüm aynen kalır.
+  navBtnActive: { backgroundColor: C.activeBg, ...activeIndicator('bottom', 2) },
   // BÜYÜK HARF + harf aralığı: oyun menüsü tipografisi
-  navTxt: { color: C.textSoft, fontSize: 12.5, fontWeight: '800', letterSpacing: 0.9, textTransform: 'uppercase' },
+  navTxt: { color: C.textSoft, fontSize: 12.5, fontWeight: '700', letterSpacing: 0.9, textTransform: 'uppercase', ...displayType(1.6) },
   navTxtNarrow: { fontSize: 10.5, letterSpacing: 0.4 },
-  navTxtActive: { color: C.onAccent },
+  navTxtActive: { color: C.activeTxt },
 
   // --- İÇERİK / LİSTELER ---
   content: { flex: 1, marginTop: 22 },
@@ -1472,16 +1492,16 @@ const s = StyleSheet.create({
   loadingTxt: { color: C.textDim, fontSize: 13, marginTop: 14, fontWeight: '600' },
   sortRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, paddingHorizontal: 20, marginBottom: 12 },
   sortChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: C.surface, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, borderWidth: 1, borderColor: C.border, ...shadow.card },
-  sortChipActive: { backgroundColor: C.accent },
+  sortChipActive: { backgroundColor: C.activeBg, borderColor: C.activeBorder, ...activeIndicator('bottom', 2) },
   sortChipTxt: { color: C.textSoft, fontSize: 11, fontWeight: '800' },
-  sortChipTxtActive: { color: C.onAccent },
+  sortChipTxtActive: { color: C.activeTxt },
   resultCount: { color: C.textDim, fontSize: 11, fontWeight: '700', marginLeft: 'auto' },
   listContainer: { padding: 14, paddingBottom: 60 },
   columnWrapper: { gap: 14 },
   emptyTxt: { color: C.textDim, textAlign: 'center', marginTop: 40, fontSize: 13 },
 
   card: {
-    flex: 1, backgroundColor: C.surface, marginBottom: 14, borderRadius: 6,
+    flex: 1, backgroundColor: C.surface, marginBottom: 14, borderRadius: R.md,
     borderWidth: 1, borderColor: C.border,
     padding: 16, alignItems: 'center', position: 'relative', minHeight: 236
   },
@@ -1509,7 +1529,7 @@ const s = StyleSheet.create({
   statCellVal: { color: C.text, fontSize: 12, fontWeight: '800', fontFamily: MONO_FONT, marginTop: 1 },
   statDivider: { width: 1, height: 20, backgroundColor: C.border },
   cardFooter: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 'auto', paddingTop: 12 },
-  inspectBtn: { backgroundColor: C.surfaceAlt, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999 },
+  inspectBtn: { backgroundColor: C.surfaceAlt, paddingHorizontal: 12, paddingVertical: 6, borderRadius: R.pill },
   inspectTxt: { color: C.textSoft, fontSize: 10, fontWeight: '800' },
   openCountTxt: { color: C.warn, fontSize: 10, fontWeight: '800' },
 
@@ -1526,9 +1546,9 @@ const s = StyleSheet.create({
   clearInvBtnSm: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: C.dangerSoft, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 4, marginLeft: 'auto' },
   invToolbar: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, paddingHorizontal: 20, paddingBottom: 10 },
   invToolBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: C.surface, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 4, borderWidth: 1, borderColor: C.border, ...shadow.card },
-  invToolBtnActive: { backgroundColor: C.accent },
+  invToolBtnActive: { backgroundColor: C.activeBg, borderColor: C.activeBorder, ...activeIndicator('bottom', 2) },
   invToolTxt: { color: C.textSoft, fontSize: 11, fontWeight: '800' },
-  bulkSellBtn: { backgroundColor: C.success, paddingHorizontal: 16, paddingVertical: 9, borderRadius: 999 },
+  bulkSellBtn: { backgroundColor: C.success, paddingHorizontal: 16, paddingVertical: 9, borderRadius: R.pill },
   bulkSellDisabled: { backgroundColor: C.borderStrong },
   bulkSellTxt: { color: C.onAccent, fontSize: 11, fontWeight: '800' },
   // ENVANTER KARTI — CS envanter hücresi hissi: keskin köşe, ince kenarlık,
@@ -1545,6 +1565,6 @@ const s = StyleSheet.create({
   stTag: { position: 'absolute', top: 6, left: 7, color: C.warn, fontSize: 8, fontWeight: '800' },
   priceTagWrap: { position: 'absolute', top: 6, right: 8, flexDirection: 'row', alignItems: 'center', gap: 1, zIndex: 2 },
   priceTag: { color: C.success, fontSize: 10, fontWeight: '800', fontFamily: MONO_FONT },
-  sourceTag: { position: 'absolute', bottom: 6, right: 6, backgroundColor: C.surfaceAlt, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 999 },
+  sourceTag: { position: 'absolute', bottom: 6, right: 6, backgroundColor: C.surfaceAlt, paddingHorizontal: 6, paddingVertical: 2, borderRadius: R.pill },
   sourceTxt: { color: C.textDim, fontSize: 7, fontWeight: '800' }
 });

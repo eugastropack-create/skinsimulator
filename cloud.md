@@ -345,6 +345,24 @@ geçer. AB/UK trafiği hedefleniyorsa Gizlilik Politikası bölümünde belirtil
 gerekir. Başka bir sağlayıcıya (Formspree, Web3Forms, EmailJS veya kendi
 Cloudflare Worker'ınız) geçmek için değiştirilecek tek yer `contactConfig.js`.
 
+## 5.11 Google Fonts (Chakra Petch + Rajdhani)
+
+Taktiksel tema arayüz fontlarını `fonts.googleapis.com` üzerinden yükler
+(`public/index.html`). `preconnect` etiketleri ilk boyamayı hızlandırır,
+`display=swap` font inerken metnin görünmez kalmasını engeller.
+
+⚠️ **Yükleme başarısız olursa arayüz BOZULMAZ** — yığındaki sistem fontuna
+düşer (`--cs-font` değişkeninin sonundaki yedekler).
+
+⚠️ **GİZLİLİK:** Google Fonts isteği ziyaretçinin IP adresini Google'a taşır.
+AB/UK trafiği hedefleniyorsa fontları kendi sunucunuzdan (self-host) servis
+etmek daha güvenlidir; o durumda değiştirilecek yer yalnızca
+`public/index.html`'deki `<link>` etiketleri ve `--cs-font` değişkenidir.
+
+⚠️ **Temayı geri almak fontu da kapatır:** font kuralı
+`html[data-cs-theme='cs-dark']` seçicisine bağlıdır ve bu öznitelik
+`src/theme.js` → `THEME` sabitinden gelir.
+
 ## 6. Gizlilik ve Güvenlik
 
 - ✅ Kişisel veri toplanmaz, gönderilmez, saklanmaz.
@@ -363,6 +381,7 @@ Cloudflare Worker'ınız) geçmek için değiştirilecek tek yer `contactConfig.
 | **2026-08-29** | `react-native-svg` (15.15.4) bağımlılığı eklendi — arayüz simgeleri |
 | **2026-08-30** | Koleksiyonlar sekmesi eklendi — **yeni dış servis YOK**; zaten indirilen `collections.json` yeniden kullanılıyor. Aktif drop havuzu listesi elle bakımlı (`src/armoryData.js`) |
 | **2026-08-30** | **Google Search Console doğrulama meta etiketi** eklendi (`public/index.html`). Analytics'ten AYRI bir şeydir |
+| **2026-08-30** | **YENİ DIŞ SERVİS: Google Fonts** — taktiksel tema arayüz fontları (bkz. §5.11). Yükleme başarısız olursa sistem fontuna düşer |
 | **2026-08-30** | **YENİ DIŞ SERVİS: FormSubmit** — iletişim formu mesajlarını `eolyrics@gmail.com` adresine iletir (bkz. §5.10). İlk gönderimde aktivasyon gerekir |
 
 | Tarih | Değişiklik |

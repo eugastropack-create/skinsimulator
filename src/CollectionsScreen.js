@@ -6,7 +6,7 @@ import HoverCard from './components/HoverCard';
 import ImagePreviewModal from './components/ImagePreviewModal';
 import { IconSearch, IconClose, IconList, IconArrowDown, IconArrowUp } from './components/Icons';
 import { useI18n } from './i18n';
-import { C, shadow, webTransition, rarityTint } from './theme';
+import { C, shadow, webTransition, rarityTint, R, activeIndicator, displayType } from './theme';
 
 // ============================================================
 // KOLEKSİYONLAR (Collections) — göz atma / keşif ekranı
@@ -417,15 +417,15 @@ const cs = StyleSheet.create({
     backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
     paddingHorizontal: 12, paddingVertical: 8, borderRadius: 4, ...shadow.card
   },
-  sortChipOn: { backgroundColor: C.accent, borderColor: C.accent },
+  sortChipOn: { backgroundColor: C.activeBg, borderColor: C.activeBorder, ...activeIndicator('bottom', 2) },
   sortChipTxt: { color: C.textSoft, fontSize: 11, fontWeight: '800' },
-  sortChipTxtOn: { color: C.onAccent },
+  sortChipTxtOn: { color: C.activeTxt },
   resultCount: { color: C.textDim, fontSize: 11, fontWeight: '700', marginLeft: 'auto' },
 
   // --- BÖLÜM BAŞLIĞI (Aktif Havuz / Tüm Koleksiyonlar) ---
   // ⚠️ `width: '100%'` ızgara satırını tek başına kaplamasını sağlar.
   sectionHead: { width: '100%', paddingTop: 6, paddingBottom: 2 },
-  sectionTitle: { color: C.text, fontSize: 12, fontWeight: '800', letterSpacing: 1.1, textTransform: 'uppercase' },
+  sectionTitle: { color: C.text, fontSize: 12, fontWeight: '700', letterSpacing: 1.1, textTransform: 'uppercase', ...displayType(1.6) },
   sectionHint: { color: C.textDim, fontSize: 10.5, fontWeight: '600', marginTop: 3 },
 
   // --- KOLEKSİYON KARTI ---
@@ -440,7 +440,9 @@ const cs = StyleSheet.create({
     padding: 9, alignItems: 'center', position: 'relative'
   },
   // Aktif havuz kartı: vurgu rengiyle çerçevelenir ve zemini hafif maviye çalar.
-  cardActive: { borderColor: C.accent, borderWidth: 2, backgroundColor: C.accentSoft },
+  // Aktif drop havuzu kartı: kutunun tamamı boyanmaz; sol kenarda parlak
+  // vurgu çizgisi + hafif ton farkı yeterli.
+  cardActive: { borderColor: C.accentBorder, backgroundColor: C.accentSoft, ...activeIndicator('left', 3) },
   activeBadge: {
     position: 'absolute', top: 6, left: 6, zIndex: 2,
     flexDirection: 'row', alignItems: 'center', gap: 4,

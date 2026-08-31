@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, View, Platform, TouchableOpacity } from 'react-native';
-import { C, shadow } from '../theme';
+import { C, shadow, R, hexToRgba } from '../theme';
 
 // ============================================================
 // BİLGİ KUTUCUĞU (TOOLTIP)
@@ -24,7 +24,19 @@ import { C, shadow } from '../theme';
 
 const ARROW = 6;
 
-export default function Tooltip({ text, children, placement = 'top', maxWidth = 210, style }) {
+// ⚠️ `maxWidth` DEĞİL, AÇIK `width` — 30 Ağu 2026 KÖK NEDEN DÜZELTMESİ
+// ============================================================
+// Kullanıcı geri bildirimi: "ROI bilgilendirme kutusu çok dikey, tamamen
+// siyah ve ekranın büyük bir kısmını kaplıyor."
+//
+// KÖK NEDEN: Baloncuk mutlak konumlu ve kapsayıcısı ÇAPA öğesi (kart
+// altındaki `statCell`, genişliği ~52 px). Mutlak konumlu bir kutunun
+// "shrink-to-fit" genişliği kapsayıcının genişliğiyle SINIRLIDIR; `maxWidth`
+// vermek bu sınırı kaldırmaz. Ölçüldü: baloncuk 86 px genişlik × 284 px
+// yükseklik — yani metin harf harf alt alta düşüyordu.
+//
+// ÇÖZÜM: sabit bir `width` vermek. Artık çapanın genişliği önemsiz.
+export default function Tooltip({ text, children, placement = 'top', width = 280, style }) {
   const [open, setOpen] = useState(false);
   const isWeb = Platform.OS === 'web';
 
@@ -35,7 +47,7 @@ export default function Tooltip({ text, children, placement = 'top', maxWidth = 
       pointerEvents="none"
       style={[
         s.bubble,
-        { maxWidth },
+        { width },
         placement === 'top' ? s.bubbleTop : s.bubbleBottom
       ]}
     >
@@ -72,15 +84,20 @@ const s = StyleSheet.create({
     // Yatay ortalama: RN-Web'de `translateX(-50%)` yerine sabit bir kayma
     // kullanılamaz (kutucuk genişliği içeriğe göre değişiyor).
     transform: [{ translateX: '-50%' }],
-    backgroundColor: C.crtBg,
-    borderRadius: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    // ⚠️ SİMSİYAH DEĞİL, YARI ŞEFFAF: tam opak koyu bir blok altındaki
+    // içeriği tamamen yutuyor ve göz yoruyordu. Şeffaflık + ince kenarlık,
+    // kutunun "üstte yüzdüğünü" hissettiriyor.
+    backgroundColor: hexToRgba('#0b0f13', 0.92),
+    borderWidth: 1,
+    borderColor: C.borderStrong,
+    borderRadius: R.sm,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
     ...shadow.modal
   },
   bubbleTop: { bottom: '100%', marginBottom: ARROW + 2 },
   bubbleBottom: { top: '100%', marginTop: ARROW + 2 },
-  bubbleTxt: { color: '#ffffff', fontSize: 11, lineHeight: 16, fontWeight: '600', textAlign: 'center' },
+  bubbleTxt: { color: '#e8ecef', fontSize: 11, lineHeight: 15.5, fontWeight: '600', textAlign: 'center' },
 
   // Konuşma balonunun sivri ucu — border hilesiyle çizilen üçgen
   // (RN + RN-Web'de çalışan tek güvenilir yöntem).
@@ -96,6 +113,6 @@ const s = StyleSheet.create({
     borderRightColor: 'transparent',
     borderStyle: 'solid'
   },
-  arrowTop: { top: '100%', borderTopWidth: ARROW, borderTopColor: C.crtBg },
-  arrowBottom: { bottom: '100%', borderBottomWidth: ARROW, borderBottomColor: C.crtBg }
+  arrowTop: { top: '100%', borderTopWidth: ARROW, borderTopColor: 'rgba(11, 15, 19, 0.92)' },
+  arrowBottom: { bottom: '100%', borderBottomWidth: ARROW, borderBottomColor: 'rgba(11, 15, 19, 0.92)' }
 });

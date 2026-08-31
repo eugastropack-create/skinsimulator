@@ -73,7 +73,7 @@ Güncellenmesi gereken tipik bölümler:
 | Dosya | Sorumluluk | Dokunurken dikkat |
 |---|---|---|
 | `App.js` | Global state, kabuk (logo/arama/menü), veri yükleme, modal montajı | Tüm state buradan prop'lanır. Dış `ScrollView` **ekleme**. Başlık animasyonu **DOM sürücülüdür** (`paintHeader`): `transition` ekleme, rAF'a taşıma, ve **p=0'da stil yazma** (kırpma yapar) |
-| `src/theme.js` | **TEK renk/gölge/geçiş kaynağı** (açık tema) | Bileşenlere ham hex yazma. `RARITY` sabitleri Valve paleti — değiştirme |
+| `src/theme.js` | **TEK renk/köşe/font/gölge kaynağı** — iki tema (`cs-dark` / `light`) | `THEME` sabiti tek satırlık geri alma anahtarıdır; `LIGHT_*` bloklarını SİLME. Bileşenlere ham hex/yarıçap/font yazma — `C` / `R` / `F` kullan. `RARITY` Valve paleti, temadan bağımsız |
 | `assets/logo-skinsimulator.png` | Saydam zeminli logo (ana + mini çubuk) | En/boy oranı **9.82** — yüksekliği genişlikten türet, ikisini birden sabitleme |
 | `src/i18n.js` | **TEK metin kaynağı** (EN varsayılan / TR) | Arayüze sabit metin gömme — `t('anahtar')` kullan. Yeni metni **her iki dile** ekle |
 | `src/BlogScreen.js` | Rehber/Blog — **semantik HTML** (AdSense) | `role` prop'ları DOM etiketine çevrilir; `role="section"` diye bir eşleme YOK. Rolleri değiştirme |
@@ -219,6 +219,10 @@ Bu durumda:
 | `public/index.html` yorumunda kapanış `head`/`body` etiketi yazmak | Expo enjeksiyonu düz metin araması yapar; bundle script **yorumun içine** gömülür ve uygulama hiç açılmaz |
 | Klavye açılınca odaklanan alanın kaybolması | Varsayılan `resizes-visual` düzen viewport'unu küçültmez. `interactive-widget=resizes-content` + `scrollIntoView({block:'center'})` |
 | Aynı i18n anahtarını iki kez tanımlamak | JS'te **sonuncusu kazanır** — İngilizce blokta unutulmuş bir Türkçe satır tüm arayüzü bozar. Anahtar sayısı iki dilde eşit olmalı |
+| Mutlak konumlu kutuya `maxWidth` verip genişlemesini beklemek | "Shrink-to-fit" genişliği KAPSAYICIYLA sınırlıdır; `maxWidth` bunu kaldırmaz. Tooltip 86×284 px'lik dikey şerit oldu — açık `width` ver |
+| `clip-path`'i içeriği taşan bir kaba uygulamak | Tooltip, açılır liste ve nadirlik ışığı KESİLİR. Yalnızca butonlarda kullan |
+| Global CSS font kuralının monospace'i ezmesi | RN-Web `fontFamily`'yi sınıfla basar, inline stille değil. `:not([class*='r-fontFamily-'])` ile hariç tut |
+| Yarıçap toplu değiştirirken daireleri unutmak | `width: N, height: N, borderRadius: N/2` bir DAİREDİR; token'a çevirmek kareye dönüştürür |
 | Emoji'yi arayüz simgesi olarak kullanmak | Her platformda farklı çizilir ve renklendirilemez. `components/Icons.js` (SVG) kullan |
 | `FlatList numColumns` + bölüm başlığı | Başlık bir HÜCREYİ kaplar ve satırın ortasına düşer. Satırları elle grupla, satır başına tek öğe ver |
 | `useWindowDimensions().width` = 0 | Gizli/ilk karede 0 gelebilir; kart genişliği negatif çıkıp ızgara çöker — `Math.max(taban, …)` koy |
@@ -296,4 +300,5 @@ Bu durumda:
 | **2026-08-29** | Terminalde **zorunlu alım kaldırıldı**; ortak `BatchResultPanel`; kapsül yırtık çizgisi bug'ı; mobil klavye düzeltmesi |
 | **2026-08-29** | `public/index.html` (başlık + Google Analytics + viewport); **emoji → SVG simge seti** (`react-native-svg`); i18n yinelenen anahtar bug'ı |
 | **2026-08-30** | **Koleksiyonlar sekmesi** (sıralama + koleksiyon içi arama + Aktif Drop Havuzu rozeti); Trade-Up sonuçları sözleşme tamamlanana kadar gizlendi; Armory harcaması dolar karşılığıyla; "Send Selected" → "Send to Inventory" |
+| **2026-08-30** | **CS2 taktiksel koyu tema** (`theme.js` → `THEME` tek satırlık geri alma); aktif durum vurgu çizgisiyle; Chakra Petch/Rajdhani; keskin köşeler; Tooltip genişlik bug'ı |
 | **2026-08-30** | Varsayılan mod **Sınırsız**; **Tooltip** ve **görsel önizleme** bileşenleri; **hızlı iletişim modülü**; Koleksiyonlar kartları küçültüldü ve arama listeye taşındı; `Contents` kapatma butonu sola alındı |

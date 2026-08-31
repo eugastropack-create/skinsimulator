@@ -85,6 +85,84 @@
         flex: 1;
       }
     </style>
+
+    <!--
+      ============================================================
+      CS2 / TAKTİKSEL TEMA — FONT ve ZEMİN
+      ============================================================
+      ⚠️ GERİ ALMA: Bu bloğun tamamını yorum satırına alın (veya silin) ve
+      `src/theme.js` içindeki `THEME` sabitini `'light'` yapın; site anında
+      eski açık temaya ve sistem fontuna döner. İkisi birlikte çalışır:
+      bu dosya FONT DOSYALARINI ve gövde zeminini, theme.js ise palet /
+      köşe yarıçapı / aktif-durum görünümünü belirler.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Rajdhani:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <style id="cs-theme">
+      :root {
+        /* Tek değişken: tüm arayüz fontu buradan gelir. */
+        --cs-font: 'Chakra Petch', 'Rajdhani', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        --cs-bg: #14181c;
+      }
+
+      /* Sayfa zemini: parlak beyaz yerine koyu antrasit.
+         ⚠️ `html`/`body` de boyanmalı — aksi hâlde kaydırma sınırında ve
+         mobil "overscroll" sırasında altta beyaz bir şerit görünüyor. */
+      /* İlk boyama için varsayılan; uygulama açılınca App.js paletten gelen
+         gerçek değeri yazar (bkz. "TEMAYI DOM'A BİLDİR"). Bu satır yalnızca
+         bundle yüklenene kadarki beyaz parlamayı önler. */
+      html,
+      body,
+      #root {
+        background-color: var(--cs-bg);
+      }
+
+      /*
+        FONTUN TÜM ARAYÜZE UYGULANMASI
+        ------------------------------------------------------------
+        ⚠️ react-native-web her metin düğümüne kendi font-family SINIFINI
+        basar (özgüllük 0,0,1,0). Bunu geçmek için ID'li bir seçici gerekiyor
+        (`#root` → 0,1,0,0) — `!important` KULLANMIYORUZ, çünkü o zaman
+        aşağıdaki monospace istisnası da ezilirdi.
+      */
+      html[data-cs-theme='cs-dark'] #root div:not([class*='r-fontFamily-']),
+      html[data-cs-theme='cs-dark'] #root span:not([class*='r-fontFamily-']),
+      html[data-cs-theme='cs-dark'] #root p:not([class*='r-fontFamily-']),
+      html[data-cs-theme='cs-dark'] #root a:not([class*='r-fontFamily-']),
+      html[data-cs-theme='cs-dark'] #root button:not([class*='r-fontFamily-']),
+      html[data-cs-theme='cs-dark'] #root input:not([class*='r-fontFamily-']),
+      html[data-cs-theme='cs-dark'] #root textarea:not([class*='r-fontFamily-']),
+      html[data-cs-theme='cs-dark'] #root h1,
+      html[data-cs-theme='cs-dark'] #root h2,
+      html[data-cs-theme='cs-dark'] #root h3 {
+        font-family: var(--cs-font);
+      }
+
+      /*
+        ⚠️ MONOSPACE İSTİSNASI YUKARIDAKİ `:not()` İLE SAĞLANIYOR — BOZMAYIN.
+        ------------------------------------------------------------
+        Bakiye, kredi ve sayaç rakamları TABULAR olmalı: rakam genişliği
+        değişirse rozet her güncellemede yerinden oynar (bu proje bunu bir kez
+        yaşadı — bkz. components/Icons.js ValuePill).
+        react-native-web, stilde AÇIKÇA `fontFamily` verilen her öğeye
+        `r-fontFamily-<hash>` sınıfı basar. Yukarıdaki kural bu sınıfa sahip
+        öğeleri `:not()` ile DIŞARIDA bırakıyor, böylece onlar kendi
+        font-family'lerini korur.
+        ⚠️ İlk denemede `[style*='monospace']` kullanılmıştı; RN-Web font-family'yi
+        inline stille DEĞİL sınıfla verdiği için hiç eşleşmedi ve monospace
+        sayılar Chakra Petch'e dönüştü (ölçüldü).
+      */
+
+      /* Koyu zeminde tarayıcı kaydırma çubuğu da koyu olsun. */
+      html {
+        color-scheme: dark;
+      }
+    </style>
   </head>
 
   <body>

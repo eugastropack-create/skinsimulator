@@ -1,7 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, View, Image, TouchableOpacity, Modal, Pressable, useWindowDimensions } from 'react-native';
 import { useI18n } from '../i18n';
-import { C, shadow, rarityGlowStyle } from '../theme';
+import { C, shadow, rarityGlowStyle, R } from '../theme';
 import { IconClose } from './Icons';
 
 // ============================================================
@@ -84,7 +84,7 @@ const s = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', padding: 20
   },
   card: {
-    backgroundColor: C.surface, borderRadius: 6,
+    backgroundColor: C.surface, borderRadius: R.md,
     borderWidth: 1, borderColor: C.border,
     paddingHorizontal: 22, paddingTop: 44, paddingBottom: 22,
     alignItems: 'center', maxWidth: '100%', ...shadow.modal

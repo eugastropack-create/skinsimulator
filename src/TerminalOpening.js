@@ -5,7 +5,7 @@ import { getRealisticPrice, getCaseTiers, poolForTier, rollTier, STATTRAK_CHANCE
 import { InlineContentsPanel } from './components/ContentsModal';
 import { useToast, ToastBanner } from './components/Toast';
 import { useI18n } from './i18n';
-import { C, shadow, rarityGlowStyle, rarityTint, webTransition } from './theme';
+import { C, shadow, rarityGlowStyle, rarityTint, webTransition, R, clipCut } from './theme';
 
 // ============================================================
 // ARMORY TERMİNALİ — GERÇEK CS2 "TEKLİF SEÇİMİ" MEKANİĞİ
@@ -526,9 +526,9 @@ export default function TerminalOpening({ terminal, onBack, balance, setBalance,
 const MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
 
 const crt = StyleSheet.create({
-  deviceShell: { width: '100%', maxWidth: 560, backgroundColor: C.surface, borderRadius: 22, padding: 16, marginTop: 4, alignItems: 'center', ...shadow.card },
+  deviceShell: { width: '100%', maxWidth: 560, backgroundColor: C.surface, borderRadius: R.lg, padding: 16, marginTop: 4, alignItems: 'center', ...shadow.card },
   screen: {
-    width: '100%', height: 190, backgroundColor: C.crtBg, borderRadius: 14, overflow: 'hidden',
+    width: '100%', height: 190, backgroundColor: C.crtBg, borderRadius: R.md, overflow: 'hidden',
     position: 'relative', paddingHorizontal: 16, paddingTop: 12
   },
   scanlines: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 3 },
@@ -545,7 +545,7 @@ const crt = StyleSheet.create({
   barTrack: { width: '80%', height: 6, backgroundColor: C.crtBgDeep, borderRadius: 3, marginTop: 10, overflow: 'hidden' },
   barFill: { height: '100%', backgroundColor: C.crtText, borderRadius: 3 },
   flash: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#ffffff', zIndex: 6 },
-  slot: { width: '70%', height: 16, backgroundColor: C.surfaceSunken, borderRadius: 8, marginTop: 12, alignItems: 'center', justifyContent: 'center' },
+  slot: { width: '70%', height: 16, backgroundColor: C.surfaceSunken, borderRadius: R.sm, marginTop: 12, alignItems: 'center', justifyContent: 'center' },
   slotMouth: { width: '86%', height: 5, backgroundColor: C.borderStrong, borderRadius: 3 },
 
   // --- Teklif/teslimat aşamasında ekran uzar (aynı cihaz, daha büyük ekran) ---
@@ -573,13 +573,13 @@ const crt = StyleSheet.create({
 
   // --- CİHAZ ÜZERİNDEKİ AKSİYONLAR (ekranla aynı blok) ---
   actionBar: { flexDirection: 'row', gap: 10, marginTop: 12, width: '100%', justifyContent: 'center', flexWrap: 'wrap' },
-  skipBtn: { borderWidth: 1, borderColor: C.borderStrong, backgroundColor: C.surfaceAlt, paddingHorizontal: 26, paddingVertical: 12, borderRadius: 6 },
+  skipBtn: { borderWidth: 1, borderColor: C.borderStrong, backgroundColor: C.surfaceAlt, paddingHorizontal: 26, paddingVertical: 12, borderRadius: R.md },
   skipBtnTxt: { color: C.textSoft, fontSize: 13, fontWeight: '800', fontFamily: MONO },
   // "Alma / Kapat" — vazgeçme eylemi olduğu için uyarı tonunda ama saldırgan değil.
-  declineBtn: { borderWidth: 1, borderColor: C.danger, backgroundColor: C.surface, paddingHorizontal: 22, paddingVertical: 12, borderRadius: 6 },
+  declineBtn: { borderWidth: 1, borderColor: C.danger, backgroundColor: C.surface, paddingHorizontal: 22, paddingVertical: 12, borderRadius: R.md },
   declineBtnTxt: { color: C.danger, fontSize: 13, fontWeight: '800', fontFamily: MONO },
   // "Al" butonu ekranın mint rengini kasaya taşır — vurgu tek bir renkten gelir.
-  buyBtn: { backgroundColor: C.crtBg, borderWidth: 1, borderColor: C.crtText, paddingHorizontal: 26, paddingVertical: 12, borderRadius: 6 },
+  buyBtn: { backgroundColor: C.crtBg, borderWidth: 1, borderColor: C.crtText, paddingHorizontal: 26, paddingVertical: 12, borderRadius: R.md },
   buyBtnTxt: { color: C.crtText, fontSize: 13, fontWeight: '800', fontFamily: MONO }
 });
 
@@ -589,7 +589,7 @@ const oc = StyleSheet.create({
   panel: {
     width: '100%', maxWidth: 380,
     backgroundColor: C.crtBgDeep,
-    borderRadius: 6, borderWidth: 1,
+    borderRadius: R.md, borderWidth: 1,
     paddingHorizontal: 14, paddingVertical: 12,
     alignItems: 'center', position: 'relative', overflow: 'hidden'
   },
@@ -613,20 +613,24 @@ const oc = StyleSheet.create({
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 18, paddingVertical: 12 },
-  backBtn: { backgroundColor: C.surface, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, ...shadow.card },
+  backBtn: { backgroundColor: C.surface, paddingHorizontal: 14, paddingVertical: 8, borderRadius: R.pill, ...shadow.card },
   backText: { color: C.accentDeep, fontSize: 14, fontWeight: '800' },
   walletText: { color: C.success, fontSize: 15, fontWeight: '800' },
   unlimitedText: { color: C.accentDeep, fontSize: 15, fontWeight: '800' },
-  statsPanel: { flexDirection: 'row', backgroundColor: C.surface, marginHorizontal: 18, borderRadius: 14, padding: 14, justifyContent: 'space-around', ...shadow.card },
+  statsPanel: { flexDirection: 'row', backgroundColor: C.surface, marginHorizontal: 18, borderRadius: R.md, padding: 14, justifyContent: 'space-around', ...shadow.card },
   statBox: { alignItems: 'center' },
   statLbl: { color: C.textDim, fontSize: 10, fontWeight: '700' },
   statVal: { color: C.text, fontSize: 14, fontWeight: '800', marginTop: 4 },
   content: { alignItems: 'center', padding: 20, paddingBottom: 60 },
   terminalName: { color: C.text, fontSize: 20, fontWeight: '800', textAlign: 'center' },
   terminalSub: { color: C.textDim, fontSize: 12, marginTop: 6, marginBottom: 16 },
-  errorText: { color: C.danger, fontSize: 13, fontWeight: '700', marginBottom: 12, backgroundColor: C.dangerSoft, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10 },
+  errorText: { color: C.danger, fontSize: 13, fontWeight: '700', marginBottom: 12, backgroundColor: C.dangerSoft, paddingHorizontal: 14, paddingVertical: 8, borderRadius: R.md },
 
-  startBtn: { backgroundColor: C.accent, paddingVertical: 14, paddingHorizontal: 40, borderRadius: 12, alignItems: 'center', marginTop: 22, ...shadow.card, shadowColor: C.accent, shadowOpacity: 0.4 },
+  // ⚠️ KESİK KÖŞE (clip-path): yalnızca web + taktiksel temada. `clipCut`
+  // kutunun DIŞINA taşan her şeyi keser, bu yüzden SADECE içeriği kendi içinde
+  // kapalı öğelerde (butonlar) kullanılır — tooltip veya açılır liste barındıran
+  // kaplara UYGULANMAZ.
+  startBtn: { backgroundColor: C.accent, paddingVertical: 14, paddingHorizontal: 40, borderRadius: R.md, alignItems: 'center', marginTop: 22, ...shadow.card, shadowColor: C.accent, shadowOpacity: 0.4, ...clipCut(12) },
   startBtnTxt: { color: C.onAccent, fontSize: 15, fontWeight: '800', letterSpacing: 0.6 },
 
   stepHint: { color: C.textDim, fontSize: 11.5, fontWeight: '600', textAlign: 'center', marginTop: 14, maxWidth: 420 },

@@ -1,7 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Modal } from 'react-native';
 import { useI18n } from '../i18n';
-import { C, shadow } from '../theme';
+import { C, shadow, R } from '../theme';
 
 // ============================================================
 // SATIŞ ONAY MODALI
@@ -75,7 +75,7 @@ export default function SellConfirmModal({
 
 const s = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(38, 48, 61, 0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  box: { backgroundColor: C.surface, borderRadius: 20, padding: 26, width: '100%', maxWidth: 410, ...shadow.modal },
+  box: { backgroundColor: C.surface, borderRadius: R.lg, padding: 26, width: '100%', maxWidth: 410, ...shadow.modal },
   title: { color: C.text, fontSize: 17, fontWeight: '800', textAlign: 'center' },
   subject: { color: C.textSoft, fontSize: 13, textAlign: 'center', marginTop: 12 },
   total: { color: C.success, fontSize: 28, fontWeight: '800', textAlign: 'center', marginTop: 4 },
@@ -83,7 +83,7 @@ const s = StyleSheet.create({
   bold: { color: C.text, fontWeight: '800' },
   row: { flexDirection: 'row', gap: 10 },
   flex: { flex: 1 },
-  btn: { paddingVertical: 13, borderRadius: 12, alignItems: 'center', marginBottom: 9 },
+  btn: { paddingVertical: 13, borderRadius: R.md, alignItems: 'center', marginBottom: 9 },
   primaryBtn: { backgroundColor: C.success },
   secondaryBtn: { backgroundColor: C.accent },
   cancelBtn: { backgroundColor: C.surfaceAlt },

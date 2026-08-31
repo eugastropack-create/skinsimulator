@@ -6,7 +6,7 @@ import {
 } from '../prices';
 import { useI18n } from '../i18n';
 import ImagePreviewModal from './ImagePreviewModal';
-import { C, RARITY, shadow, rarityTint } from '../theme';
+import { C, RARITY, shadow, rarityTint, R } from '../theme';
 
 // Altın (Bıçak/Eldiven) kademesinde varsayılan olarak kaç eşya gösterilecek.
 // Bir kasada 60+ bıçak olabiliyor; hepsini birden basmak listeyi boğuyordu.
@@ -265,12 +265,12 @@ const s = StyleSheet.create({
   listRoot: { width: '100%' },
   tierSection: { marginBottom: 20 },
   tierHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 6 },
-  tierChip: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999 },
+  tierChip: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 12, paddingVertical: 6, borderRadius: R.pill },
   tierDot: { width: 9, height: 9, borderRadius: 5 },
   tierLabel: { fontSize: 12, fontWeight: '800', color: C.text },
   tierChance: { color: C.textDim, fontSize: 11, fontWeight: '700' },
   itemGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  itemCard: { width: 112, backgroundColor: C.surface, borderRadius: 12, borderTopWidth: 3, alignItems: 'center', padding: 9, ...shadow.card },
+  itemCard: { width: 112, backgroundColor: C.surface, borderRadius: R.md, borderTopWidth: 3, alignItems: 'center', padding: 9, ...shadow.card },
   itemCardCompact: { width: 100, padding: 7 },
   itemImg: { width: 82, height: 58 },
   itemImgCompact: { width: 74, height: 50 },
@@ -278,10 +278,10 @@ const s = StyleSheet.create({
   itemChance: { color: C.accentDeep, fontSize: 9, fontWeight: '800', marginTop: 2 },
   itemPrice: { color: C.success, fontSize: 9, fontWeight: '800', marginTop: 2, textAlign: 'center' },
   empty: { color: C.textDim, fontSize: 12, textAlign: 'center', paddingVertical: 20 },
-  moreBtn: { marginTop: 12, alignSelf: 'flex-start', backgroundColor: C.surface, paddingHorizontal: 16, paddingVertical: 9, borderRadius: 999, ...shadow.card },
+  moreBtn: { marginTop: 12, alignSelf: 'flex-start', backgroundColor: C.surface, paddingHorizontal: 16, paddingVertical: 9, borderRadius: R.pill, ...shadow.card },
   moreBtnTxt: { color: C.gold, fontSize: 11, fontWeight: '800' },
 
-  inlineWrap: { width: '100%', backgroundColor: C.surfaceAlt, borderRadius: 18, padding: 16, marginTop: 24 },
+  inlineWrap: { width: '100%', backgroundColor: C.surfaceAlt, borderRadius: R.lg, padding: 16, marginTop: 24 },
   inlineHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, gap: 8 },
   inlineTitle: { color: C.text, fontSize: 14, fontWeight: '800', flexShrink: 1 },
   inlineToggle: { color: C.accentDeep, fontSize: 11, fontWeight: '800' }

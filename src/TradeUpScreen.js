@@ -6,7 +6,7 @@ import { getRealisticPrice, POPULAR_SKIN_PRIORITY } from './prices';
 import { fetchSkins } from './api';
 import { useToast, ToastBanner } from './components/Toast';
 import { useI18n } from './i18n';
-import { C, RARITY, shadow } from './theme';
+import { C, RARITY, shadow, R, activeIndicator, displayType, clipCut } from './theme';
 import { IconLock } from './components/Icons';
 
 const NEXT_RARITY_NAME = { 'Consumer Grade': 'Industrial Grade', 'Industrial Grade': 'Mil-Spec Grade', 'Mil-Spec Grade': 'Restricted', 'Restricted': 'Classified', 'Classified': 'Covert' };
@@ -215,6 +215,40 @@ const card = StyleSheet.create({
 
 // SAĞ PANEL / ALT PANEL İÇERİĞİ (geniş ekranda sticky sidebar, dar ekranda
 // grid'in altında) — TEK bir yerden render edilip iki layout'ta da kullanılır.
+// ============================================================
+// SONUÇ YER TUTUCUSU (PLACEHOLDER)
+// ============================================================
+// ⚠️ Kullanıcı isteği (30 Ağu 2026): sözleşme tamamlanmadan da çıktıların
+// NEREDE belireceği anlaşılsın. Boş, şeffaf çerçeveli kutucuklar o alanı
+// fiziksel olarak rezerve ediyor; sözleşme dolunca aynı yerde gerçek çıktı
+// listesi basılıyor — panel "zıplamıyor".
+//
+// ⚠️ HEM 0/10'DA HEM 1-9/10'DA görünür: kullanıcı daha ilk eşyayı koymadan
+// da alanı görmeli. Bu yüzden `SummaryContent`in İKİ erken dönüş dalında da
+// çağrılıyor.
+//
+// ⚠️ `pointerEvents="none"`: tıklanabilir görünüp hiçbir şey yapmamaları
+// kullanıcıyı yanıltırdı.
+function OutcomePlaceholder({ t }) {
+  return (
+    <>
+      <Text style={ts.placeholderTitle}>{t('tradeup.outcomesPlaceholder')}</Text>
+      <View pointerEvents="none" style={ts.placeholderList}>
+        {Array.from({ length: 4 }).map((_, i) => (
+          <View key={i} style={ts.placeholderRow}>
+            <View style={ts.placeholderThumb} />
+            <View style={ts.placeholderLines}>
+              <View style={[ts.placeholderBar, { width: '62%' }]} />
+              <View style={[ts.placeholderBar, { width: '34%', marginTop: 5, height: 6 }]} />
+            </View>
+            <View style={[ts.placeholderBar, { width: 44, height: 9 }]} />
+          </View>
+        ))}
+      </View>
+    </>
+  );
+}
+
 // ⚠️ SONUÇLAR YALNIZCA SÖZLEŞME TAMAMLANINCA GÖRÜNÜR (29 Ağu 2026)
 // ============================================================
 // Eskiden 2. eşya konur konmaz olası çıktılar, yüzdeler ve kâr tahmini
@@ -229,7 +263,12 @@ const card = StyleSheet.create({
 // yuva kilitleme (isDeadEnd) ve İmzala butonunun etkinliği ona bağlı.
 function SummaryContent({ analysis, filledCount, requiredCount, ready, profitAmount, profitPct, t }) {
   if (!analysis) {
-    return <Text style={ts.emptyHint}>{t('tradeup.emptyHint')}</Text>;
+    return (
+      <View style={ts.lockedWrap}>
+        <Text style={ts.emptyHint}>{t('tradeup.emptyHint')}</Text>
+        <OutcomePlaceholder t={t} />
+      </View>
+    );
   }
   if (!ready) {
     return (
@@ -239,6 +278,8 @@ function SummaryContent({ analysis, filledCount, requiredCount, ready, profitAmo
         </View>
         <Text style={ts.progressCount}>{filledCount} / {requiredCount}</Text>
         <Text style={ts.lockedTxt}>{t('tradeup.lockedUntilFull', { n: requiredCount, done: filledCount })}</Text>
+
+        <OutcomePlaceholder t={t} />
       </View>
     );
   }
@@ -782,13 +823,15 @@ export default function TradeUpScreen({ inventory, setInventory, priceMap, allCo
           kullanıcıya hiçbir şey anlatmıyordu. Yerini, sağ paneldeki asıl
           işlevi adlandıran "Olası İhtimaller & Karlılık Oranı" başlığı aldı.
           Sıfırlama butonu da buradan çıkıp girdi kutucuğunun başlığına taşındı. */}
+      {/* ⚠️ "Ücretsiz simülatör — bakiyenizden düşülmez" ROZETİ KALDIRILDI
+          (30 Ağu 2026 — kullanıcı isteği). Ücretsizlik hâlâ YAPISAL bir
+          garantidir: bu ekrana `setBalance`/`gameMode` prop'ları hiç
+          geçirilmez, yani bakiyeye erişimi yoktur. Rozet yalnızca görsel bir
+          bilgilendirmeydi; kaldırılması davranışı DEĞİŞTİRMEZ.
+          Metin `i18n.js`'te `tradeup.freeBadge` olarak duruyor — geri
+          isterseniz yalnızca bu blok geri eklenir. */}
       <View style={ts.headerRow}>
         <Text style={ts.title}>{t('tradeup.title')}</Text>
-        {/* Ücretsizliği görünür kıl — kullanıcı "acaba para gidiyor mu?" diye
-            tereddüt etmesin. */}
-        <View style={ts.freeBadge}>
-          <Text style={ts.freeBadgeTxt}>{t('tradeup.freeBadge')}</Text>
-        </View>
       </View>
 
       <View style={ts.subTabRow}>
@@ -881,8 +924,8 @@ export default function TradeUpScreen({ inventory, setInventory, priceMap, allCo
             <Text style={{color: wonItem.displayColor, fontSize: 18, fontWeight: 'bold', textAlign: 'center'}}>{wonItem.name}</Text>
             <Text style={{color: C.text, fontSize: 14, marginVertical: 8}}>{t('tradeup.avgFloat')}: {wonItem.float.toFixed(4)} ({wonItem.wear})</Text>
             <View style={{flexDirection: 'row', gap: 10, marginTop: 15}}>
-              <TouchableOpacity style={{backgroundColor: C.accent, padding: 12, borderRadius: 10}} onPress={() => { setInventory(p => [...p, wonItem]); setWonItem(null); }}><Text style={{color: C.onAccent, fontWeight: '800'}}>{t('common.keep')}</Text></TouchableOpacity>
-              <TouchableOpacity style={{backgroundColor: C.success, padding: 12, borderRadius: 10}} onPress={discardResult}><Text style={{color: C.onAccent, fontWeight: '800'}}>{t('tradeup.closeResult')}</Text></TouchableOpacity>
+              <TouchableOpacity style={{backgroundColor: C.accent, padding: 12, borderRadius: R.md}} onPress={() => { setInventory(p => [...p, wonItem]); setWonItem(null); }}><Text style={{color: C.onAccent, fontWeight: '800'}}>{t('common.keep')}</Text></TouchableOpacity>
+              <TouchableOpacity style={{backgroundColor: C.success, padding: 12, borderRadius: R.md}} onPress={discardResult}><Text style={{color: C.onAccent, fontWeight: '800'}}>{t('tradeup.closeResult')}</Text></TouchableOpacity>
             </View>
             <TouchableOpacity style={{marginTop: 14}} onPress={startNewContract}>
               <Text style={{color: C.textDim, fontSize: 12, textDecorationLine: 'underline'}}>{t('tradeup.newContract')}</Text>
@@ -958,24 +1001,24 @@ const ts = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8, gap: 10, flexWrap: 'wrap' },
   title: { color: C.text, fontSize: 17, fontWeight: '800' },
-  freeBadge: { backgroundColor: C.successSoft, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 6 },
+  freeBadge: { backgroundColor: C.successSoft, paddingHorizontal: 12, paddingVertical: 7, borderRadius: R.md },
   freeBadgeTxt: { color: C.success, fontSize: 11, fontWeight: '800' },
-  clearBtn: { backgroundColor: C.dangerSoft, borderWidth: 1, borderColor: '#f3cfcf', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 6 },
+  clearBtn: { backgroundColor: C.dangerSoft, borderWidth: 1, borderColor: '#f3cfcf', paddingHorizontal: 12, paddingVertical: 7, borderRadius: R.md },
   clearTxt: { color: C.danger, fontSize: 11, fontWeight: '800' },
   unlimitedTxt: { color: C.accentDeep, fontSize: 13, fontWeight: '800' },
-  pickerSearch: { backgroundColor: C.surface, color: C.text, margin: 14, padding: 14, borderRadius: 999, fontSize: 14, outlineStyle: 'none', ...shadow.card },
+  pickerSearch: { backgroundColor: C.surface, color: C.text, margin: 14, padding: 14, borderRadius: R.pill, fontSize: 14, outlineStyle: 'none', ...shadow.card },
   pickerHint: { color: C.textDim, fontSize: 11, textAlign: 'center', marginBottom: 10 },
   pickerEmpty: { color: C.textDim, fontSize: 12, textAlign: 'center', marginTop: 30 },
-  excludedBanner: { margin: 14, padding: 14, backgroundColor: C.dangerSoft, borderLeftWidth: 4, borderLeftColor: C.danger, borderRadius: 6 },
+  excludedBanner: { margin: 14, padding: 14, backgroundColor: C.dangerSoft, borderLeftWidth: 4, borderLeftColor: C.danger, borderRadius: R.md },
   excludedBannerTxt: { color: '#a5453f', fontSize: 11, lineHeight: 17, fontWeight: '600' },
   excludedGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
-  excludedCard: { width: 72, alignItems: 'center', backgroundColor: C.surface, borderRadius: 10, padding: 7 },
+  excludedCard: { width: 72, alignItems: 'center', backgroundColor: C.surface, borderRadius: R.md, padding: 7 },
   excludedLock: { fontSize: 12, marginBottom: 2 },
   excludedName: { color: C.textDim, fontSize: 8, textAlign: 'center', marginTop: 2 },
   scrollContent: { padding: 10, paddingBottom: 20 },
 
   // GİRDİ PANELİ — belirgin, keskin hatlı kutucuk
-  gridPanel: { backgroundColor: C.surface, borderRadius: 6, borderWidth: 1, borderColor: C.borderStrong, padding: 10 },
+  gridPanel: { backgroundColor: C.surface, borderRadius: R.md, borderWidth: 1, borderColor: C.borderStrong, padding: 10 },
   gridPanelHeader: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingBottom: 8, marginBottom: 10, borderBottomWidth: 1, borderBottomColor: C.border, gap: 10
@@ -984,7 +1027,7 @@ const ts = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
   sidebar: { width: SIDEBAR_W, backgroundColor: C.surfaceAlt, borderLeftWidth: 1, borderLeftColor: C.borderStrong },
   sidebarScroll: { padding: 16 },
-  summaryPanel: { backgroundColor: C.surface, borderRadius: 8, borderWidth: 1, borderColor: C.borderStrong, padding: 16, marginTop: 14 },
+  summaryPanel: { backgroundColor: C.surface, borderRadius: R.sm, borderWidth: 1, borderColor: C.borderStrong, padding: 16, marginTop: 14 },
   summaryTitle: { color: C.text, fontSize: 14, fontWeight: '800', letterSpacing: 0.2 },
   summarySub: { color: C.textDim, fontSize: 11, fontWeight: '700', marginTop: 3, marginBottom: 14 },
   statGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
@@ -1016,22 +1059,35 @@ const ts = StyleSheet.create({
   progressFill: { height: '100%', backgroundColor: C.accent, borderRadius: 3 },
   progressCount: { color: C.text, fontSize: 22, fontWeight: '800', fontFamily: TU_MONO, marginTop: 10 },
   lockedTxt: { color: C.textDim, fontSize: 11.5, fontWeight: '600', textAlign: 'center', marginTop: 6, lineHeight: 17, maxWidth: 280 },
-  knifeBanner: { backgroundColor: '#fdf6dd', borderLeftWidth: 4, borderLeftColor: C.gold, borderRadius: 6, padding: 12, marginTop: 14 },
+
+  // --- SONUÇ YER TUTUCUSU ---
+  placeholderTitle: { color: C.textFaint, fontSize: 10, fontWeight: '800', letterSpacing: 1.2, textTransform: 'uppercase', marginTop: 20, marginBottom: 8 },
+  placeholderList: { width: '100%', gap: 6 },
+  placeholderRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 9,
+    borderWidth: 1, borderColor: C.border, borderStyle: 'dashed',
+    borderRadius: R.sm, paddingHorizontal: 8, paddingVertical: 8,
+    backgroundColor: 'transparent'
+  },
+  placeholderThumb: { width: 34, height: 24, borderRadius: R.xs, backgroundColor: C.surfaceAlt },
+  placeholderLines: { flex: 1, minWidth: 0 },
+  placeholderBar: { height: 8, borderRadius: R.xs, backgroundColor: C.surfaceAlt },
+  knifeBanner: { backgroundColor: '#fdf6dd', borderLeftWidth: 4, borderLeftColor: C.gold, borderRadius: R.md, padding: 12, marginTop: 14 },
   knifeBannerTxt: { color: '#8a6d08', fontSize: 10, lineHeight: 16, fontWeight: '600' },
   footer: { padding: 14, paddingBottom: 22, backgroundColor: C.surface, ...shadow.bar },
-  tradeBtn: { backgroundColor: C.accent, padding: 16, borderRadius: 8, alignItems: 'center' },
+  tradeBtn: { backgroundColor: C.accent, padding: 16, borderRadius: R.sm, alignItems: 'center' },
   tradeBtnDisabled: { backgroundColor: C.borderStrong },
   tradeBtnTxt: { color: C.onAccent, fontSize: 16, fontWeight: '800', letterSpacing: 0.6 },
-  pickerCard: { flex: 1, backgroundColor: C.surface, margin: 5, padding: 9, borderRadius: 8, borderWidth: 1, borderColor: C.border, alignItems: 'center', maxWidth: '31%' },
+  pickerCard: { flex: 1, backgroundColor: C.surface, margin: 5, padding: 9, borderRadius: R.sm, borderWidth: 1, borderColor: C.border, alignItems: 'center', maxWidth: '31%' },
   resultOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(38, 48, 61, 0.55)', justifyContent: 'center', alignItems: 'center', zIndex: 100 },
-  resultBox: { backgroundColor: C.surface, padding: 28, borderRadius: 10, borderWidth: 3, alignItems: 'center', width: '90%', maxWidth: 420, ...shadow.modal },
+  resultBox: { backgroundColor: C.surface, padding: 28, borderRadius: R.md, borderWidth: 3, alignItems: 'center', width: '90%', maxWidth: 420, ...shadow.modal },
   subTabRow: { flexDirection: 'row', paddingHorizontal: 14, paddingTop: 6, gap: 8 },
-  subTabBtn: { paddingVertical: 9, paddingHorizontal: 16, borderRadius: 6, backgroundColor: C.surface, borderWidth: 1, borderColor: C.borderStrong },
-  subTabBtnActive: { backgroundColor: C.accent },
+  subTabBtn: { paddingVertical: 9, paddingHorizontal: 16, borderRadius: R.md, backgroundColor: C.surface, borderWidth: 1, borderColor: C.borderStrong },
+  subTabBtnActive: { backgroundColor: C.activeBg, ...activeIndicator('bottom', 2) },
   subTabTxt: { color: C.textSoft, fontSize: 12, fontWeight: '800' },
   subTabTxtActive: { color: C.onAccent },
-  clearHistoryBtn: { backgroundColor: C.dangerSoft, margin: 14, marginBottom: 0, padding: 12, borderRadius: 12, alignItems: 'center' },
-  historyCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.surface, borderRadius: 8, borderWidth: 1, borderColor: C.border, padding: 12, marginBottom: 10 },
+  clearHistoryBtn: { backgroundColor: C.dangerSoft, margin: 14, marginBottom: 0, padding: 12, borderRadius: R.md, alignItems: 'center' },
+  historyCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.surface, borderRadius: R.sm, borderWidth: 1, borderColor: C.border, padding: 12, marginBottom: 10 },
   historyImg: { width: 58, height: 44 },
   historyName: { fontSize: 13, fontWeight: '800' },
   historyMeta: { color: C.textDim, fontSize: 10, marginTop: 2 },
