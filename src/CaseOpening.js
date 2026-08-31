@@ -7,10 +7,10 @@ import {
 } from './prices';
 import { InlineContentsPanel } from './components/ContentsModal';
 import BatchResultPanel from './components/BatchResultPanel';
-import { IconCase, IconKey } from './components/Icons';
+import { IconCase, IconKey, IconRefresh } from './components/Icons';
 import Tooltip from './components/Tooltip';
 import { useI18n } from './i18n';
-import { C, shadow, rarityGlowStyle, hexToRgba, R, clipCut } from './theme';
+import { C, shadow, rarityGlowStyle, hexToRgba, R, clipCut, displayType } from './theme';
 
 // react-native-web'de `useNativeDriver: true` desteklenmiyor (konsola "native
 // animated module missing" uyarısı basıp JS'e düşüyor) — bu geçiş bazı
@@ -236,6 +236,13 @@ export default function CaseOpening({ crate, onBack, balance, setBalance, invent
   const [sessionSpent, setSessionSpent] = useState(0);
   const [sessionWon, setSessionWon] = useState(0);
   const [sessionOpened, setSessionOpened] = useState(0);
+
+  // Elle sıfırlama — kullanıcı aynı kutuda yeni bir tur saymak istediğinde.
+  const resetSessionStats = () => {
+    setSessionSpent(0);
+    setSessionWon(0);
+    setSessionOpened(0);
+  };
 
   const [batch, setBatch] = useState(null); // { items, count, spending, totalWon, animated, revealed, miniAnims, rowWidth, sequential }
   const [revealedCount, setRevealedCount] = useState(0);
@@ -632,11 +639,32 @@ export default function CaseOpening({ crate, onBack, balance, setBalance, invent
         {gameMode === 'wallet' ? <Text style={styles.balanceText}>{t('common.wallet', { n: balance.toFixed(2) })}</Text> : <Text style={styles.unlimitedText}>{t('common.unlimitedMode')}</Text>}
       </View>
 
+      {/* ============================================================
+          KÜMÜLATİF İSTATİSTİK PANELİ
+          ============================================================
+          ⚠️ Bu rakamlar TEK BİR AÇILIŞA ait DEĞİL, bu kutuda yapılan TÜM
+          açılışların toplamıdır — 10x'i üst üste üç kez çeviren kullanıcı
+          30 kutunun toplamını görür. Sayaçlar `setX(prev => prev + n)` ile
+          birikir; asla `setX(n)` yazmayın.
+
+          İKİ SIFIRLAMA YOLU VAR:
+            1. ELLE — aşağıdaki sıfırlama butonu.
+            2. OTOMATİK — başka bir kutuya geçilince. Bunu App.js'teki
+               `key={subject.id}` sağlıyor (bileşen yeniden kurulur), burada
+               ayrıca bir kod YOKTUR. */}
       <View style={styles.statsPanel}>
-        <View style={styles.statBox}><Text style={styles.statLbl}>{t('common.opened')}</Text><Text style={styles.statVal}>{sessionOpened}</Text></View>
-        <View style={styles.statBox}><Text style={styles.statLbl}>{t('common.spent')}</Text><Text style={[styles.statVal, { color: C.danger }]}>-${sessionSpent.toFixed(2)}</Text></View>
-        <View style={styles.statBox}><Text style={styles.statLbl}>{t('common.won')}</Text><Text style={[styles.statVal, { color: C.success }]}>+${sessionWon.toFixed(2)}</Text></View>
+        <View style={styles.statBox}><Text style={styles.statLbl}>{t('common.totalOpened')}</Text><Text style={styles.statVal}>{sessionOpened}</Text></View>
+        <View style={styles.statBox}><Text style={styles.statLbl}>{t('common.totalSpent')}</Text><Text style={[styles.statVal, { color: C.danger }]}>-${sessionSpent.toFixed(2)}</Text></View>
+        <View style={styles.statBox}><Text style={styles.statLbl}>{t('common.totalWon')}</Text><Text style={[styles.statVal, { color: C.success }]}>+${sessionWon.toFixed(2)}</Text></View>
         <View style={styles.statBox}><Text style={styles.statLbl}>{t('common.profit')}</Text><Text style={[styles.statVal, { color: netProfit >= 0 ? C.success : C.danger }]}>{formatSignedMoney(netProfit)}</Text></View>
+
+        {/* Sayaç sıfırsa buton görünmez — basacak bir şey yokken yer kaplamasın. */}
+        {sessionOpened > 0 && (
+          <TouchableOpacity style={styles.statsResetBtn} onPress={resetSessionStats}>
+            <IconRefresh size={12} color={C.textDim} />
+            <Text style={styles.statsResetTxt}>{t('common.resetStats')}</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <ScrollView contentContainerStyle={[styles.content, batch && styles.contentCompact]}>
@@ -862,6 +890,12 @@ const styles = StyleSheet.create({
   backText: { color: C.accentDeep, fontSize: 14, fontWeight: '800' },
   balanceText: { color: C.success, fontSize: 15, fontWeight: '800' },
   unlimitedText: { color: C.accentDeep, fontSize: 15, fontWeight: '800' },
+  statsResetBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 9, paddingVertical: 5,
+    borderWidth: 1, borderColor: C.border, borderRadius: R.sm, backgroundColor: C.bgAlt
+  },
+  statsResetTxt: { color: C.textDim, fontSize: 10, fontWeight: '800', ...displayType(0.4) },
   statsPanel: { flexDirection: 'row', backgroundColor: C.surface, marginHorizontal: 18, borderRadius: R.md, padding: 14, justifyContent: 'space-between', ...shadow.card },
   statBox: { alignItems: 'center' },
   statLbl: { color: C.textDim, fontSize: 10, fontWeight: '700', letterSpacing: 0.3 },

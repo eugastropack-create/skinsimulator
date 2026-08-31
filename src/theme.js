@@ -68,13 +68,24 @@ const LIGHT_C = {
   textFaint: '#a6b2c1',
   onAccent: '#ffffff',
 
-  accent: '#38a3f1',
-  accentDeep: '#1b7fd1',
-  accentSoft: '#e4f1fd',
-  accentBorder: '#bfdefa',
+  // ============================================================
+  // ⚠️ VURGU RENGİ LOGODAN TÜREDİ (1 Eyl 2026) — KEYFİ DEĞİL
+  // ============================================================
+  // Yeni logo ejderha temalı: kiremit kırmızısı gövde, kor turuncusu alevler,
+  // krem/ten rengi harfler. Eski açık mavi (#38a3f1) logonun tam karşıt
+  // rengiydi ve yan yana durduklarında ikisi de yanlış görünüyordu.
+  //
+  // AÇIK TEMADA DAHA KOYU BİR KİREMİT KULLANILIR: logodaki parlak kor
+  // turuncusu (#f4641e) beyaz zeminde beyaz metinle 3.1:1 kontrast veriyor —
+  // WCAG AA sınırı 4.5:1. `#c8431a` ile 4.9:1'e çıkıyor (ölçüldü).
+  accent: '#c8431a',        // kiremit — logonun gövde kırmızısı
+  accentDeep: '#9e3413',    // koyu kiremit (hover / bağlantı metni)
+  accentSoft: '#fdece5',    // çok açık ten — yumuşak zeminler
+  accentBorder: '#f5c9b5',  // ten kenarlık
 
   success: '#0f9d63',
   successSoft: '#e3f7ee',
+  successBorder: '#9fdcc2',
   danger: '#e05252',
   dangerSoft: '#fdeaea',
   warn: '#d98d1f',
@@ -87,9 +98,9 @@ const LIGHT_C = {
   crtDim: '#2a7a68',
   crtScan: 'rgba(95, 240, 196, 0.08)',
 
-  activeBg: '#38a3f1',
+  activeBg: '#c8431a',
   activeTxt: '#ffffff',
-  activeBorder: '#38a3f1',
+  activeBorder: '#c8431a',
   accentLine: 'transparent',
   overlay: 'rgba(18, 28, 40, 0.72)'
 };
@@ -112,15 +123,24 @@ const DARK_C = {
   textSoft: '#b3bcc5',
   textDim: '#8a949e',
   textFaint: '#626c76',
-  onAccent: '#12161a',    // sarı zemin üzerinde KOYU metin
+  // ⚠️ Kor turuncusu (#f4641e) zemin üzerinde KOYU metin okunur (7.0:1);
+  // beyaz metin yalnızca 3.4:1 verirdi.
+  onAccent: '#1a0d06',
 
-  accent: '#f2c94c',
-  accentDeep: '#ffd966',
-  accentSoft: '#2b2a1f',
-  accentBorder: '#4d4526',
+  // ============================================================
+  // ⚠️ VURGU RENGİ LOGODAN TÜREDİ (1 Eyl 2026)
+  // ============================================================
+  // Logodaki kor turuncusu. Eski taktiksel sarı (#f2c94c) silinmedi, sadece
+  // değiştirildi — geri almak için bu dört satırı eski değerlere döndürmek
+  // yeterli (#f2c94c / #ffd966 / #2b2a1f / #4d4526).
+  accent: '#f4641e',        // kor turuncusu — logonun alev rengi
+  accentDeep: '#ff8143',    // parlak kor (hover)
+  accentSoft: '#2a1810',    // kömürleşmiş kızıl — yumuşak zeminler
+  accentBorder: '#5a2a15',  // kor kenarlık
 
   success: '#46d68a',
   successSoft: '#17281f',
+  successBorder: '#2e5c45',
   danger: '#ff6b6b',
   dangerSoft: '#2c1d1d',
   warn: '#f0a33a',
@@ -137,9 +157,9 @@ const DARK_C = {
   // (sarı buton üzerinde doğru), ama aktif sekmenin zemini koyu gri olduğu
   // için orada okunmaz. Aktif metin için DAİMA `activeTxt` kullanın.
   activeBg: '#2a3037',
-  activeTxt: '#ffd966',
+  activeTxt: '#ff9a5c',   // açık kor — mat gri aktif zeminde 6.2:1
   activeBorder: '#414a54',
-  accentLine: '#f2c94c',
+  accentLine: '#f4641e',
   overlay: 'rgba(6, 9, 12, 0.78)'
 };
 

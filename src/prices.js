@@ -28,7 +28,23 @@ import { getWearFromFloat, generateMockPrice, mockWearMultiplier, generateFloat,
 // (workflow 4 saatte bir tetikleniyor ama betik o hafta zaten güncellendiyse
 // atlıyor). Pratikte veri birkaç günlük ile birkaç haftalık arasında olabilir.
 // Gerçek piyasa fiyatlarıdır ama ANLIK değildir.
-const LIVE_PRICE_URL =
+// ⚠️ BİRİNCİL KAYNAK: KENDİ BESLEMEMİZ (1 Eyl 2026'dan itibaren)
+// `.github/workflows/update-prices.yml` 2 SAATTE BİR çalışıp Skinport +
+// Steam verisini birleştiriyor, tek listelemelik gürültüyü onarıyor ve
+// sonucu `prices-data` dalına yazıyor. Ayrıntı: `scripts/update-prices.mjs`.
+//
+// NEDEN GEREKLİYDİ: ham Steam beslemesinde skinlerin **%42'sinin** aşınma
+// fiyat eğrisi kırıktı (aşınma kötüleşirken fiyat YÜKSELİYORDU) — çünkü
+// Steam `sell_price` o anki EN UCUZ LİSTELEMEDİR ve ince bantlarda tek bir
+// kişinin fiyatıdır. Kendi beslememizde bu oran **%12**. Ölçülen örnek:
+// USP-S | Bleeding Edge (Well-Worn) $3.91 → $1.02.
+const OWN_PRICE_URL =
+  'https://raw.githubusercontent.com/eugastropack-create/skinsimulator/prices-data/latest.json';
+
+// ⚠️ YEDEK: Kendi beslememiz henüz yayınlanmadıysa (workflow ilk kez
+// çalışmadan önce) veya erişilemezse ham ByMykel kaynağına düşülür.
+// Uygulama böylece HER durumda fiyatlı açılır.
+const FALLBACK_PRICE_URL =
   'https://raw.githubusercontent.com/ByMykel/counter-strike-price-tracker/main/static/latest.json';
 
 // ⚠️ BİRİM: Kaynak fiyatları CENT olarak verir (toplayıcı betikte doğrudan
@@ -37,32 +53,58 @@ const LIVE_PRICE_URL =
 // fiyatları 100 KAT şişirir.
 const CENTS_TO_USD = 100;
 
+// ⚠️ İKİ KAYNAK AYNI ŞEMAYI KULLANMAZ:
+//   kendi beslememiz  → DOLAR  (onarım aşamasında zaten bölünüyor)
+//   ByMykel yedeği    → CENT   (100'e bölmek ZORUNLU)
+// Bu yüzden birim, dosyanın kendi metadata'sından okunuyor; sabit varsayım
+// yapmak yedek devreye girdiğinde tüm fiyatları 100 kat şişirirdi.
+const loadPriceTable = async (url, label) => {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${label} HTTP ${res.status}`);
+  const raw = await res.json();
+  return raw;
+};
+
 export const fetchLivePrices = async () => {
+  let raw = null;
+  let usedFallback = false;
   try {
-    const res = await fetch(LIVE_PRICE_URL);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const raw = await res.json();
+    raw = await loadPriceTable(OWN_PRICE_URL, 'kendi besleme');
+  } catch (e) {
+    console.log('⚠️ Kendi fiyat beslemesi yok, ByMykel yedeğine düşülüyor:', e.message);
+    usedFallback = true;
+  }
+
+  try {
+    if (!raw) raw = await loadPriceTable(FALLBACK_PRICE_URL, 'ByMykel');
 
     // Dosya yapısı: { metadata: {...}, prices: { "<market_hash_name>": <cent> } }
     // Yapı ileride düzleşirse diye her iki biçimi de kabul ediyoruz.
     const table = raw?.prices && typeof raw.prices === 'object' ? raw.prices : raw;
 
+    // Kendi beslememiz `currency: 'USD'` yazar ve değerler zaten DOLARDIR.
+    // Ham ByMykel'de bu alan yoktur ve değerler CENT'tir.
+    const divisor = usedFallback || raw?.metadata?.currency !== 'USD' ? CENTS_TO_USD : 1;
+
     const normalized = {};
     Object.keys(table).forEach(key => {
-      const cents = table[key];
+      const val = table[key];
       // Bazı anahtarlar iç isimlerdir (#CSGO_crate_...) — onları da alıyoruz,
       // zararsızlar: uygulama yalnızca market_hash_name ile sorgu yapıyor.
-      if (typeof cents === 'number' && cents > 0) {
-        normalized[key] = cents / CENTS_TO_USD;
+      if (typeof val === 'number' && val > 0) {
+        normalized[key] = val / divisor;
       }
     });
 
     if (Object.keys(normalized).length === 0) throw new Error('Beklenmeyen veri formatı (0 eşya bulundu)');
 
     const updatedAt = raw?.metadata?.updated_at;
+    const repaired = raw?.metadata?.repaired;
     console.log(
       `✅ Canlı fiyat verisi yüklendi: ${Object.keys(normalized).length} eşya` +
-      (updatedAt ? ` (kaynak güncelleme: ${new Date(updatedAt).toLocaleDateString()})` : '')
+      (usedFallback ? ' [YEDEK: ham ByMykel]' : ' [kendi besleme, 2 saatlik]') +
+      (updatedAt ? ` (güncelleme: ${new Date(updatedAt).toLocaleString()})` : '') +
+      (repaired ? ` · ${repaired} fiyat onarıldı` : '')
     );
     return normalized;
   } catch (e) {

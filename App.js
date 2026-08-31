@@ -29,7 +29,7 @@ import {
   IconSearch, IconInventory, IconClose, IconCheck, IconInfinity, IconRefresh,
   IconBook, IconList, IconChart, IconGem, IconTag, IconTrend, IconClock,
   IconArrowDown, IconArrowUp, IconSelect, IconTrash, IconSell,
-  IconSun, IconMoon
+  IconSun, IconMoon, IconSwap
 } from './src/components/Icons';
 import LanguageSwitcher from './src/components/LanguageSwitcher';
 import Disclaimer from './src/components/Disclaimer';
@@ -866,6 +866,7 @@ function AppShell() {
     if (kind === 'terminal') {
       return (
         <TerminalOpening
+          key={subject.id}
           terminal={subject} onBack={back}
           balance={balance} setBalance={setBalance}
           setInventory={setInventory}
@@ -873,11 +874,26 @@ function AppShell() {
         />
       );
     }
-    if (kind === 'sticker') return <CapsuleOpening capsule={subject} {...common} />;
-    if (kind === 'souvenir') return <CaseOpening crate={subject} mode="souvenir" inventory={inventory} {...common} />;
+    // ============================================================
+    // ⚠️ `key={subject.id}` — OTOMATİK İSTATİSTİK SIFIRLAMA
+    // ============================================================
+    // Kullanıcı isteği (1 Eyl 2026): "başka bir kutu açmaya başlarsa önceki
+    // kutuya ait istatistikler otomatik sıfırlansın."
+    //
+    // KÖK NEDEN: `key` yokken React, A kasasından B kasasına geçildiğinde
+    // AYNI bileşen örneğini yeniden kullanıyordu (ikisi de `kind === 'case'`).
+    // `sessionSpent` / `sessionWon` / `sessionOpened` o örneğin state'i olduğu
+    // için önceki kutunun rakamları yenisine DEVREDİYORDU.
+    //
+    // `key` eklendiğinde React örneği söküp yeniden kuruyor; sıfırlama
+    // YAPISAL hâle geliyor — ayrıca bir `useEffect` yazmaya gerek yok ve
+    // ileride yeni bir sayaç eklenirse onu sıfırlamayı unutmak imkânsız.
+    if (kind === 'sticker') return <CapsuleOpening key={subject.id} capsule={subject} {...common} />;
+    if (kind === 'souvenir') return <CaseOpening key={subject.id} crate={subject} mode="souvenir" inventory={inventory} {...common} />;
     if (kind === 'armory') {
       return (
         <ArmoryOpening
+          key={subject.id}
           collection={subject} onBack={back}
           balance={balance} setBalance={setBalance}
           stars={stars} setStars={setStars}
@@ -886,7 +902,7 @@ function AppShell() {
         />
       );
     }
-    return <CaseOpening crate={subject} mode="case" inventory={inventory} {...common} />;
+    return <CaseOpening key={subject.id} crate={subject} mode="case" inventory={inventory} {...common} />;
   };
 
   // Para + kredi göstergeleri. Kırılım noktasına göre farklı satırda
@@ -985,14 +1001,29 @@ function AppShell() {
       <View style={[s.utilityBar, isNarrow ? s.utilityBarNarrow : s.utilityBarWide]}>
         {/* ---------- SOL: mod anahtarı ---------- */}
         <View style={[s.utilityRow, isNarrow && s.utilityRowNarrow]}>
-          <TouchableOpacity
-            style={[s.modeBtn, gameMode !== 'wallet' && s.modeBtnUnlimited]}
-            onPress={() => setGameMode(m => m === 'wallet' ? 'unlimited' : 'wallet')}
-          >
-            <Text style={[s.modeBtnTxt, gameMode !== 'wallet' && s.modeBtnTxtUnlimited]}>
-              {gameMode === 'wallet' ? t('util.wallet') : t('util.unlimited')}
-            </Text>
-          </TouchableOpacity>
+          {/* ============================================================
+              MOD ANAHTARI — TIKLANABİLİR OLDUĞU GÖRÜNMELİ
+              ============================================================
+              Kullanıcı geri bildirimi (1 Eyl 2026): "unlimited mod yazan
+              alanın tıklanabilir olduğu anlaşılmıyor."
+              KÖK NEDEN: kutu yalnızca bir rozete benziyordu — ne ikon, ne
+              imleç değişimi, ne de açıklama vardı. Üç ipucu birden eklendi:
+                1. Takas ikonu (iki yönlü ok) — eylemi gösterir
+                2. Hover'da açıklama kutucuğu — ne olacağını yazar
+                3. Web'de `cursor: pointer` — tıklanabilirliği doğrular */}
+          <Tooltip text={t('util.modeHint')} placement="bottom">
+            <TouchableOpacity
+              style={[s.modeBtn, gameMode !== 'wallet' && s.modeBtnUnlimited]}
+              onPress={() => setGameMode(m => m === 'wallet' ? 'unlimited' : 'wallet')}
+              accessibilityRole="button"
+              accessibilityLabel={t('util.modeHint')}
+            >
+              <Text style={[s.modeBtnTxt, gameMode !== 'wallet' && s.modeBtnTxtUnlimited]}>
+                {gameMode === 'wallet' ? t('util.wallet') : t('util.unlimited')}
+              </Text>
+              <IconSwap size={12} color={gameMode !== 'wallet' ? C.success : C.accentDeep} strokeWidth={2.4} />
+            </TouchableOpacity>
+          </Tooltip>
 
           {/* MOBİLDE para/kredi 1. satırda, modun sağında durur — böylece
               "cüzdan modu her zaman en üstte" ve para sağda olur. */}
@@ -1429,10 +1460,15 @@ const s = StyleSheet.create({
 
   // MOD ANAHTARI — en solda, tek başına, durumu renkten okunuyor
   modeBtn: {
+    // ⚠️ `flexDirection: 'row'` ZORUNLU — takas ikonu metnin YANINDA durmalı.
+    flexDirection: 'row', alignItems: 'center', gap: 6,
     backgroundColor: C.accentSoft, borderWidth: 1, borderColor: C.accentBorder,
-    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 4
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: R.xs,
+    ...(Platform.OS === 'web' ? { cursor: 'pointer' } : null)
   },
-  modeBtnUnlimited: { backgroundColor: C.successSoft, borderColor: '#9fdcc2' },
+  // ⚠️ Ham hex yerine token (Altın Kural 8) — aksi hâlde aydınlık/karanlık
+  // tema geçişinde bu kenarlık sabit kalıp yanlış kontrast veriyordu.
+  modeBtnUnlimited: { backgroundColor: C.successSoft, borderColor: C.successBorder },
   modeBtnTxt: { color: C.accentDeep, fontSize: 11, fontWeight: '800', letterSpacing: 0.8 },
   modeBtnTxtUnlimited: { color: C.success },
 

@@ -39,3 +39,6 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Fiyat boru hattinin yerel ciktisi (GitHub Actions prices-data dalina yazar)
+out/

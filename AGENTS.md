@@ -86,6 +86,8 @@ Güncellenmesi gereken tipik bölümler:
 | `src/components/LanguageSwitcher.js` | Globe ikonlu EN/TR değiştirici | Menü `Modal` ile açılır (RN-Web'de mutlak konumlu menü kırpılıyor) |
 | `src/components/Disclaimer.js` | Yasal sorumluluk reddi (footer) — **kapatılabilir** | **Üç maddeyi de kaldırma** — yasal bilgilendirme. `compact` tek satıra iner. Kapatma `localStorage`'a yazılır; `Platform` + `try/catch` korumalarını **silme** |
 | `src/api.js` | **Tüm** ByMykel CSGO-API çağrıları + `crates.json` önbelleği | Bileşen içine doğrudan `fetch` yazma. Önbelleği kaldırma — 8 MB'lık dosya 4 kez inerdi |
+| `scripts/update-prices.mjs` | Fiyat boru hattı: Skinport + Steam birleştirme, güven puanı, **aşınma eğrisi onarımı** | GitHub Actions'ta 2 saatte bir çalışır. Skinport FİYAT kaynağı DEĞİL, **likidite** kaynağıdır. Onarım eşiklerini değiştirmeden önce ölçüm yap |
+| `.github/workflows/update-prices.yml` | Cron (2 saat) + `prices-data` yetim dalına push | Dalı `master`'a taşıma — Cloudflare Pages her fiyat güncellemesinde site build'i tetikler |
 | `src/TerminalOpening.js` | Armory terminali — **adım adım teklif seçimi** (1/5 → 5/5, %5 ile 6.) | **Çark KULLANMAZ, kasa DEĞİLDİR.** **DOLAR** kullanır (kredi değil). Teklif geçişine **animasyon EKLEME** — anında olmalı. Son seçenekte Pas Geç devre dışı |
 | `src/CapsuleOpening.js` | Sticker kapsülü (titreme/yırtılma/patlama) | **Çark KULLANMAZ**. Yarılar tek görselden `overflow:hidden` ile üretilir |
 | `src/components/HoverCard.js` | Hover'da 3B yükselen kart | CSS transition kullanır, `Animated` **değil** — geri çevirme |
@@ -242,6 +244,9 @@ Bu durumda:
 | Aktif buton/sekme METNİNE `C.onAccent` vermek | `onAccent` DOLU sarı zemin içindir (neredeyse siyah). Aktif durum zemini mat gridir → metin okunmaz. **`C.activeTxt`** kullan |
 | Trade-Up float'ında HAM ortalama kullanmak | Her skinin aralığı farklıdır; 0.45–1.00 aralıklı bir skinde 0.50 "en iyi hâl"dir. Önce **normalize** et: `(f−min)/(max−min)`, sonra çıktının aralığına ölçekle |
 | Sıralanan bir listede varyanslı simüle fiyat | `generateMockPrice` her çağrıda farklı döner → liste her yeniden hesapta zıplar. `getRealisticPrice(..., { stable: true })` kullan |
+| Piyasa fiyatını tek kaynaktan, sorgusuz almak | Steam `sell_price` = o anki EN UCUZ LİSTELEME. İnce aşınma bantlarında (1-3 listeleme) tek kişinin fiyatıdır; skinlerin **%42'sinin** aşınma eğrisi kırıktı. Likiditeye bak, eğriyi onar |
+| Aşınma süzgecinin oranları da değiştirmesine izin vermek | Kullanıcı "AK" yazınca %100 AK çıkacağını sanır. Yüzdeler DAİMA tam listeden, süzme yalnızca hangi kartın basılacağından sorumlu |
+| Ekran bileşenini `key` olmadan monte etmek | Kasa A'dan B'ye geçince React AYNI örneği kullanır ve oturum sayaçları devreder. `key={subject.id}` sıfırlamayı YAPISAL yapar |
 | Emoji'yi arayüz simgesi olarak kullanmak | Her platformda farklı çizilir ve renklendirilemez. `components/Icons.js` (SVG) kullan |
 | `FlatList numColumns` + bölüm başlığı | Başlık bir HÜCREYİ kaplar ve satırın ortasına düşer. Satırları elle grupla, satır başına tek öğe ver |
 | `useWindowDimensions().width` = 0 | Gizli/ilk karede 0 gelebilir; kart genişliği negatif çıkıp ızgara çöker — `Math.max(taban, …)` koy |
@@ -319,6 +324,11 @@ Bu durumda:
 | **2026-08-29** | Terminalde **zorunlu alım kaldırıldı**; ortak `BatchResultPanel`; kapsül yırtık çizgisi bug'ı; mobil klavye düzeltmesi |
 | **2026-08-29** | `public/index.html` (başlık + Google Analytics + viewport); **emoji → SVG simge seti** (`react-native-svg`); i18n yinelenen anahtar bug'ı |
 | **2026-08-30** | **Koleksiyonlar sekmesi** (sıralama + koleksiyon içi arama + Aktif Drop Havuzu rozeti); Trade-Up sonuçları sözleşme tamamlanana kadar gizlendi; Armory harcaması dolar karşılığıyla; "Send Selected" → "Send to Inventory" |
+| **2026-09-01** | **KRİTİK — fiyat tutarsızlığı:** kök neden isim eşleştirme değil, Steam `sell_price`'ın "en ucuz listeleme" olmasıydı. Skinport likidite sinyali + aşınma eğrisi onarımı eklendi; kırık eğri **%42 → %12** |
+| **2026-09-01** | **Otomatik fiyat güncelleme** — GitHub Actions cron (2 saat) → `prices-data` yetim dalı; uygulama kendi beslemesini çeker, ByMykel'e düşer |
+| **2026-09-01** | **Kümülatif kasa istatistikleri** (Toplam Açılan/Harcanan/Gelen) + elle sıfırlama + kutu değişince `key` ile otomatik sıfırlama |
+| **2026-09-01** | **Kategori içi arama** (`ContentsList`) — oranları DEĞİŞTİRMEZ; **Sınırsız Mod** butonuna takas ikonu + tooltip + `cursor:pointer` |
+| **2026-09-01** | **Logo paleti** — vurgu rengi mavi/sarıdan logonun kiremit-kor turuncusuna geçti (aydınlık `#c8431a` / karanlık `#f4641e`); tüm kontrastlar WCAG AA ölçüldü |
 | **2026-08-31** | **Karanlık/Aydınlık mod düğmesi** — tokenlar CSS değişkenine çevrildi; geçiş yeniden yükleme YAPMAZ (bakiye/envanter/geçmiş korunur), tercih `localStorage`'da |
 | **2026-08-31** | **Trade-Up float'ı gerçek CS2 formülüne geçti** (normalize ortalama); çıktı fiyatları deterministik (`stable: true`); satırlarda aşınma+float gösteriliyor |
 | **2026-08-31** | **Kâr ihtimali göstergesi** (%X ihtimalle kâr) + `Tooltip` açıklamaları |

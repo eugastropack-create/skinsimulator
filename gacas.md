@@ -1680,6 +1680,12 @@ npm run ios      # iOS
 
 | Tarih | Değişiklik |
 |---|---|
+| **2026-09-01** | **KRİTİK — FİYAT TUTARSIZLIĞI ÇÖZÜLDÜ.** Kök neden isim eşleştirme DEĞİL, kaynağın anlamıydı: Steam `sell_price` o anki **en ucuz listelemedir**. Likit eşyada piyasa değeri, ince aşınma bandında (1-3 listeleme) tek kişinin fiyatı. Ölçüm: skinlerin **%42'sinin** aşınma fiyat eğrisi kırıktı (aşınma kötüleşirken fiyat yükseliyordu). Skinport `quantity` likidite sinyali + log-doğrusal eğri onarımı ile **%12'ye** indi. `USP-S \| Bleeding Edge (Well-Worn)` $3.91 → **$1.02** (kullanıcının bildirdiği eşya). Likit eşyalar hiç değişmedi (Redline FT $42.10, Asiimov FT $166.76) |
+| **2026-09-01** | **Otomatik fiyat güncelleme** — GitHub Actions cron her 2 saatte bir `scripts/update-prices.mjs` çalıştırıp `prices-data` yetim dalına yazıyor; uygulama oradan çekiyor, erişemezse ham ByMykel'e düşüyor |
+| **2026-09-01** | **Kümülatif kasa istatistikleri:** Toplam Açılan / Harcanan / Gelen artık üst üste birikiyor. Elle sıfırlama butonu + kutu değişince `key={subject.id}` ile otomatik sıfırlama |
+| **2026-09-01** | **Kategori içi arama** — kasa/koleksiyon içeriğini süzer; ⚠️ kademe yüzdeleri ve eşya başına ihtimal DAİMA tam listeden hesaplanır, süzme yalnızca görünürlüğü etkiler |
+| **2026-09-01** | **Sınırsız Mod** butonuna takas ikonu, açıklama kutucuğu ve `cursor: pointer` — tıklanabilirliği görünür oldu |
+| **2026-09-01** | **Logo paleti** — vurgu rengi logodaki kiremit/kor turuncusuna geçti (aydınlık `#c8431a`, karanlık `#f4641e`); her iki temada tüm metin/zemin çiftleri WCAG AA üzerinde ölçüldü |
 | **2026-08-31** | **Karanlık/Aydınlık mod düğmesi** — tokenlar CSS değişkenine çevrildi (`buildThemeCss`/`applyTheme`); geçiş **yeniden yükleme yapmaz**, bakiye/envanter/geçmiş korunur. Tercih `localStorage`'da (`skinsim.theme`) |
 | **2026-08-31** | **KRİTİK — Trade-Up çıktı float'ı yanlış formülle hesaplanıyordu:** ham ortalama yerine **normalize ortalama** (gerçek CS2 / csfloat formülü). Aşınma artık monotonik ve öngörülebilir |
 | **2026-08-31** | **Çıktı listesi rastgele sıralanıyordu:** canlı fiyatı olmayan eşyalarda `Math.random()` varyansı; `getRealisticPrice(..., { stable: true })` eklendi. Çıktı satırlarında artık **aşınma + float** da yazıyor |

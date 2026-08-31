@@ -219,6 +219,18 @@ export const IconGlobe = (p) => (
   </Icon>
 );
 
+// Mod değiştirme — karşılıklı iki ok (takas)
+// ⚠️ `IconRefresh` (dairesel ok) DEĞİL: o "yenile/sıfırla" demek. Buradaki
+// eylem iki durum arasında GEÇİŞ; karşılıklı oklar bunu doğru anlatıyor.
+export const IconSwap = (p) => (
+  <Icon {...p}>
+    <Polyline points="16,4 20,8 16,12" />
+    <Line x1="20" y1="8" x2="5" y2="8" />
+    <Polyline points="8,12 4,16 8,20" />
+    <Line x1="4" y1="16" x2="19" y2="16" />
+  </Icon>
+);
+
 // Aydınlık mod — güneş
 export const IconSun = (p) => (
   <Icon {...p}>
@@ -364,7 +376,7 @@ const p = StyleSheet.create({
 export default {
   Icon, IconSearch, IconInventory, IconCase, IconKey, IconList, IconChart,
   IconGem, IconTag, IconTrend, IconClock, IconArrowDown, IconArrowUp,
-  IconRefresh, IconBook, IconWallet, IconInfinity, IconGlobe, IconSun, IconMoon, IconClose, IconCheck,
+  IconRefresh, IconBook, IconWallet, IconInfinity, IconGlobe, IconSun, IconMoon, IconSwap, IconClose, IconCheck,
   IconLock, IconSelect, IconTrash, IconSell,
   StarIcon, DollarIcon, ValuePill, STAR_GREEN
 };

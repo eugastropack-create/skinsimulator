@@ -1,0 +1,72 @@
+name: Fiyatları güncelle
+
+# ============================================================
+# OTOMATİK FİYAT GÜNCELLEME
+# ============================================================
+# 2 saatte bir çalışır, `scripts/update-prices.mjs` ile Skinport + Steam
+# verisini birleştirip onarır ve sonucu `prices-data` dalına yazar.
+#
+# ⚠️ NEDEN AYRI BİR DAL (`prices-data`)?
+#   1. `master` geçmişi kirlenmez — günde 12 otomatik commit ana dala düşmez.
+#   2. Cloudflare Pages YENİDEN DERLEMEZ. Pages yalnızca üretim dalını izler;
+#      fiyat dosyası ayrı dalda olduğu için her güncellemede site build'i
+#      tetiklenmez (ücretsiz planda aylık build kotası korunur).
+#   3. `raw.githubusercontent.com` CORS başlığı gönderir, yani tarayıcı
+#      dosyayı DOĞRUDAN çekebilir — proxy/Worker gerekmez.
+#      (Skinport'un kendi API'si CORS göndermiyor; ölçüldü. Bu yüzden ona
+#      tarayıcıdan değil, YALNIZCA bu workflow içinden erişiyoruz.)
+
+on:
+  schedule:
+    # Her 2 saatte bir (UTC). Kullanıcı isteği: "1, 2 veya maksimum 4-5 saatte bir".
+    # ⚠️ Daha sık YAPMAYIN: Skinport /v1/items 5 dakikada bir önbelleklenir ve
+    # IP başına 5 dakikada 8 istek sınırı vardır; 2 saat fazlasıyla güvenli.
+    - cron: '0 */2 * * *'
+  workflow_dispatch:        # Panelden elle tetiklemek için
+
+# Betiğin `prices-data` dalına push yapabilmesi için gereken izin.
+permissions:
+  contents: write
+
+concurrency:
+  group: update-prices
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Fiyatları çek, birleştir ve onar
+        run: node scripts/update-prices.mjs
+
+      - name: prices-data dalına yaz
+        run: |
+          set -euo pipefail
+          git config user.name  "skinsimulator-price-bot"
+          git config user.email "price-bot@users.noreply.github.com"
+
+          # Dalı YETİM (orphan) tutuyoruz: içinde yalnızca latest.json var,
+          # site kodunun geçmişiyle hiç karışmıyor.
+          git checkout --orphan prices-data
+          git rm -rf --cached . >/dev/null
+          find . -maxdepth 1 -mindepth 1 \
+                 ! -name '.git' ! -name 'out' -exec rm -rf {} +
+          mv out/latest.json ./latest.json
+          rm -rf out
+
+          git add latest.json
+          # Fiyatlar hiç değişmediyse commit atma (boş commit hatası vermesin).
+          if git diff --cached --quiet; then
+            echo "Değişiklik yok, commit atlanıyor."
+            exit 0
+          fi
+          git commit -m "Fiyat güncellemesi $(date -u '+%Y-%m-%d %H:%M UTC')"
+          git push --force origin prices-data
