@@ -6,6 +6,19 @@ export const getWearFromFloat = (floatVal) => {
   return 'Battle-Scarred';
 };
 
+// Simüle fiyatlamada float -> çarpan tablosu.
+// ⚠️ TEK KAYNAK: hem `generateMockPrice` (rastgele varyanslı) hem de
+// `prices.js -> stableMockPrice` (varyanssız) bunu kullanır. Ayrı ayrı
+// yazılırsa biri güncellenip diğeri unutulur ve aynı eşya iki farklı yerde
+// iki farklı fiyat gösterir.
+export const mockWearMultiplier = (floatVal) => {
+  if (floatVal < 0.07) return 2.5;
+  if (floatVal < 0.15) return 1.5;
+  if (floatVal < 0.38) return 1.0;
+  if (floatVal < 0.45) return 0.8;
+  return 0.6;
+};
+
 export const generateMockPrice = (rarityName, floatVal, isStatTrak) => {
   let basePrice = 0.5;
   const name = (rarityName || '').toLowerCase();
@@ -19,14 +32,7 @@ export const generateMockPrice = (rarityName, floatVal, isStatTrak) => {
   else if (name.includes('rare') || name.includes('altın') || name.includes('gold')) basePrice = 300.0;
   else basePrice = 1.0;
 
-  let wearMultiplier = 1.0;
-  if (floatVal < 0.07) wearMultiplier = 2.5;
-  else if (floatVal < 0.15) wearMultiplier = 1.5;
-  else if (floatVal < 0.38) wearMultiplier = 1.0;
-  else if (floatVal < 0.45) wearMultiplier = 0.8;
-  else wearMultiplier = 0.6;
-
-  let finalPrice = basePrice * wearMultiplier;
+  let finalPrice = basePrice * mockWearMultiplier(floatVal);
   if (isStatTrak) finalPrice *= 1.8;
 
   const randomVariance = 0.85 + (Math.random() * 0.30);

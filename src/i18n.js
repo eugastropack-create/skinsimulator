@@ -39,6 +39,9 @@ const DICT = {
     'util.unlimitedBalance': 'Unlimited Balance',
     'util.virtualEarnings': 'virtual: ${n}',
     'util.language': 'Language',
+    'util.theme': 'Theme',
+    'util.themeLight': 'Light',
+    'util.themeDark': 'Dark',
     'util.blog': 'Guides',
 
 
@@ -264,6 +267,10 @@ const DICT = {
     'tradeup.freeBadge': 'Free simulator — your balance is never charged',
     'tradeup.expectedValue': 'Expected Value',
     'tradeup.estProfit': 'Est. Profit',
+    'tradeup.wearPos': 'Wear position',
+    'tradeup.profitChance': '{pct}% chance of profit',
+    'tradeup.tipAvgFloat': 'The raw average of your inputs’ float values. What actually drives the outcome is the WEAR POSITION below it: each input is first normalised inside its own float range, and the average of those positions is mapped onto the output skin’s range — the same formula CS2 uses.',
+    'tradeup.tipProfitChance': 'The combined chance of all outcomes worth more than your total input value. Expected Value can look high because of one rare expensive outcome; this number tells you how often the contract actually pays off.',
     'tradeup.source': 'Source: {names}',
     'tradeup.knifeRecipe': 'Special Recipe Active:',
     'tradeup.knifeRecipeBody': '5 Covert (Red) items = one random Gold reward (Knife / Gloves). The remaining 5 slots are locked. This trade does not exist in real CS2 — it is simulator-only.',
@@ -378,6 +385,9 @@ const DICT = {
     'util.unlimitedBalance': 'Sınırsız Bakiye',
     'util.virtualEarnings': 'sanal: ${n}',
     'util.language': 'Dil',
+    'util.theme': 'Tema',
+    'util.themeLight': 'Aydınlık',
+    'util.themeDark': 'Karanlık',
     'util.blog': 'Rehber',
 
 
@@ -592,6 +602,10 @@ const DICT = {
     'tradeup.freeBadge': 'Ücretsiz simülatör — bakiyenizden düşülmez',
     'tradeup.expectedValue': 'Beklenen Değer',
     'tradeup.estProfit': 'Tahmini Kâr',
+    'tradeup.wearPos': 'Aşınma konumu',
+    'tradeup.profitChance': '%{pct} ihtimalle kâr',
+    'tradeup.tipAvgFloat': 'Girdilerinizin float değerlerinin ham ortalaması. Sonucu belirleyen asıl sayı altındaki AŞINMA KONUMU: her girdi önce kendi float aralığı içinde normalize edilir, bu konumların ortalaması da çıkan skinin aralığına ölçeklenir — CS2’nin kullandığı formülün aynısı.',
+    'tradeup.tipProfitChance': 'Girdilerinizin toplam değerinden daha pahalı olan tüm çıktıların ihtimal toplamı. Beklenen Değer tek bir nadir pahalı eşya yüzünden yüksek görünebilir; bu sayı sözleşmenin gerçekte ne sıklıkla kâr ettiğini söyler.',
     'tradeup.source': 'Kaynak: {names}',
     'tradeup.knifeRecipe': 'Özel Tarif Aktif:',
     'tradeup.knifeRecipeBody': '5 Kırmızı (Covert) eşya = rastgele Sarı ödül (Bıçak / Eldiven). Kalan 5 yuva kilitlendi. Bu geçiş gerçek CS2’de yoktur, simülatöre özeldir.',

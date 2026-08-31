@@ -44,10 +44,15 @@ Güncellenmesi gereken tipik bölümler:
 5. **Yorumlar Türkçe, kod İngilizce.** Mevcut kod tabanının dili budur.
 6. **Kalıcılık yok.** State yalnızca oturum içidir. `localStorage`/`AsyncStorage`
    eklemeden önce sor.
-   > **TEK ONAYLI İSTİSNA (28 Ağu 2026):** Disclaimer'ın kapatılmış olması
+   > **ONAYLI İSTİSNA #1 (28 Ağu 2026):** Disclaimer'ın kapatılmış olması
    > `localStorage`'da `skinsim.disclaimerDismissed` anahtarıyla saklanır
-   > (kullanıcı açıkça istedi). Başka hiçbir şey kalıcı DEĞİLDİR — bakiye,
-   > envanter, kredi ve geçmiş hâlâ yalnızca oturum içidir.
+   > (kullanıcı açıkça istedi).
+   >
+   > **ONAYLI İSTİSNA #2 (31 Ağu 2026):** Karanlık/Aydınlık tema tercihi
+   > `skinsim.theme` anahtarında saklanır (kullanıcı açıkça istedi).
+   >
+   > Başka hiçbir şey kalıcı DEĞİLDİR — bakiye, envanter, kredi ve geçmiş
+   > hâlâ yalnızca oturum içidir.
 7. **Sabit metin yazma.** Kullanıcıya görünen her metin `src/i18n.js`
    sözlüğünden `t('anahtar')` ile gelir ve **EN + TR** olarak eklenir.
    Varsayılan dil **İngilizce**'dir.
@@ -73,7 +78,7 @@ Güncellenmesi gereken tipik bölümler:
 | Dosya | Sorumluluk | Dokunurken dikkat |
 |---|---|---|
 | `App.js` | Global state, kabuk (logo/arama/menü), veri yükleme, modal montajı | Tüm state buradan prop'lanır. Dış `ScrollView` **ekleme**. Başlık animasyonu **DOM sürücülüdür** (`paintHeader`): `transition` ekleme, rAF'a taşıma, ve **p=0'da stil yazma** (kırpma yapar) |
-| `src/theme.js` | **TEK renk/köşe/font/gölge kaynağı** — iki tema (`cs-dark` / `light`) | `THEME` sabiti tek satırlık geri alma anahtarıdır; `LIGHT_*` bloklarını SİLME. Bileşenlere ham hex/yarıçap/font yazma — `C` / `R` / `F` kullan. `RARITY` Valve paleti, temadan bağımsız |
+| `src/theme.js` | **TEK renk/köşe/font/gölge kaynağı** — iki tema (`cs-dark` / `light`), **çalışma anında değiştirilebilir** | Web'de `C`/`R`/`shadow()` artık **CSS değişkeni dizesi** döndürür (`var(--c-bg)`) — `hexToRgba(C.x, …)` YAPMA, hex değil. `DEFAULT_THEME` varsayılanı belirler; `LIGHT_*` bloklarını SİLME. Aktif durum METNİ için `onAccent` DEĞİL **`activeTxt`**. `RARITY` Valve paleti, temadan bağımsız |
 | `assets/logo-skinsimulator.png` | Saydam zeminli logo (ana + mini çubuk) | En/boy oranı **9.82** — yüksekliği genişlikten türet, ikisini birden sabitleme |
 | `src/i18n.js` | **TEK metin kaynağı** (EN varsayılan / TR) | Arayüze sabit metin gömme — `t('anahtar')` kullan. Yeni metni **her iki dile** ekle |
 | `src/BlogScreen.js` | Rehber/Blog — **semantik HTML** (AdSense) | `role` prop'ları DOM etiketine çevrilir; `role="section"` diye bir eşleme YOK. Rolleri değiştirme |
@@ -84,8 +89,8 @@ Güncellenmesi gereken tipik bölümler:
 | `src/TerminalOpening.js` | Armory terminali — **adım adım teklif seçimi** (1/5 → 5/5, %5 ile 6.) | **Çark KULLANMAZ, kasa DEĞİLDİR.** **DOLAR** kullanır (kredi değil). Teklif geçişine **animasyon EKLEME** — anında olmalı. Son seçenekte Pas Geç devre dışı |
 | `src/CapsuleOpening.js` | Sticker kapsülü (titreme/yırtılma/patlama) | **Çark KULLANMAZ**. Yarılar tek görselden `overflow:hidden` ile üretilir |
 | `src/components/HoverCard.js` | Hover'da 3B yükselen kart | CSS transition kullanır, `Animated` **değil** — geri çevirme |
-| `src/components/Icons.js` | CS simgeleri (yeşil ★ / $) + `ValuePill` | Emoji'ye geri dönme — platformlar arası tutarsız. Sayılar monospace kalmalı |
-| `src/utils.js` | Float üretimi, aşınma eşlemesi, mock fiyat, para formatı | `generateFloat` **ağırlıklı** dağılım kullanır, uniform'a döndürme |
+| `src/components/Icons.js` | CS simgeleri (yeşil ★ / $) + `ValuePill` + tema düğmesi (`IconSun`/`IconMoon`) | Emoji'ye geri dönme — platformlar arası tutarsız. Sayılar monospace kalmalı |
+| `src/utils.js` | Float üretimi, aşınma eşlemesi, mock fiyat, para formatı | `generateFloat` **ağırlıklı** dağılım kullanır, uniform'a döndürme. Aşınma→fiyat çarpanı `mockWearMultiplier` ile TEK yerde — `prices.js` de onu kullanır |
 | `src/components/BatchResultPanel.js` | Çoklu açılış sonuç paneli — Tekrar Aç · tekli satış · çoklu seçim · toplu aksiyonlar | Kasa/Souvenir/Sticker/Armory **hepsi** bunu kullanır. Satışta `batch.totalWon` DEĞİL **kalan** eşyaların toplamını öde (tek tek satış yapılmış olabilir). "Tekrar Aç" paneli önceden KAPATMA — açılış reddedilirse eşyalar kaybolur |
 | `src/prices.js` | Canlı/mock fiyat çözümleme, EV/ROI, kararlı sıralama değeri | Altın kademe `contains_rare`'den gelir; sıralamada `getStableSortValue()` kullan |
 | `src/CaseOpening.js` | Kasa **ve Souvenir** açılışı (`mode` prop'u) | Gösterge KUTU değil OK (`WinnerPointer`) — kutuya geri dönme; `ITEM_PITCH`/`getRouletteWidth()` matematiğini bozma; jitter EKLEME; altın kademe `contains_rare`'den çekilir; **sekme (bounce)** ve **bekçi** mantığını kaldırma |
@@ -140,7 +145,12 @@ npm run web
    - ✅ `prices.csgotrader.app ... CORS` → **normal**, simüle fiyata düşer
    - ✅ `"shadow*" style props are deprecated` → zararsız
    - ❌ Bunlar dışındaki her hata incelenmelidir.
-3. **Regresyon turu:** Kasa aç (1x/5x/10x) · **Terminal çalıştır → 1/5'ten 5/5'e pas geç → son seçenekte Pas Geç'in kapalı olduğunu doğrula → Eşyayı Al** ·
+3. **Regresyon turu:** **tema düğmesine bas → aydınlığa/karanlığa geçtiğini,
+   yerleşimin ve menü sırasının HİÇ değişmediğini, bakiye/envanterin
+   KORUNDUĞUNU doğrula, sayfayı yenile (tercih kalmalı)** ·
+   **Trade-Up'a 10 aynı skin koy → float'ı 0.01/0.30/0.60 yap → çıktı aşınması
+   monotonik ilerlemeli ve aynı float'ta fiyatlar BİREBİR aynı kalmalı** ·
+   Kasa aç (1x/5x/10x) · **Terminal çalıştır → 1/5'ten 5/5'e pas geç → son seçenekte Pas Geç'in kapalı olduğunu doğrula → Eşyayı Al** ·
    **listede aşağı kaydırıp menünün daraldığını, en üstte geri açıldığını gör** ·
    **disclaimer'ı kapatıp sayfayı yenile (geri gelmemeli)** ·
    **Rehber sekmesini aç, altı bölümü gez, dili TR'ye çevirip metinlerin
@@ -226,6 +236,12 @@ Bu durumda:
 | Eşya türünü ADINDAN regex'le anlamaya çalışmak | Sabitlenmemiş `/(Charm\|Sticker\|Patch\|Pin)/i` "Slee**pin**g Potion" ve "Dis**patch**"i eledi → 10 skin havuzdan düştü. Türü **id önekinden** oku (`skin-` / `sticker-` / `keychain-` / `graffiti-` / `agent-`) |
 | Bir eşyanın koleksiyonlarını ADIYLA eşlemek | "Recoil AK-47" hem grafiti hem silah adı olarak 19 koleksiyonda geçiyor. Kimlikle eşle — koleksiyonlardaki `skin-` ögelerinin %100'ü skins.json ile tutuyor |
 | Çok koleksiyonlu eşyada her koleksiyona tam oy vermek | Toplam oy şişer (10 girdi → 50 oy) ve o eşyanın ağırlığı katlanır. Her girdi TOPLAM 1 oy kullanmalı, koleksiyonları arasında bölünmeli |
+| `hexToRgba(C.bir_token, …)` çağırmak | Web'de `C.*` artık `var(--c-x)` dizesidir, hex DEĞİL — ayrıştırma bozulur. Şeffaf uç için doğrudan `transparent` yaz |
+| Tema değişkeni renginde `shadowOpacity` vermek | RN-Web `var()` renginde alfayı YOK SAYIYOR (ölçüldü). Alfayı değişkenin İÇİNE göm (`--sh-md: rgba(...)`) |
+| Global font kuralını tek bir temaya kilitlemek | Diğer temada HİÇBİR kural eşleşmez ve tarayıcı varsayılanı (Times New Roman — serif) devreye girer. Kural her temada geçerli olmalı, font `--cs-font` ile temaya göre değişir |
+| Aktif buton/sekme METNİNE `C.onAccent` vermek | `onAccent` DOLU sarı zemin içindir (neredeyse siyah). Aktif durum zemini mat gridir → metin okunmaz. **`C.activeTxt`** kullan |
+| Trade-Up float'ında HAM ortalama kullanmak | Her skinin aralığı farklıdır; 0.45–1.00 aralıklı bir skinde 0.50 "en iyi hâl"dir. Önce **normalize** et: `(f−min)/(max−min)`, sonra çıktının aralığına ölçekle |
+| Sıralanan bir listede varyanslı simüle fiyat | `generateMockPrice` her çağrıda farklı döner → liste her yeniden hesapta zıplar. `getRealisticPrice(..., { stable: true })` kullan |
 | Emoji'yi arayüz simgesi olarak kullanmak | Her platformda farklı çizilir ve renklendirilemez. `components/Icons.js` (SVG) kullan |
 | `FlatList numColumns` + bölüm başlığı | Başlık bir HÜCREYİ kaplar ve satırın ortasına düşer. Satırları elle grupla, satır başına tek öğe ver |
 | `useWindowDimensions().width` = 0 | Gizli/ilk karede 0 gelebilir; kart genişliği negatif çıkıp ızgara çöker — `Math.max(taban, …)` koy |
@@ -303,6 +319,10 @@ Bu durumda:
 | **2026-08-29** | Terminalde **zorunlu alım kaldırıldı**; ortak `BatchResultPanel`; kapsül yırtık çizgisi bug'ı; mobil klavye düzeltmesi |
 | **2026-08-29** | `public/index.html` (başlık + Google Analytics + viewport); **emoji → SVG simge seti** (`react-native-svg`); i18n yinelenen anahtar bug'ı |
 | **2026-08-30** | **Koleksiyonlar sekmesi** (sıralama + koleksiyon içi arama + Aktif Drop Havuzu rozeti); Trade-Up sonuçları sözleşme tamamlanana kadar gizlendi; Armory harcaması dolar karşılığıyla; "Send Selected" → "Send to Inventory" |
+| **2026-08-31** | **Karanlık/Aydınlık mod düğmesi** — tokenlar CSS değişkenine çevrildi; geçiş yeniden yükleme YAPMAZ (bakiye/envanter/geçmiş korunur), tercih `localStorage`'da |
+| **2026-08-31** | **Trade-Up float'ı gerçek CS2 formülüne geçti** (normalize ortalama); çıktı fiyatları deterministik (`stable: true`); satırlarda aşınma+float gösteriliyor |
+| **2026-08-31** | **Kâr ihtimali göstergesi** (%X ihtimalle kâr) + `Tooltip` açıklamaları |
+| **2026-08-31** | **Aktif durum yazı rengi** `onAccent` → `activeTxt` (koyu temada okunmuyordu) |
 | **2026-08-31** | **KRİTİK:** Trade-Up çıktı havuzu tek eşyaya düşüyordu (ada göre süzen sabitlenmemiş regex 10 skini eliyordu); tür artık id önekinden okunuyor. Oy şişmesi de giderildi |
 | **2026-08-30** | **CS2 taktiksel koyu tema** (`theme.js` → `THEME` tek satırlık geri alma); aktif durum vurgu çizgisiyle; Chakra Petch/Rajdhani; keskin köşeler; Tooltip genişlik bug'ı |
 | **2026-08-30** | Varsayılan mod **Sınırsız**; **Tooltip** ve **görsel önizleme** bileşenleri; **hızlı iletişim modülü**; Koleksiyonlar kartları küçültüldü ve arama listeye taşındı; `Contents` kapatma butonu sola alındı |

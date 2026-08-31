@@ -90,11 +90,13 @@
       ============================================================
       CS2 / TAKTİKSEL TEMA — FONT ve ZEMİN
       ============================================================
-      ⚠️ GERİ ALMA: Bu bloğun tamamını yorum satırına alın (veya silin) ve
-      `src/theme.js` içindeki `THEME` sabitini `'light'` yapın; site anında
-      eski açık temaya ve sistem fontuna döner. İkisi birlikte çalışır:
-      bu dosya FONT DOSYALARINI ve gövde zeminini, theme.js ise palet /
-      köşe yarıçapı / aktif-durum görünümünü belirler.
+      ⚠️ ARTIK ÇALIŞMA ANINDA DEĞİŞİYOR (31 Ağu 2026): üst çubuktaki
+      Güneş/Ay butonu `html[data-cs-theme]` özniteliğini değiştiriyor;
+      aşağıdaki font kuralı yalnızca `cs-dark` için geçerli olduğundan
+      aydınlık temada otomatik olarak sistem fontuna dönülüyor.
+
+      ⚠️ KALICI GERİ ALMA: `src/theme.js` içindeki `DEFAULT_THEME` sabitini
+      `'light'` yapın — site varsayılan olarak eski açık tasarımla açılır.
     -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -116,10 +118,14 @@
       /* İlk boyama için varsayılan; uygulama açılınca App.js paletten gelen
          gerçek değeri yazar (bkz. "TEMAYI DOM'A BİLDİR"). Bu satır yalnızca
          bundle yüklenene kadarki beyaz parlamayı önler. */
+      /* ⚠️ `--c-bg` TEMA DEĞİŞKENİDİR (App.js açılışta <style id="cs-theme-vars">
+         etiketini basar). `--cs-bg` yalnızca o etiket basılana kadarki BİR KARELİK
+         yedektir; ikisini birden bırakmak zorunlu — sadece `--cs-bg` yazılırsa
+         aydınlık temada #root koyu kalır (yaşandı, 31 Ağu 2026). */
       html,
       body,
       #root {
-        background-color: var(--cs-bg);
+        background-color: var(--c-bg, var(--cs-bg));
       }
 
       /*
@@ -130,16 +136,22 @@
         (`#root` → 0,1,0,0) — `!important` KULLANMIYORUZ, çünkü o zaman
         aşağıdaki monospace istisnası da ezilirdi.
       */
-      html[data-cs-theme='cs-dark'] #root div:not([class*='r-fontFamily-']),
-      html[data-cs-theme='cs-dark'] #root span:not([class*='r-fontFamily-']),
-      html[data-cs-theme='cs-dark'] #root p:not([class*='r-fontFamily-']),
-      html[data-cs-theme='cs-dark'] #root a:not([class*='r-fontFamily-']),
-      html[data-cs-theme='cs-dark'] #root button:not([class*='r-fontFamily-']),
-      html[data-cs-theme='cs-dark'] #root input:not([class*='r-fontFamily-']),
-      html[data-cs-theme='cs-dark'] #root textarea:not([class*='r-fontFamily-']),
-      html[data-cs-theme='cs-dark'] #root h1,
-      html[data-cs-theme='cs-dark'] #root h2,
-      html[data-cs-theme='cs-dark'] #root h3 {
+      /* ⚠️ TEMAYA GÖRE SEÇİCİ YAZMAYIN — `--cs-font` ZATEN TEMAYA GÖRE DEĞİŞİR.
+         İlk sürümde bu kural `html[data-cs-theme='cs-dark']` ile sınırlıydı;
+         aydınlık temaya geçilince HİÇBİR kural eşleşmediği için tarayıcının
+         varsayılanı (Times New Roman — serif!) devreye girdi (ölçüldü,
+         31 Ağu 2026). Kural her temada geçerli olmalı; hangi fontun
+         kullanılacağına `theme.js -> EXTRA_VARS[tema]['cs-font']` karar verir. */
+      #root div:not([class*='r-fontFamily-']),
+      #root span:not([class*='r-fontFamily-']),
+      #root p:not([class*='r-fontFamily-']),
+      #root a:not([class*='r-fontFamily-']),
+      #root button:not([class*='r-fontFamily-']),
+      #root input:not([class*='r-fontFamily-']),
+      #root textarea:not([class*='r-fontFamily-']),
+      #root h1,
+      #root h2,
+      #root h3 {
         font-family: var(--cs-font);
       }
 
@@ -158,9 +170,15 @@
         sayılar Chakra Petch'e dönüştü (ölçüldü).
       */
 
-      /* Koyu zeminde tarayıcı kaydırma çubuğu da koyu olsun. */
-      html {
+      /* Koyu zeminde tarayıcı kaydırma çubuğu da koyu olsun.
+         ⚠️ SADECE koyu temada: `applyTheme()` bunu satır içi stille de yazar
+         (satır içi kazanır) ama ilk boyamada bu kural geçerli olur. */
+      html[data-cs-theme='cs-dark'],
+      html:not([data-cs-theme]) {
         color-scheme: dark;
+      }
+      html[data-cs-theme='light'] {
+        color-scheme: light;
       }
     </style>
   </head>

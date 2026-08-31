@@ -219,6 +219,28 @@ export const IconGlobe = (p) => (
   </Icon>
 );
 
+// Aydınlık mod — güneş
+export const IconSun = (p) => (
+  <Icon {...p}>
+    <Circle cx="12" cy="12" r="4.2" />
+    <Line x1="12" y1="2.5" x2="12" y2="5" />
+    <Line x1="12" y1="19" x2="12" y2="21.5" />
+    <Line x1="2.5" y1="12" x2="5" y2="12" />
+    <Line x1="19" y1="12" x2="21.5" y2="12" />
+    <Line x1="5.3" y1="5.3" x2="7.1" y2="7.1" />
+    <Line x1="16.9" y1="16.9" x2="18.7" y2="18.7" />
+    <Line x1="18.7" y1="5.3" x2="16.9" y2="7.1" />
+    <Line x1="7.1" y1="16.9" x2="5.3" y2="18.7" />
+  </Icon>
+);
+
+// Karanlık mod — hilal
+export const IconMoon = (p) => (
+  <Icon {...p}>
+    <Path d="M20.5 14.8A8.8 8.8 0 0 1 9.2 3.5a8.8 8.8 0 1 0 11.3 11.3z" />
+  </Icon>
+);
+
 // Kapat
 export const IconClose = (p) => (
   <Icon {...p}>
@@ -342,7 +364,7 @@ const p = StyleSheet.create({
 export default {
   Icon, IconSearch, IconInventory, IconCase, IconKey, IconList, IconChart,
   IconGem, IconTag, IconTrend, IconClock, IconArrowDown, IconArrowUp,
-  IconRefresh, IconBook, IconWallet, IconInfinity, IconGlobe, IconClose, IconCheck,
+  IconRefresh, IconBook, IconWallet, IconInfinity, IconGlobe, IconSun, IconMoon, IconClose, IconCheck,
   IconLock, IconSelect, IconTrash, IconSell,
   StarIcon, DollarIcon, ValuePill, STAR_GREEN
 };

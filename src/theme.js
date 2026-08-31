@@ -4,35 +4,54 @@ import { Platform } from 'react-native';
 // SKIN SIMULATOR — TASARIM SİSTEMİ (TEK RENK/BİÇİM KAYNAĞI)
 // ============================================================
 // TEK KAYNAK. Hiçbir bileşen kendi içinde ham renk kodu, köşe yarıçapı veya
-// font ailesi tanımlamamalı; buradaki tokenları kullanmalı. Böylece tema tek
-// dosyadan değiştirilebilir ve ekranlar arasında kayma olmaz.
+// font ailesi tanımlamamalı; buradaki tokenları (`C` / `R` / `F`) kullanmalı.
 //
 // ============================================================
-// ⚠️⚠️  TEK SATIRLIK GERİ ALMA ANAHTARI  ⚠️⚠️
+// ⚠️ İKİ TEMA — ÇALIŞMA ZAMANINDA, YENİDEN YÜKLEMEDEN DEĞİŞİR
 // ============================================================
-// Aşağıdaki `THEME` sabiti TÜM görsel kimliği belirler. İki değer alır:
+//   'cs-dark'  →  CS2 / taktiksel koyu antrasit tema  (VARSAYILAN)
+//   'light'    →  eski açık tema (buzul grisi / beyaz kartlar)
 //
-//     'cs-dark'  →  CS2 / taktiksel koyu antrasit tema  (VARSAYILAN)
-//     'light'    →  eski açık tema (buzul grisi / beyaz kartlar)
+// NASIL ÇALIŞIYOR (web):
+//   `C.surface` gibi tokenlar artık ham hex DEĞİL, birer **CSS değişkeni**
+//   döndürür: `var(--c-surface)`. İki paletin değerleri de `buildThemeCss()`
+//   ile tek bir <style> etiketine yazılır ve `html[data-cs-theme="..."]`
+//   seçicisiyle ayrılır. Tema değiştirmek = o özniteliği değiştirmek.
 //
-// Yeni tasarımı beğenmezseniz SADECE bu satırı `'light'` yapın; palet,
-// köşe yarıçapları, fontlar, aktif-durum görünümü ve gölgeler ANINDA
-// eskisine döner. Hiçbir bileşen dosyasına dokunmanız gerekmez — eski
-// değerlerin tamamı `LIGHT_*` bloklarında OLDUĞU GİBİ duruyor, silinmedi.
+//   Bunun kritik faydası: `StyleSheet.create` değerleri modül yüklenirken BİR
+//   KEZ hesaplar; hex yazsaydık tema ancak sayfa YENİDEN YÜKLENEREK
+//   değişebilirdi ve kullanıcının bakiyesi/envanteri sıfırlanırdı. Değişken
+//   yazınca stiller sabit kalıyor, yalnızca değişkenlerin değeri değişiyor —
+//   geçiş anında ve durum kaybı olmadan gerçekleşiyor.
 //
-// (Fontlar için ayrıca `public/index.html` içindeki `--cs-font` bloğu var;
-//  orada da tek bir satır yorum satırına alınarak sistem fontuna dönülür.)
-export const THEME = 'cs-dark';
+//   ⚠️ react-native-web'in CSS değişkenlerini renk, `borderRadius` VE
+//   `shadowColor` için kabul ettiği ÖLÇÜLEREK doğrulandı (30 Ağu 2026).
+//
+// NATIVE (iOS/Android): CSS değişkeni yoktur. Orada tokenlar `DEFAULT_THEME`
+// paletinin ham değerlerini alır ve tema derleme zamanında sabittir.
+//
+// ⚠️ GERİ ALMA: Varsayılanı değiştirmek için `DEFAULT_THEME`'i güncelleyin.
+// Eski açık tema SİLİNMEDİ — `LIGHT_*` blokları olduğu gibi duruyor.
 
-const isCS = THEME === 'cs-dark';
+export const THEMES = ['cs-dark', 'light'];
+export const DEFAULT_THEME = 'cs-dark';
+
+// Geriye dönük uyumluluk: eski kod `THEME` sabitini içe aktarıyordu.
+export const THEME = DEFAULT_THEME;
+
+const IS_WEB = Platform.OS === 'web';
 
 // ============================================================
 // 1) RENK PALETLERİ
 // ============================================================
-// PALET MANTIĞI — AÇIK TEMA (eski, korunuyor):
-//   • Ana vurgu  : açık mavi (#38a3f1)
-//   • Zeminler   : buzul grisi / kırık beyaz
-//   • Kartlar    : kaba çerçeve YOK; yumuşak gölge
+// ⚠️ İKİ PALETİN ANAHTARLARI BİREBİR AYNI OLMALI. `buildThemeCss` her anahtar
+// için bir CSS değişkeni üretir; birinde eksik olan anahtar, o temada tanımsız
+// bir değişken (dolayısıyla görünmez/siyah bir öğe) demektir.
+
+// AÇIK TEMA (eski tasarım — korunuyor):
+//   • Ana vurgu : açık mavi (#38a3f1)
+//   • Zeminler  : buzul grisi / kırık beyaz
+//   • Aktif hâl : kutunun TAMAMI vurgu rengiyle dolu (eski davranış)
 const LIGHT_C = {
   bg: '#f4f7fb',
   bgAlt: '#eaf1f8',
@@ -68,24 +87,22 @@ const LIGHT_C = {
   crtDim: '#2a7a68',
   crtScan: 'rgba(95, 240, 196, 0.08)',
 
-  // --- AKTİF/SEÇİLİ DURUM (açık temada: kutunun tamamı vurgu rengiyle dolu) ---
   activeBg: '#38a3f1',
   activeTxt: '#ffffff',
   activeBorder: '#38a3f1',
-  accentLine: 'transparent', // açık temada vurgu çizgisi YOK
+  accentLine: 'transparent',
   overlay: 'rgba(18, 28, 40, 0.72)'
 };
 
-// PALET MANTIĞI — CS2 / TAKTİKSEL KOYU TEMA:
+// CS2 / TAKTİKSEL KOYU TEMA:
 //   • Zeminler  : antrasit → "gunmetal" gri kademeleri (parlak beyaz YOK)
-//   • Vurgu     : taktiksel sarı (#f2c94c) — CS2 arayüz sarısı
+//   • Vurgu     : taktiksel sarı (#f2c94c)
 //   • Aktif hâl : kutu BOYANMAZ; koyu mat gri zemin + ince parlak sarı çizgi
-//   • Metin     : kırık beyaz; saf beyaz DEĞİL (koyu zeminde göz yorar)
 const DARK_C = {
-  bg: '#14181c',          // sayfa zemini — koyu antrasit
-  bgAlt: '#1b2026',       // ikincil zemin (şeritler, çark arkası)
-  surface: '#21262c',     // kart / panel — gunmetal
-  surfaceAlt: '#2a3037',  // panel içi vurgulu bölüm / AKTİF durum zemini
+  bg: '#14181c',
+  bgAlt: '#1b2026',
+  surface: '#21262c',
+  surfaceAlt: '#2a3037',
   surfaceSunken: '#171b1f',
 
   border: '#313941',
@@ -97,7 +114,7 @@ const DARK_C = {
   textFaint: '#626c76',
   onAccent: '#12161a',    // sarı zemin üzerinde KOYU metin
 
-  accent: '#f2c94c',      // taktiksel sarı
+  accent: '#f2c94c',
   accentDeep: '#ffd966',
   accentSoft: '#2b2a1f',
   accentBorder: '#4d4526',
@@ -110,14 +127,15 @@ const DARK_C = {
   warnSoft: '#2d2519',
   gold: '#ffd700',
 
-  // CRT ekranı zaten koyuydu — dokunulmadı.
   crtBg: '#0d1b26',
   crtBgDeep: '#08141d',
   crtText: '#5ff0c4',
   crtDim: '#2a7a68',
   crtScan: 'rgba(95, 240, 196, 0.08)',
 
-  // --- AKTİF/SEÇİLİ DURUM (koyu temada: mat gri zemin + parlak sarı çizgi) ---
+  // ⚠️ Aktif hâlde metin AÇIK renk olmalı. `onAccent` burada NEREDEYSE SİYAH
+  // (sarı buton üzerinde doğru), ama aktif sekmenin zemini koyu gri olduğu
+  // için orada okunmaz. Aktif metin için DAİMA `activeTxt` kullanın.
   activeBg: '#2a3037',
   activeTxt: '#ffd966',
   activeBorder: '#414a54',
@@ -125,14 +143,12 @@ const DARK_C = {
   overlay: 'rgba(6, 9, 12, 0.78)'
 };
 
-export const C = isCS ? DARK_C : LIGHT_C;
+const PALETTES = { 'cs-dark': DARK_C, light: LIGHT_C };
 
 // ============================================================
 // 2) NADİRLİK RENKLERİ — Valve resmi paleti (DEĞİŞTİRME)
 // ============================================================
-// ⚠️ TEMADAN BAĞIMSIZ. Bunlar Valve'in resmi CS2 renkleridir
-// (mavi/mor/pembe/kırmızı/altın); kullanıcılar bu renkleri oyundan tanıyor,
-// bu yüzden koyu temada da AYNI kalırlar.
+// ⚠️ TEMADAN BAĞIMSIZ; kullanıcılar bu renkleri oyundan tanıyor.
 export const RARITY = {
   gold:   '#ffd700',
   red:    '#eb4b4b',
@@ -144,114 +160,123 @@ export const RARITY = {
 };
 
 // ============================================================
-// 3) KÖŞE YARIÇAPLARI (BORDER RADIUS)
+// 3) KÖŞE YARIÇAPLARI
 // ============================================================
-// ⚠️ Taktiksel temada köşeler KESKİN. Bileşenler ham sayı yerine bu tokenları
-// kullanır; tema anahtarı değişince tüm site birlikte döner.
-//
-//   xs → ince kontroller (rozet, çip, tik kutusu)
-//   sm → butonlar, girdi alanları
-//   md → kartlar
-//   lg → paneller, modallar
-//   pill → eskiden 999'lu "hap" biçimi; taktiksel temada o da keskinleşir
 const LIGHT_R = { xs: 4, sm: 6, md: 10, lg: 14, xl: 20, pill: 999 };
 const DARK_R  = { xs: 0, sm: 2, md: 3,  lg: 4,  xl: 4,  pill: 3 };
-export const R = isCS ? DARK_R : LIGHT_R;
+const RADII = { 'cs-dark': DARK_R, light: LIGHT_R };
 
 // ============================================================
-// 4) FONTLAR
+// 4) GÖLGELER
 // ============================================================
-// ⚠️ Font DOSYALARI `public/index.html` içinde Google Fonts ile yükleniyor;
-// buradaki tokenlar yalnızca hangi ailenin kullanılacağını söyler. Yükleme
-// başarısız olursa yığındaki sistem fontuna düşer — arayüz bozulmaz.
+// ⚠️ WEB'DE ALFA DEĞİŞKENİN İÇİNE GÖMÜLÜR. `shadowColor` bir CSS değişkeni
+// olduğunda react-native-web `shadowOpacity`yi UYGULAYAMIYOR (ölçüldü: renk
+// tam opak çıkıyor). Bu yüzden web tarafında opaklık 1'e sabitlenip alfa
+// doğrudan rgba() içinde veriliyor.
+const SHADOW_COLOR = {
+  'cs-dark': { card: 'rgba(0,0,0,0.45)', cardHover: 'rgba(0,0,0,0.6)', bar: 'rgba(0,0,0,0.4)', modal: 'rgba(0,0,0,0.65)' },
+  light:    { card: 'rgba(139,163,191,0.16)', cardHover: 'rgba(111,139,171,0.26)', bar: 'rgba(139,163,191,0.12)', modal: 'rgba(77,99,125,0.28)' }
+};
+// Gölge GEOMETRİSİ temadan bağımsız (yalnızca renk değişiyor) — açık temanın
+// yumuşak/yayvan değerleri koyu temada da doğru duruyor.
+const SHADOW_GEOM = {
+  card:      { shadowOffset: { width: 0, height: 4 },  shadowRadius: 14, elevation: 3 },
+  cardHover: { shadowOffset: { width: 0, height: 14 }, shadowRadius: 26, elevation: 10 },
+  bar:       { shadowOffset: { width: 0, height: 2 },  shadowRadius: 10, elevation: 2 },
+  modal:     { shadowOffset: { width: 0, height: 18 }, shadowRadius: 40, elevation: 16 }
+};
+
+// ============================================================
+// 5) TOKEN ÜRETİMİ
+// ============================================================
+const cssVar = (name, fallback) => `var(--${name}, ${fallback})`;
+
+const varsFrom = (obj, prefix, fallbackPalette) =>
+  Object.keys(obj).reduce((acc, key) => {
+    acc[key] = cssVar(`${prefix}-${key}`, fallbackPalette[key]);
+    return acc;
+  }, {});
+
+// Web → CSS değişkeni; native → düz değer.
+export const C = IS_WEB ? varsFrom(LIGHT_C, 'c', DARK_C) : PALETTES[DEFAULT_THEME];
+export const R = IS_WEB
+  ? Object.keys(LIGHT_R).reduce((a, k) => { a[k] = cssVar(`r-${k}`, `${DARK_R[k]}px`); return a; }, {})
+  : RADII[DEFAULT_THEME];
+
+export const shadow = Object.keys(SHADOW_GEOM).reduce((acc, key) => {
+  acc[key] = IS_WEB
+    ? { ...SHADOW_GEOM[key], shadowColor: cssVar(`sh-${key}`, SHADOW_COLOR[DEFAULT_THEME][key]), shadowOpacity: 1 }
+    : { ...SHADOW_GEOM[key], shadowColor: SHADOW_COLOR[DEFAULT_THEME][key], shadowOpacity: 1 };
+  return acc;
+}, {});
+
+// ============================================================
+// 6) FONTLAR
+// ============================================================
+// ⚠️ Font AİLESİ web'de CSS ile veriliyor (`public/index.html` →
+// `html[data-cs-theme='cs-dark']` kuralı), çünkü tema anında değişebilmeli.
+// Buradaki tokenlar yalnızca native ve açık istisnalar için.
 //
-// ⚠️ `mono` HER İKİ TEMADA DA gerçek monospace kalır: bakiye/sayaç
-// rakamlarının genişliği sabit olmalı, yoksa sayı değiştikçe rozet yerinden
-// oynar (bu proje bunu bir kez yaşadı — bkz. components/Icons.js ValuePill).
+// ⚠️ `mono` HER İKİ TEMADA DA gerçek monospace: bakiye/sayaç rakamlarının
+// genişliği sabit olmalı, yoksa sayı değiştikçe rozet yerinden oynar.
 const SYSTEM_STACK = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
 const MONO_STACK = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
 
-const LIGHT_F = { body: SYSTEM_STACK, display: SYSTEM_STACK, mono: MONO_STACK };
-const DARK_F = {
-  body: "'Chakra Petch', 'Rajdhani', " + SYSTEM_STACK,
-  display: "'Rajdhani', 'Chakra Petch', 'Oswald', " + SYSTEM_STACK,
+export const F = {
+  body: IS_WEB ? 'var(--cs-font)' : SYSTEM_STACK,
+  display: IS_WEB ? 'var(--cs-font-display, var(--cs-font))' : SYSTEM_STACK,
   mono: MONO_STACK
 };
-export const F = isCS ? DARK_F : LIGHT_F;
 
 // Başlık / menü tipografisi: büyük harf + geniş harf aralığı.
-// ⚠️ Açık temada DEĞİŞİKLİK YOK (null döner) — geri alma tam olsun diye.
-export const displayType = (letterSpacing = 1.1) =>
-  isCS ? { fontFamily: F.display, textTransform: 'uppercase', letterSpacing } : null;
+// ⚠️ Font AİLESİ burada VERİLMEZ — verilirse react-native-web o öğeye
+// `r-fontFamily-*` sınıfı basar ve index.html'deki tema kuralı onu `:not()`
+// ile dışarıda bırakır; sonuçta menü fontu temayla birlikte DEĞİŞMEZ.
+// Büyük harf ve harf aralığı zaten her iki temada da uygulanıyordu.
+export const displayType = (letterSpacing = 1.1) => ({
+  textTransform: 'uppercase',
+  letterSpacing
+});
 
 // ============================================================
-// 5) AKTİF/SEÇİLİ DURUM GÖRÜNÜMÜ
+// 7) AKTİF/SEÇİLİ DURUM GÖRÜNÜMÜ
 // ============================================================
-// ⚠️ Kullanıcı isteği (30 Ağu 2026): "Aktif sekmelerde kutunun tamamını
-// boyamayın; koyu mat gri zemin + ince parlak vurgu çizgisi olsun."
-//
-// Açık temada bu fonksiyon `null` döner ve eski "tamamen dolu vurgu rengi"
-// görünümü aynen korunur — yani geri alma kayıpsızdır.
+// Koyu temada: mat gri zemin + ince parlak vurgu çizgisi.
+// Açık temada: çizgi kalınlığı 0 → eski "tamamen dolu vurgu rengi" görünümü.
+// Kalınlık da bir CSS değişkeni olduğu için tema anında değişebiliyor.
 export const activeIndicator = (side = 'bottom', width = 2) => {
-  if (!isCS) return null;
-  if (side === 'left') return { borderLeftWidth: width, borderLeftColor: C.accentLine };
-  return { borderBottomWidth: width, borderBottomColor: C.accentLine };
+  if (!IS_WEB) {
+    if (DEFAULT_THEME !== 'cs-dark') return null;
+    return side === 'left'
+      ? { borderLeftWidth: width, borderLeftColor: PALETTES[DEFAULT_THEME].accentLine }
+      : { borderBottomWidth: width, borderBottomColor: PALETTES[DEFAULT_THEME].accentLine };
+  }
+  const w = cssVar(`line-${width}`, `${width}px`);
+  return side === 'left'
+    ? { borderLeftWidth: w, borderLeftColor: C.accentLine }
+    : { borderBottomWidth: w, borderBottomColor: C.accentLine };
 };
 
 // ============================================================
-// 6) KESİK KÖŞE (CLIP-PATH) — taktiksel vurgu
+// 8) KESİK KÖŞE (CLIP-PATH) — taktiksel vurgu
 // ============================================================
-// ⚠️ YALNIZCA WEB ve yalnızca taktiksel temada. Native'de `clipPath` yoktur.
-//
-// ⚠️ NEREYE UYGULANMAZ: içeriği DIŞARI TAŞAN kaplar. `clip-path` kutunun
-// dışına çıkan her şeyi keser — bilgi kutucuğu (Tooltip), açılır arama
-// listesi ve nadirlik ışığı taşan öğelerdir. Bu yüzden yalnızca kendi
-// içinde kapalı öğelerde (butonlar, rozetler) kullanılır.
-export const clipCut = (size = 10) =>
-  isCS && Platform.OS === 'web'
-    ? { clipPath: `polygon(0 0, calc(100% - ${size}px) 0, 100% ${size}px, 100% 100%, ${size}px 100%, 0 calc(100% - ${size}px))` }
-    : null;
-
-// Tek köşesi kesik (sağ üst) — küçük rozetler için.
-export const clipCorner = (size = 8) =>
-  isCS && Platform.OS === 'web'
-    ? { clipPath: `polygon(0 0, calc(100% - ${size}px) 0, 100% ${size}px, 100% 100%, 0 100%)` }
-    : null;
+// ⚠️ Yalnızca web. `clip-path` kutunun DIŞINA taşan her şeyi keser; bu yüzden
+// SADECE içeriği kendi içinde kapalı öğelerde (butonlar) kullanılır —
+// bilgi kutucuğu veya açılır liste barındıran kaplara UYGULANMAZ.
+// ⚠️ Boyut sabittir (12px): değer bir CSS değişkeninden geldiği için parametre
+// başına ayrı bir değişken üretmek gerekirdi; tek boyut yeterli.
+export const clipCut = () => (IS_WEB ? { clipPath: 'var(--cs-clip, none)' } : null);
+export const clipCorner = () => (IS_WEB ? { clipPath: 'var(--cs-clip-corner, none)' } : null);
 
 // ============================================================
-// 7) GÖLGELER
+// 9) WEB GEÇİŞLERİ (CSS transition)
 // ============================================================
-// ⚠️ Açık temada gölge rengi mavi-gri: siyah gölge açık zeminde kirli görünür.
-// Koyu temada tersi geçerli — gölge NEREDEYSE SİYAH olmalı, aksi hâlde
-// kartların etrafında gri bir hale oluşur ve zemin "sisli" görünür.
-const LIGHT_SHADOW = {
-  card:      { shadowColor: '#8ba3bf', shadowOffset: { width: 0, height: 4 },  shadowOpacity: 0.16, shadowRadius: 14, elevation: 3 },
-  cardHover: { shadowColor: '#6f8bab', shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.26, shadowRadius: 26, elevation: 10 },
-  bar:       { shadowColor: '#8ba3bf', shadowOffset: { width: 0, height: 2 },  shadowOpacity: 0.12, shadowRadius: 10, elevation: 2 },
-  modal:     { shadowColor: '#4d637d', shadowOffset: { width: 0, height: 18 }, shadowOpacity: 0.28, shadowRadius: 40, elevation: 16 }
-};
-
-const DARK_SHADOW = {
-  card:      { shadowColor: '#000000', shadowOffset: { width: 0, height: 3 },  shadowOpacity: 0.45, shadowRadius: 10, elevation: 3 },
-  cardHover: { shadowColor: '#000000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.6,  shadowRadius: 22, elevation: 10 },
-  bar:       { shadowColor: '#000000', shadowOffset: { width: 0, height: 2 },  shadowOpacity: 0.4,  shadowRadius: 8,  elevation: 2 },
-  modal:     { shadowColor: '#000000', shadowOffset: { width: 0, height: 16 }, shadowOpacity: 0.65, shadowRadius: 36, elevation: 16 }
-};
-
-export const shadow = isCS ? DARK_SHADOW : LIGHT_SHADOW;
-
-// ============================================================
-// 8) WEB GEÇİŞLERİ (CSS transition)
-// ============================================================
-// react-native-web, `transitionProperty/Duration/TimingFunction` stil
-// anahtarlarını gerçek CSS transition'a çevirir. Bunu Animated yerine
-// kullanmak hover efektleri için ÇOK daha sağlam:
-//   • JS thread'i meşgul etmez,
-//   • composite edilmeyen (arka plan) sekmelerde takılan requestAnimationFrame
-//     sorununa yakalanmaz (bkz. AGENTS.md §3 Test Ortamı Notu).
-// Native'de bu anahtarlar sessizce yok sayılır — stil ANINDA değişir.
+// react-native-web `transitionProperty/Duration/TimingFunction` anahtarlarını
+// gerçek CSS transition'a çevirir. Animated yerine bunu kullanmak hover için
+// çok daha sağlam: JS thread'ini meşgul etmez ve composite edilmeyen
+// sekmelerde donan requestAnimationFrame sorununa yakalanmaz.
 export const webTransition = (props = 'transform, box-shadow', ms = 180) =>
-  Platform.OS === 'web'
+  IS_WEB
     ? {
         transitionProperty: props,
         transitionDuration: `${ms}ms`,
@@ -260,15 +285,11 @@ export const webTransition = (props = 'transform, box-shadow', ms = 180) =>
     : null;
 
 // ============================================================
-// 9) NADİRLİK IŞIĞI (RARITY GLOW) — CS2 orijinal drop efekti
+// 10) NADİRLİK IŞIĞI + RENK YARDIMCILARI
 // ============================================================
-// Eşya kutusunun ALT %10-15'lik kısmından yukarı doğru SÖNÜMLENEREK çıkan,
-// eşyanın nadirlik rengindeki ışık. CS2'de bu efekt eşyanın nadirliğini daha
-// eşya okunmadan belli eder.
-//
-// RN-Web'de gerçek bir `linear-gradient` stringi `background` anahtarıyla
-// verilebiliyor. Native'de gradient desteği olmadığı için düz yarı saydam
-// bir renge düşüyor.
+// ⚠️ Bu fonksiyonlara DAİMA gerçek hex verilir (nadirlik renkleri temadan
+// bağımsız). `C.*` tokenları web'de `var(...)` stringi olduğu için buraya
+// GEÇİRİLEMEZ — hex ayrıştırma bozulur.
 export const rarityGlowStyle = (hex, { height = '38%', strength = 0.85 } = {}) => {
   const base = {
     position: 'absolute',
@@ -279,7 +300,7 @@ export const rarityGlowStyle = (hex, { height = '38%', strength = 0.85 } = {}) =
     borderBottomLeftRadius: R.md,
     borderBottomRightRadius: R.md
   };
-  if (Platform.OS === 'web') {
+  if (IS_WEB) {
     return {
       ...base,
       background: `linear-gradient(to top, ${hexToRgba(hex, strength)} 0%, ${hexToRgba(hex, strength * 0.45)} 32%, ${hexToRgba(hex, 0)} 100%)`
@@ -298,12 +319,97 @@ export const hexToRgba = (hex, alpha = 1) => {
 };
 
 // Nadirlik rengini zemin üzerinde okunaklı bir "chip" zeminine çevirir.
-// ⚠️ Koyu temada opaklık ARTIRILIR: %12'lik bir renk, koyu antrasit üzerinde
-// neredeyse görünmez kalıyordu.
-export const rarityTint = (hex) => hexToRgba(hex, isCS ? 0.18 : 0.12);
+// ⚠️ Opaklık temaya göre değişir (koyu zeminde %12 neredeyse görünmez), bu
+// yüzden alfa da bir CSS değişkeninden gelir — `rgba()` içinde `var()`
+// kullanmak geçerli CSS'tir.
+export const rarityTint = (hex) => {
+  const h = (hex || '#000000').replace('#', '');
+  const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
+  const n = parseInt(full, 16);
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  return IS_WEB
+    ? `rgba(${r}, ${g}, ${b}, var(--rarity-tint, 0.18))`
+    : `rgba(${r}, ${g}, ${b}, ${DEFAULT_THEME === 'cs-dark' ? 0.18 : 0.12})`;
+};
+
+// ============================================================
+// 11) TEMA CSS'İ + ÇALIŞMA ZAMANI GEÇİŞİ
+// ============================================================
+// Her iki paletin değişkenlerini tek bir stil bloğu olarak üretir. App.js bunu
+// bir <style id="cs-theme-vars"> etiketine yazar.
+const EXTRA_VARS = {
+  'cs-dark': {
+    // ⚠️ FONT DA DEĞİŞKEN: böylece tema geçişinde font da anında değişiyor.
+    // Dosyalar `public/index.html` içinde Google Fonts ile yükleniyor.
+    'cs-font': "'Chakra Petch', 'Rajdhani', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+    'cs-font-display': "'Rajdhani', 'Chakra Petch', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+    'line-2': '2px',
+    'line-3': '3px',
+    'rarity-tint': '0.18',
+    'cs-clip': 'polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px))',
+    'cs-clip-corner': 'polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%)'
+  },
+  light: {
+    // ⚠️ Açık temada sistem fontu — eski tasarım aynen döner.
+    'cs-font': '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+    'cs-font-display': '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+    // ⚠️ Vurgu çizgisi ve kesik köşe YOK — eski tasarım aynen döner.
+    'line-2': '0px',
+    'line-3': '0px',
+    'rarity-tint': '0.12',
+    'cs-clip': 'none',
+    'cs-clip-corner': 'none'
+  }
+};
+
+const blockFor = (name) => {
+  const parts = [];
+  Object.entries(PALETTES[name]).forEach(([k, v]) => parts.push(`--c-${k}:${v}`));
+  Object.entries(RADII[name]).forEach(([k, v]) => parts.push(`--r-${k}:${v}px`));
+  Object.entries(SHADOW_COLOR[name]).forEach(([k, v]) => parts.push(`--sh-${k}:${v}`));
+  Object.entries(EXTRA_VARS[name]).forEach(([k, v]) => parts.push(`--${k}:${v}`));
+  return parts.join(';');
+};
+
+export const buildThemeCss = () =>
+  THEMES.map(name => `html[data-cs-theme="${name}"]{${blockFor(name)}}`).join('\n') +
+  // Öznitelik henüz yazılmadıysa (ilk boyama) varsayılan tema geçerli olsun.
+  `\nhtml:not([data-cs-theme]){${blockFor(DEFAULT_THEME)}}`;
+
+// ⚠️ TEK ONAYLI KALICILIK #2 (bkz. AGENTS.md Altın Kural 6): tema TERCİHİ
+// `localStorage`'da tutulur. Bu bir oyun durumu değil, bir arayüz tercihidir —
+// disclaimer'ın kapatılmış olmasıyla aynı sınıf. Bakiye/envanter/geçmiş HÂLÂ
+// yalnızca oturum içidir.
+// ⚠️ `localStorage` native'de YOKTUR ve gizli sekmede HATA FIRLATIR — Platform
+// kontrolü + try/catch zorunlu.
+const STORAGE_KEY = 'skinsim.theme';
+
+export const getStoredTheme = () => {
+  if (!IS_WEB) return DEFAULT_THEME;
+  try {
+    const v = window.localStorage.getItem(STORAGE_KEY);
+    return THEMES.includes(v) ? v : DEFAULT_THEME;
+  } catch {
+    return DEFAULT_THEME;
+  }
+};
+
+export const applyTheme = (name) => {
+  const theme = THEMES.includes(name) ? name : DEFAULT_THEME;
+  if (!IS_WEB || typeof document === 'undefined') return theme;
+  document.documentElement.setAttribute('data-cs-theme', theme);
+  // Kaydırma çubuğu ve tarayıcı arayüzü de temaya uysun.
+  document.documentElement.style.colorScheme = theme === 'cs-dark' ? 'dark' : 'light';
+  // Gövde zemini: değişken üzerinden, böylece geçiş anında olur.
+  document.documentElement.style.backgroundColor = `var(--c-bg)`;
+  document.body.style.backgroundColor = `var(--c-bg)`;
+  try { window.localStorage.setItem(STORAGE_KEY, theme); } catch { /* gizli sekme */ }
+  return theme;
+};
 
 export default {
-  THEME, C, RARITY, R, F, shadow,
+  THEMES, DEFAULT_THEME, THEME, C, RARITY, R, F, shadow,
   displayType, activeIndicator, clipCut, clipCorner,
-  webTransition, rarityGlowStyle, hexToRgba, rarityTint
+  webTransition, rarityGlowStyle, hexToRgba, rarityTint,
+  buildThemeCss, getStoredTheme, applyTheme
 };

@@ -28,12 +28,13 @@ import {
   StarIcon, DollarIcon, ValuePill, STAR_GREEN,
   IconSearch, IconInventory, IconClose, IconCheck, IconInfinity, IconRefresh,
   IconBook, IconList, IconChart, IconGem, IconTag, IconTrend, IconClock,
-  IconArrowDown, IconArrowUp, IconSelect, IconTrash, IconSell
+  IconArrowDown, IconArrowUp, IconSelect, IconTrash, IconSell,
+  IconSun, IconMoon
 } from './src/components/Icons';
 import LanguageSwitcher from './src/components/LanguageSwitcher';
 import Disclaimer from './src/components/Disclaimer';
 import { I18nProvider, useI18n } from './src/i18n';
-import { C, shadow, webTransition, R, displayType, activeIndicator, clipCut, THEME } from './src/theme';
+import { C, shadow, webTransition, R, displayType, activeIndicator, clipCut, buildThemeCss, getStoredTheme, applyTheme } from './src/theme';
 
 // ============================================================
 // ARMORY ÖZEL EŞYASI (Limited Edition Item)
@@ -140,10 +141,17 @@ const LOGO_ASPECT = 9.82; // 1100 / 112
 // Böylece temayı geri almak için GERÇEKTEN tek satır yetiyor.
 //
 // ⚠️ Yalnızca web: native'de `document` yoktur.
+// ⚠️ MODÜL YÜKLENİRKEN çalışır (React ağacından ÖNCE): ilk boyamada yanlış
+// temanın görünüp sonra "zıplaması" (flash of wrong theme) böyle önleniyor.
 if (Platform.OS === 'web' && typeof document !== 'undefined') {
-  document.documentElement.setAttribute('data-cs-theme', THEME);
-  document.documentElement.style.backgroundColor = C.bg;
-  document.body.style.backgroundColor = C.bg;
+  let styleEl = document.getElementById('cs-theme-vars');
+  if (!styleEl) {
+    styleEl = document.createElement('style');
+    styleEl.id = 'cs-theme-vars';
+    document.head.appendChild(styleEl);
+  }
+  styleEl.textContent = buildThemeCss();
+  applyTheme(getStoredTheme());
 }
 
 export default function App() {
@@ -156,6 +164,21 @@ export default function App() {
 
 function AppShell() {
   const { t } = useI18n();
+
+  // ============================================================
+  // TEMA (Karanlık / Aydınlık)
+  // ============================================================
+  // ⚠️ GEÇİŞ SAYFAYI YENİDEN YÜKLEMEZ. Renk/yarıçap/font tokenları CSS
+  // değişkeni olduğu için yalnızca `<html data-cs-theme>` özniteliği değişiyor;
+  // React ağacı yeniden kurulmuyor, dolayısıyla bakiye, envanter, açılış
+  // geçmişi ve yarım kalan Trade-Up sözleşmesi KORUNUYOR.
+  // Buradaki state sadece butonun hangi ikonu göstereceğini bilmek için.
+  const [theme, setTheme] = useState(getStoredTheme);
+  const toggleTheme = () => {
+    const next = theme === 'cs-dark' ? 'light' : 'cs-dark';
+    setTheme(applyTheme(next));
+  };
+
   const [tab, setTab] = useState('cases');
   // ⚠️ VARSAYILAN MOD: SINIRSIZ (30 Ağu 2026 — kullanıcı isteği).
   // Site ilk açıldığında kullanıcı hemen deneme yapabilsin diye bakiye
@@ -808,7 +831,7 @@ function AppShell() {
             const active = listSortMode === opt.key;
             return (
               <TouchableOpacity key={opt.key} style={[s.sortChip, active && s.sortChipActive]} onPress={() => setListSortMode(opt.key)}>
-                <opt.Icon size={13} color={active ? C.onAccent : C.textDim} />
+                <opt.Icon size={13} color={active ? C.activeTxt : C.textDim} />
                 <Text style={[s.sortChipTxt, active && s.sortChipTxtActive]}>{t(opt.labelKey)}</Text>
               </TouchableOpacity>
             );
@@ -988,15 +1011,29 @@ function AppShell() {
             style={[s.ghostBtn, tab === 'inventory' && s.ghostBtnActive]}
             onPress={() => switchTab('inventory')}
           >
-            <IconInventory size={13} color={tab === 'inventory' ? C.onAccent : C.textSoft} />
+            <IconInventory size={13} color={tab === 'inventory' ? C.activeTxt : C.textSoft} />
             <Text style={[s.ghostBtnTxt, tab === 'inventory' && s.ghostBtnTxtActive]}>{t('util.inventory', { n: inventory.length })}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[s.ghostBtn, tab === 'blog' && s.ghostBtnActive]}
             onPress={() => { setBlogSection('about'); switchTab('blog'); }}
           >
-            <IconBook size={13} color={tab === 'blog' ? C.onAccent : C.textSoft} />
+            <IconBook size={13} color={tab === 'blog' ? C.activeTxt : C.textSoft} />
             <Text style={[s.ghostBtnTxt, tab === 'blog' && s.ghostBtnTxtActive]}>{t('util.blog')}</Text>
+          </TouchableOpacity>
+
+          {/* ---------- KARANLIK / AYDINLIK MOD ---------- */}
+          <TouchableOpacity
+            style={s.ghostBtn}
+            onPress={toggleTheme}
+            accessibilityLabel={t('util.theme')}
+          >
+            {theme === 'cs-dark'
+              ? <IconSun size={13} color={C.textSoft} />
+              : <IconMoon size={13} color={C.textSoft} />}
+            <Text style={s.ghostBtnTxt}>
+              {theme === 'cs-dark' ? t('util.themeLight') : t('util.themeDark')}
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity style={s.dangerGhostBtn} onPress={() => setResetAllConfirmOpen(true)}>
             <IconRefresh size={13} color={C.danger} />
@@ -1165,7 +1202,7 @@ function AppShell() {
                       const active = invSort === opt.key;
                       return (
                         <TouchableOpacity key={opt.key} style={[s.sortChip, active && s.sortChipActive]} onPress={() => setInvSort(opt.key)}>
-                          <opt.Icon size={13} color={active ? C.onAccent : C.textDim} />
+                          <opt.Icon size={13} color={active ? C.activeTxt : C.textDim} />
                           <Text style={[s.sortChipTxt, active && s.sortChipTxtActive]}>{t(opt.labelKey)}</Text>
                         </TouchableOpacity>
                       );
@@ -1178,8 +1215,12 @@ function AppShell() {
                       style={[s.invToolBtn, selectMode && s.invToolBtnActive]}
                       onPress={() => { setSelectMode(m => !m); setSelectedUids([]); }}
                     >
-                      <IconSelect size={13} color={selectMode ? C.onAccent : C.textSoft} />
-                      <Text style={[s.invToolTxt, selectMode && { color: C.onAccent }]}>
+                      {/* ⚠️ AKTİF METİN `activeTxt` OLMALI, `onAccent` DEĞİL:
+                          koyu temada `onAccent` neredeyse siyahtır (sarı buton
+                          üzerinde doğru) ama aktif butonun zemini koyu gri
+                          olduğu için orada okunmaz hâle geliyordu. */}
+                      <IconSelect size={13} color={selectMode ? C.activeTxt : C.textSoft} />
+                      <Text style={[s.invToolTxt, selectMode && { color: C.activeTxt }]}>
                         {selectMode ? t('inv.multiSelectOn') : t('inv.multiSelect')}
                       </Text>
                     </TouchableOpacity>

@@ -1,4 +1,4 @@
-import { getWearFromFloat, generateMockPrice, generateFloat, WEAR_TIERS } from './utils';
+import { getWearFromFloat, generateMockPrice, mockWearMultiplier, generateFloat, WEAR_TIERS } from './utils';
 
 // ============================================================
 // CANLI FİYAT KAYNAĞI
@@ -123,7 +123,25 @@ const lookupLivePrice = (priceMap, item, wear, isStatTrak, isSouvenir) => {
 };
 
 // Ana fiyat çözümleyici: önce canlı fiyata bakar, bulamazsa simülasyona düşer
-export const getRealisticPrice = (priceMap, item, floatVal, isStatTrak, rarityNameFallback, isSouvenir = false) => {
+// Simüle fiyatın VARYANSSIZ karşılığı.
+// ⚠️ NEDEN GEREKLİ: `generateMockPrice` içinde `0.85 + Math.random() * 0.30`
+// var. Canlı fiyatı olmayan bir eşya için bu fonksiyon her çağrıldığında
+// FARKLI bir sayı döner. Trade-Up panelinde çıktı listesi fiyata göre
+// sıralandığı için, kullanıcı float çubuğunu her oynattığında (analiz yeniden
+// hesaplanır) aynı eşyalar listede yer değiştiriyordu — kullanıcının
+// "bir üste, bir alta gittiğini gördüm" dediği davranış (31 Ağu 2026).
+// Burada rastgele varyans yerine eşyanın ADINDAN türetilen deterministik
+// çarpan kullanılıyor: liste artık kararlı, aşınma değişince fiyat hâlâ
+// mantıklı biçimde değişiyor.
+const stableMockPrice = (rarityName, floatVal, isStatTrak, itemName) => {
+  let p = MOCK_BASE_BY_RARITY(rarityName) * mockWearMultiplier(floatVal) * deterministicItemFactor(itemName || '');
+  if (isStatTrak) p *= 1.8;
+  return parseFloat(p.toFixed(2));
+};
+
+// `opts.stable: true` -> canlı fiyat bulunamazsa RASTGELE varyans kullanılmaz.
+// Sıralanan/karşılaştırılan her listede (Trade-Up çıktıları, EV) zorunludur.
+export const getRealisticPrice = (priceMap, item, floatVal, isStatTrak, rarityNameFallback, isSouvenir = false, { stable = false } = {}) => {
   const wear = getWearFromFloat(floatVal);
   if (priceMap) {
     let live = lookupLivePrice(priceMap, item, wear, isStatTrak, isSouvenir);
@@ -135,7 +153,9 @@ export const getRealisticPrice = (priceMap, item, floatVal, isStatTrak, rarityNa
     }
     if (live != null) return parseFloat(live.toFixed(2));
   }
-  const mock = generateMockPrice(rarityNameFallback ?? item?.rarity?.name, floatVal, isStatTrak);
+  const mock = stable
+    ? stableMockPrice(rarityNameFallback ?? item?.rarity?.name, floatVal, isStatTrak, item?.name)
+    : generateMockPrice(rarityNameFallback ?? item?.rarity?.name, floatVal, isStatTrak);
   // Simüle fiyatlamada souvenir primi: gerçek piyasada souvenir varyantları
   // normalden belirgin şekilde pahalıdır (arz çok daha kısıtlı).
   return isSouvenir ? parseFloat((mock * 1.6).toFixed(2)) : mock;

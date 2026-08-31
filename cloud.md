@@ -231,19 +231,21 @@ görünen bir sorumluluk reddi bulunur (EN/TR). İçerik i18n sözlüğündeki
 
 ## 5.6 Tarayıcı Depolaması (localStorage)
 
-Uygulama **tek bir** kalıcı anahtar kullanır:
+Uygulama **iki** kalıcı anahtar kullanır:
 
 | Anahtar | Değer | Amaç |
 |---|---|---|
 | `skinsim.disclaimerDismissed` | `'1'` | Kullanıcı sorumluluk reddini kapattı |
+| `skinsim.theme` | `'cs-dark'` \| `'light'` | Karanlık/Aydınlık mod tercihi |
 
 Başka hiçbir veri saklanmaz — bakiye, kredi, envanter ve geçmiş **yalnızca
-oturum içidir** ve sayfa yenilendiğinde sıfırlanır. Depolanan değer kişisel veri
-içermez, hiçbir sunucuya gönderilmez (zaten sunucu yoktur — bkz. §1).
+oturum içidir** ve sayfa yenilendiğinde sıfırlanır. Depolanan değerler kişisel
+veri içermez, hiçbir sunucuya gönderilmez (zaten sunucu yoktur — bkz. §1) ve
+çerez DEĞİLDİR (çerez onayı gerektirmez).
 
 Erişim `Platform.OS !== 'web'` kontrolü ve `try/catch` ile korunur; gizli
-sekmede veya depolama kapalıyken uygulama **çökmez**, yalnızca uyarı tekrar
-görünür.
+sekmede veya depolama kapalıyken uygulama **çökmez** — uyarı tekrar görünür,
+tema varsayılana (`cs-dark`) döner.
 
 ---
 
@@ -382,6 +384,7 @@ etmek daha güvenlidir; o durumda değiştirilecek yer yalnızca
 | **2026-08-30** | Koleksiyonlar sekmesi eklendi — **yeni dış servis YOK**; zaten indirilen `collections.json` yeniden kullanılıyor. Aktif drop havuzu listesi elle bakımlı (`src/armoryData.js`) |
 | **2026-08-30** | **Google Search Console doğrulama meta etiketi** eklendi (`public/index.html`). Analytics'ten AYRI bir şeydir |
 | **2026-08-30** | **YENİ DIŞ SERVİS: Google Fonts** — taktiksel tema arayüz fontları (bkz. §5.11). Yükleme başarısız olursa sistem fontuna düşer |
+| **2026-08-31** | **Karanlık/Aydınlık mod** — `localStorage`'a ikinci anahtar (`skinsim.theme`, bkz. §5.6). **Yeni dış servis YOK**; Google Fonts yalnızca koyu temada kullanılıyor, aydınlık tema sistem fontuna düşer |
 | **2026-08-30** | **YENİ DIŞ SERVİS: FormSubmit** — iletişim formu mesajlarını `eolyrics@gmail.com` adresine iletir (bkz. §5.10). İlk gönderimde aktivasyon gerekir |
 
 | Tarih | Değişiklik |

@@ -330,7 +330,9 @@ export default function CollectionsScreen({ collections, priceMap }) {
               style={[cs.sortChip, on && cs.sortChipOn, webTransition('background-color, border-color', 150)]}
               onPress={() => setSortMode(opt.key)}
             >
-              <opt.Icon size={13} color={on ? C.onAccent : C.textDim} />
+              {/* ⚠️ `activeTxt` — çipin aktif zemini `activeBg` (koyu gri),
+                  vurgu sarısı DEĞİL. `onAccent` burada neredeyse siyah kalıyordu. */}
+              <opt.Icon size={13} color={on ? C.activeTxt : C.textDim} />
               <Text style={[cs.sortChipTxt, on && cs.sortChipTxtOn]}>{t(opt.labelKey)}</Text>
             </TouchableOpacity>
           );

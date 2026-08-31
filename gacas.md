@@ -393,7 +393,66 @@ Doğrulanan sonuç (200.000 örnek, 0.00–1.00 skin):
    `Consumer → Industrial → Mil-Spec → Restricted → Classified → Covert`
 3. **Çıktı havuzu, girdilerin ait olduğu koleksiyon(lar)dan** belirlenir. Her girdi
    kendi koleksiyonuna **toplam 1 oy** verir; havuz bu oylarla ağırlıklandırılır.
-4. Çıktı float'ı: `hedefMin + ortalamaFloat × (hedefMax − hedefMin)`
+4. Çıktı float'ı: **normalize ortalama** ile hesaplanır (aşağıya bakın).
+
+#### Çıktı float'ı — gerçek CS2 formülü
+
+```
+1) Her girdi KENDİ aralığında normalize edilir:
+       n_i = (float_i − min_i) / (max_i − min_i)          → 0..1
+2) Ortalaması alınır:
+       n̄  = Σ n_i / N
+3) Ortalama, ÇIKTININ kendi aralığına ölçeklenir:
+       outFloat = outMin + n̄ × (outMax − outMin)
+```
+
+Referans: csfloat.com trade-up aracı ve tradeupcalculator.com aynı formülü
+kullanır. Arayüzde bu değer **"Aşınma konumu: %X"** olarak gösterilir; asıl
+hesaba giren sayı budur, üstündeki "Ort. Float" yalnızca bilgi amaçlıdır.
+
+> **⚠️ 31 AĞU 2026 — BUG: ÇIKTI AŞINMASI RASTGELE ZIPLIYORDU**
+>
+> **Kullanıcı şikâyeti:** *"Float'ı değiştirdiğimde çıkan eşyanın aşınması bir
+> üste bir alta, tamamen rastgele gidiyor."*
+>
+> **KÖK NEDEN 1 — HAM ORTALAMA.** Eski kod normalize etmeden ham float
+> ortalamasını doğrudan çıktının aralığına oturtuyordu
+> (`outMin + ortalamaHamFloat × (outMax − outMin)`). Her skinin float aralığı
+> farklı olduğu için bu anlamsızdır: aralığı 0.45–1.00 olan bir skin 0.50
+> float ile **takılabilecek en iyi hâlindedir** (konumu %9) ama eski kod bunu
+> "orta karar" sayıp çıktıyı Field-Tested'a gönderiyordu. Aralıkları farklı iki
+> girdide çubuğu birkaç piksel oynatmak ortalamayı ters yönlere kaydırıyor,
+> sonuç rastgele görünüyordu.
+>
+> **KÖK NEDEN 2 — FİYATTA RASTGELE VARYANS.** Canlı fiyatı olmayan eşyalarda
+> `generateMockPrice` içindeki `0.85 + Math.random() × 0.30` her çağrıda farklı
+> bir sayı üretiyordu. Çıktı listesi fiyata göre sıralandığı için, float her
+> oynatıldığında (analiz yeniden hesaplanır) **aynı eşyalar listede yer
+> değiştiriyordu**. Artık `getRealisticPrice(..., { stable: true })` eşyanın
+> adından türeyen deterministik çarpanı kullanıyor.
+>
+> **Doğrulama (10× UMP-45 | Warm Blooded, Harlequin Collection):**
+>
+> | Girdi float | Aşınma konumu | Çıktı float | Çıktı aşınması |
+> |---|---|---|---|
+> | 0.01 | %1.4 | 0.014 | Factory New |
+> | 0.15 | %21.4 | 0.214 | Field-Tested |
+> | 0.30 | %42.9 | 0.429 | Well-Worn |
+> | 0.60 | %85.7 | 0.857 | Battle-Scarred |
+>
+> Monotonik ve deterministik. Aynı float ikinci kez uygulandığında fiyatlar
+> **birebir aynı** çıktı ($4.66 / $1.50) — liste artık zıplamıyor.
+
+#### Kâr ihtimali ("%X ihtimalle kâr")
+
+```
+kârİhtimali = Σ  o.chance    (o.price > girdilerin toplam değeri olan çıktılar)
+```
+
+Beklenen Değer'i **tamamlar, yerine geçmez**: EV tek bir nadir pahalı çıktı
+yüzünden yüksek görünebilirken sözleşmelerin ezici çoğunluğu zararla bitebilir.
+Eşitlik kâr sayılmaz. ⚠️ İhtimaller **%100'e normalize edildikten SONRA**
+toplanır.
 
 #### Olasılık formülü
 
@@ -1305,19 +1364,55 @@ atmak isteyenler için yazılıdır.
 > güncelleme."* — Bu yüzden hiçbir bileşenin JSX ağacı, hiçbir `flex` düzeni
 > ve menü sırası değişmedi; yalnızca **token değerleri** değişti.
 
-#### ⚠️ TEK SATIRLIK GERİ ALMA
-`src/theme.js` → `export const THEME = 'cs-dark' | 'light'`.
-Bu **tek sabit** paleti, köşe yarıçaplarını, fontları, aktif-durum görünümünü,
-gölgeleri ve gövde zeminini birlikte belirler. Eski açık tema **silinmedi**:
-`LIGHT_C` / `LIGHT_R` / `LIGHT_F` / `LIGHT_SHADOW` blokları olduğu gibi duruyor.
+#### ⚠️ 31 AĞU 2026 — TEMA ARTIK KULLANICI TARAFINDAN DEĞİŞTİRİLİYOR
 
-`App.js` temayı DOM'a köprüler (`<html data-cs-theme="...">` + gövde zemini),
-böylece `public/index.html`'deki font kuralı da aynı anahtara bağlanır.
+Üst yardımcı çubukta **Güneş/Ay butonu** var; `cs-dark` ↔ `light` arasında
+geçiş yapıyor. Varsayılan `cs-dark`, tercih `localStorage`'da
+`skinsim.theme` anahtarında saklanıyor (Altın Kural 6'ya **onaylı ikinci
+istisna** — ilki disclaimer'dı).
 
-> **Doğrulandı:** `THEME='light'` → gövde `#f4f7fb`, kart beyaz + 10 px yarıçap,
-> aktif sekme yeniden dolu mavi, Chakra Petch kullanan öğe sayısı **0**.
-> `THEME='cs-dark'` → gövde `#14181c`, aktif sekme mat gri + 2 px sarı çizgi,
-> 81 öğe Chakra Petch, 30 öğe monospace.
+**⚠️ SAYFA YENİDEN YÜKLENMİYOR — bakiye, envanter, açılış geçmişi ve yarım
+kalan Trade-Up sözleşmesi KORUNUYOR.** Bunu mümkün kılan mekanizma:
+
+```
+theme.js  →  C.surface  ===  'var(--c-surface)'      (web'de)
+             R.md       ===  'var(--r-md)'
+             shadow()   →    'var(--sh-md)'
+
+buildThemeCss()  →  <style id="cs-theme-vars">
+                    html[data-cs-theme="cs-dark"]{ --c-surface:#21262c; … }
+                    html[data-cs-theme="light"]  { --c-surface:#ffffff; … }
+
+applyTheme(t)    →  <html data-cs-theme="t">      ← DEĞİŞEN TEK ŞEY
+```
+
+Yani `StyleSheet.create` bir kez çalışıp CSS **değişken adlarını** yazıyor;
+tema değişince tarayıcı o değişkenlerin değerini yeniden çözüyor. React ağacı
+hiç yeniden kurulmuyor.
+
+> **Ölçüldü (RN-Web `var()` desteği):** `backgroundColor` ✅ · `borderRadius` ✅
+> · `shadowColor` ✅. **⚠️ `shadowOpacity` var() renginde YOK SAYILIYOR** — bu
+> yüzden alfa doğrudan değişkenin içine gömülü (`--sh-md: rgba(...)`).
+
+#### ⚠️ VARSAYILANI KALICI OLARAK DEĞİŞTİRME
+`src/theme.js` → `export const DEFAULT_THEME = 'cs-dark' | 'light'`.
+Eski açık tema **silinmedi**: `LIGHT_C` / `LIGHT_R` / `LIGHT_F` /
+`LIGHT_SHADOW` blokları olduğu gibi duruyor ve artık ikisi de **canlı**.
+
+> **Doğrulandı (31 Ağu 2026, tarayıcıda):** butona basınca `<html>` özniteliği
+> `light` oldu, gövde `rgb(244,247,251)`, font sistem yığınına döndü, tercih
+> `localStorage`'a yazıldı ve yenilemede korundu; geri basınca `cs-dark`,
+> gövde `rgb(20,24,28)`. Menü sırası, ızgara ve yerleşim **hiç değişmedi**.
+
+> **⚠️ FONT KURALINI TEMAYA GÖRE SEÇME.** İlk sürümde `index.html`'deki font
+> kuralı `html[data-cs-theme='cs-dark']` ile sınırlıydı; aydınlık temada
+> hiçbir kural eşleşmediği için tarayıcı varsayılanı (**Times New Roman —
+> serif!**) devreye girdi (ölçüldü). Kural her temada geçerli olmalı; hangi
+> fontun kullanılacağına `EXTRA_VARS[tema]['cs-font']` karar verir.
+
+> **⚠️ `hexToRgba(C.x, …)` ARTIK ÇALIŞMAZ.** `C.x` bir hex değil,
+> `var(--c-x)` dizesidir; hex ayrıştırma bozulur. Şeffaf uç gerekiyorsa
+> doğrudan `transparent` yazın (bkz. `CaseOpening.EdgeFades`).
 
 #### Palet
 | Token | Açık tema | Taktiksel tema |
@@ -1585,6 +1680,11 @@ npm run ios      # iOS
 
 | Tarih | Değişiklik |
 |---|---|
+| **2026-08-31** | **Karanlık/Aydınlık mod düğmesi** — tokenlar CSS değişkenine çevrildi (`buildThemeCss`/`applyTheme`); geçiş **yeniden yükleme yapmaz**, bakiye/envanter/geçmiş korunur. Tercih `localStorage`'da (`skinsim.theme`) |
+| **2026-08-31** | **KRİTİK — Trade-Up çıktı float'ı yanlış formülle hesaplanıyordu:** ham ortalama yerine **normalize ortalama** (gerçek CS2 / csfloat formülü). Aşınma artık monotonik ve öngörülebilir |
+| **2026-08-31** | **Çıktı listesi rastgele sıralanıyordu:** canlı fiyatı olmayan eşyalarda `Math.random()` varyansı; `getRealisticPrice(..., { stable: true })` eklendi. Çıktı satırlarında artık **aşınma + float** da yazıyor |
+| **2026-08-31** | **Kâr ihtimali göstergesi** — girdi toplamından pahalı çıktıların ihtimal toplamı (renkli çubuk + açıklama kutucuğu) |
+| **2026-08-31** | **Aktif durum yazı rengi:** koyu temada `onAccent` (neredeyse siyah) mat gri aktif zeminde okunmuyordu → `activeTxt`. Contract sekmesi, envanter çoklu seçim ve tüm sıralama çipleri düzeltildi |
 | **2026-08-31** | **KRİTİK — Trade-Up çıktı havuzu tek eşyaya düşüyordu:** sabitlenmemiş `/(Charm\|Sticker\|Patch\|Pin)/i` regex'i "Slee**pin**g Potion" gibi 10 gerçek silah skinini eliyordu. Tür artık kimlikten (`skin-`) anlaşılıyor. 10× UMP-45 → %100 AWP yerine doğru %50/%50 |
 | **2026-08-31** | **Trade-Up oy şişmesi:** birden fazla koleksiyonda geçen eşya her koleksiyona ayrı tam oy veriyordu (10 girdi → 50 oy). Artık her girdi toplam 1 oy kullanır |
 | **2026-08-31** | Aynı eşya iki koleksiyondan da geliyorsa ihtimaller **toplanıyor**, listede iki kez görünmüyor |

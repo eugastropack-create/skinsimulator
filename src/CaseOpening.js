@@ -110,8 +110,11 @@ function WinnerPointer({ size = POINTER_SIZE, color = C.accentDeep }) {
 function EdgeFades({ bg = C.bgAlt, fadeWidth = 50 }) {
   return (
     <>
-      <View pointerEvents="none" style={[edge.fade, { left: 0, width: fadeWidth, background: `linear-gradient(to right, ${bg} 25%, ${hexToRgba(bg, 0)} 100%)` }]} />
-      <View pointerEvents="none" style={[edge.fade, { right: 0, width: fadeWidth, background: `linear-gradient(to left, ${bg} 25%, ${hexToRgba(bg, 0)} 100%)` }]} />
+      {/* ⚠️ `hexToRgba(bg, 0)` KULLANILAMAZ: `bg` artık bir CSS değişkeni
+          (`var(--c-bgAlt)`) — hex ayrıştırma bozulur. Şeffaf uç için doğrudan
+          `transparent` kullanılıyor; görsel sonuç birebir aynı. */}
+      <View pointerEvents="none" style={[edge.fade, { left: 0, width: fadeWidth, background: `linear-gradient(to right, ${bg} 25%, transparent 100%)` }]} />
+      <View pointerEvents="none" style={[edge.fade, { right: 0, width: fadeWidth, background: `linear-gradient(to left, ${bg} 25%, transparent 100%)` }]} />
     </>
   );
 }

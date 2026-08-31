@@ -8,6 +8,7 @@ import { useToast, ToastBanner } from './components/Toast';
 import { useI18n } from './i18n';
 import { C, RARITY, shadow, R, activeIndicator, displayType, clipCut } from './theme';
 import { IconLock } from './components/Icons';
+import Tooltip from './components/Tooltip';
 
 const NEXT_RARITY_NAME = { 'Consumer Grade': 'Industrial Grade', 'Industrial Grade': 'Mil-Spec Grade', 'Mil-Spec Grade': 'Restricted', 'Restricted': 'Classified', 'Classified': 'Covert' };
 const RARITY_LABELS = { 'Consumer Grade': 'Consumer', 'Industrial Grade': 'Industrial', 'Mil-Spec Grade': 'Mil-Spec', 'Restricted': 'Restricted', 'Classified': 'Classified', 'Covert': 'Covert' };
@@ -322,8 +323,15 @@ function SummaryContent({ analysis, filledCount, requiredCount, ready, profitAmo
     <>
       <View style={ts.statGrid}>
         <View style={ts.statItem}>
-          <Text style={ts.statLbl}>{t('tradeup.avgFloat')}</Text>
-          <Text style={ts.statVal}>{analysis.avgFloat.toFixed(4)}</Text>
+          <Tooltip text={t('tradeup.tipAvgFloat')}>
+            <Text style={ts.statLbl}>{t('tradeup.avgFloat')}</Text>
+            <Text style={ts.statVal}>{analysis.avgFloat.toFixed(4)}</Text>
+            {/* Asıl hesaba giren sayı BU: girdilerin kendi aralıklarındaki
+                ortalama konumu. Çıktının aşınmasını birebir bu belirliyor. */}
+            <Text style={ts.statSub}>
+              {t('tradeup.wearPos')}: %{(analysis.avgNormFloat * 100).toFixed(1)}
+            </Text>
+          </Tooltip>
         </View>
         <View style={ts.statItem}>
           <Text style={ts.statLbl}>{t('tradeup.totalCost')}</Text>
@@ -340,6 +348,38 @@ function SummaryContent({ analysis, filledCount, requiredCount, ready, profitAmo
           <Text style={[ts.statVal, { color: profitAmount >= 0 ? C.success : C.danger }]}>{formatSignedMoney(profitAmount)} (%{profitPct.toFixed(0)})</Text>
         </View>
       </View>
+
+      {/* ============================================================
+          KÂR İHTİMALİ
+          ============================================================
+          ⚠️ Beklenen Değer'den AYRI bir bilgidir ve onu tamamlar: EV, tek bir
+          çok pahalı çıktı yüzünden yüksek görünebilirken sözleşmelerin ezici
+          çoğunluğu zararla bitebilir. Buradaki yüzde, "kaç kere kârlı çıkarım"
+          sorusunun cevabıdır (girdi toplamından PAHALI çıktıların ihtimal
+          toplamı). Eşitlik kâr sayılmaz. */}
+      <Tooltip text={t('tradeup.tipProfitChance')}>
+        <View style={ts.chanceBar}>
+          <View style={ts.chanceTrack}>
+            <View
+              style={[
+                ts.chanceFill,
+                {
+                  width: `${Math.min(100, Math.max(0, analysis.profitChance))}%`,
+                  backgroundColor: analysis.profitChance >= 50 ? C.success : analysis.profitChance >= 20 ? C.accent : C.danger,
+                },
+              ]}
+            />
+          </View>
+          <Text
+            style={[
+              ts.chanceTxt,
+              { color: analysis.profitChance >= 50 ? C.success : analysis.profitChance >= 20 ? C.accent : C.danger },
+            ]}
+          >
+            {t('tradeup.profitChance', { pct: analysis.profitChance.toFixed(1) })}
+          </Text>
+        </View>
+      </Tooltip>
 
       {analysis.sourceCollectionNames?.length > 0 && (
         <Text style={ts.sourceTxt} numberOfLines={2}>{t('tradeup.source', { names: analysis.sourceCollectionNames.join(', ') })}</Text>
@@ -377,6 +417,10 @@ function SummaryContent({ analysis, filledCount, requiredCount, ready, profitAmo
                     </Text>
                     <Text style={ts.outcomePct}>
                       %{o.chance < 0.5 ? o.chance.toFixed(2) : o.chance.toFixed(1)}
+                      {/* Çıktının aşınması artık deterministik: kullanıcı float
+                          çubuğunu oynattıkça burada ANINDA değişir ve imzalayınca
+                          birebir bu değer çıkar. */}
+                      {o.outWear ? <Text style={ts.outcomeWear}>  ·  {o.outWear} ({o.outFloat.toFixed(3)})</Text> : null}
                     </Text>
                   </View>
                   {/* Tahmini fiyat — ihtimalin yanında değeri de görünsün */}
@@ -522,6 +566,51 @@ export default function TradeUpScreen({ inventory, setInventory, priceMap, allCo
     const targetRarity = isKnifeRecipe ? 'Covert' : NEXT_RARITY_NAME[inputRarity];
     if (!targetRarity) { setAnalysis(null); return; }
 
+    // ============================================================
+    // ÇIKTI FLOAT'I — GERÇEK CS2 FORMÜLÜ (NORMALİZE ORTALAMA)
+    // ============================================================
+    // ⚠️ BUG DÜZELTMESİ (31 Ağu 2026, kullanıcı bildirimi: "float değiştirince
+    // çıkan eşyanın aşınması bir üste bir alta rastgele zıplıyor").
+    //
+    // KÖK NEDEN: Eski kod girdilerin HAM float ortalamasını alıp doğrudan
+    // çıktının aralığına oturtuyordu:
+    //
+    //     f = outMin + ortalamaHamFloat * (outMax - outMin)          // ← YANLIŞ
+    //
+    // Bu, her skinin float aralığının FARKLI olduğunu görmezden gelir.
+    // Örnek: aralığı 0.45–1.00 olan bir skin (yalnızca WW/BS basılabilir)
+    // 0.50 float ile TAKILABİLECEK EN İYİ hâlindedir — aralığındaki konumu
+    // (0.50-0.45)/0.55 = 0.09, yani neredeyse "Factory New" konumu. Eski kod
+    // ham 0.50'yi kullandığı için bunu "orta karar" sayıyor ve çıktıyı
+    // Field-Tested'a gönderiyordu. Aynı çubuğu birkaç piksel oynatmak,
+    // aralıkları farklı iki girdide bambaşka yönlere kayan bir ortalama
+    // ürettiği için sonuç rastgele görünüyordu.
+    //
+    // DOĞRUSU (csfloat.com / tradeupcalculator.com ile aynı):
+    //   1. Her girdi KENDİ aralığına göre normalize edilir:
+    //          n_i = (float_i - min_i) / (max_i - min_i)        -> 0..1
+    //   2. Bu normalize değerlerin ortalaması alınır:  n̄ = Σn_i / N
+    //   3. Ortalama, ÇIKTININ kendi aralığına ölçeklenir:
+    //          outFloat = outMin + n̄ * (outMax - outMin)
+    //
+    // Böylece "girdilerin aşınma yüzdesi" ile "çıktının aşınma yüzdesi" aynı
+    // şey olur: hepsi FN yakınıysa çıktı da FN yakını gelir, hepsi yıpranmışsa
+    // çıktı da yıpranmış gelir. Artık deterministik ve öngörülebilir.
+    //
+    // ⚠️ SIFIR GENİŞLİK KORUMASI: `min_float === max_float` olan (veya alanları
+    // eksik olup ikisi de aynı varsayılana düşen) eşyalarda bölme 0/0 olur ve
+    // NaN üretir; o durumda konum 0 kabul edilir.
+    const normalizedFloats = validSlots.map(e => {
+      const mn = e.skin.min_float ?? 0;
+      const mx = e.skin.max_float ?? 1;
+      const span = mx - mn;
+      if (!(span > 0)) return 0;
+      return Math.min(1, Math.max(0, (e.float - mn) / span));
+    });
+    const avgNormFloat = normalizedFloats.reduce((a, n) => a + n, 0) / normalizedFloats.length;
+    // Panelde gösterilen "Ortalama Float": kullanıcının kartlarda gördüğü
+    // sayıların ham ortalaması. Hesaplamada KULLANILMAZ (yukarıya bakın),
+    // yalnızca bilgi amaçlıdır.
     const avgFloat = validSlots.reduce((a, e) => a + e.float, 0) / validSlots.length;
     // Slotların fiyatları zaten seçim/float değişimi anında hesaplanıp entry.price'ta saklanıyor
     const totalCost = validSlots.reduce((acc, e) => acc + e.price, 0);
@@ -549,12 +638,19 @@ export default function TradeUpScreen({ inventory, setInventory, priceMap, allCo
     });
 
     const buildOutcome = (t, priceRarityOverride) => {
-      // Float interpolasyonu: hedef eşyanın KENDİ min/max float aralığı içinde,
-      // girdilerin ortalama (0-1) float konumuna karşılık gelen noktayı hesaplar.
+      // Hedefin KENDİ aralığında, girdilerin NORMALİZE ortalama konumuna
+      // karşılık gelen nokta (bkz. yukarıdaki formül açıklaması).
       const targetMin = t.min_float ?? 0;
       const targetMax = t.max_float ?? 1;
-      const f = parseFloat((targetMin + avgFloat * (targetMax - targetMin)).toFixed(4));
-      return { skin: t, outFloat: f, price: getRealisticPrice(priceMap, t, f, false, priceRarityOverride ?? targetRarity) };
+      const f = parseFloat((targetMin + avgNormFloat * (targetMax - targetMin)).toFixed(4));
+      // ⚠️ `stable: true` ZORUNLU: liste fiyata göre sıralanıyor; varyanslı
+      // simüle fiyat kullanılırsa her float oynatmasında satırlar yer değiştirir.
+      return {
+        skin: t,
+        outFloat: f,
+        outWear: getWearFromFloat(f),
+        price: getRealisticPrice(priceMap, t, f, false, priceRarityOverride ?? targetRarity, false, { stable: true }),
+      };
     };
 
     let possibleOutcomes = [];
@@ -634,12 +730,27 @@ export default function TradeUpScreen({ inventory, setInventory, priceMap, allCo
     }
 
     const ev = possibleOutcomes.reduce((a, o) => a + o.price * (o.chance / 100), 0);
+
+    // ============================================================
+    // KÂR İHTİMALİ — "%X ihtimalle kâr"
+    // ============================================================
+    // EV tek başına yanıltıcıdır: %1 ihtimalle çıkan çok pahalı bir eşya EV'yi
+    // yukarı çeker ama sözleşmelerin %99'u zararla biter. Bu satır kullanıcıya
+    // "kaç kere kârlı çıkarım" sorusunun cevabını verir.
+    //
+    // Tanım: girdilerin TOPLAM piyasa değerinden daha değerli olan çıktıların
+    // ihtimallerinin toplamı. Eşitlik kâr sayılmaz (başa baş).
+    // ⚠️ `possibleOutcomes` normalize edildikten SONRA hesaplanmalı — aksi
+    // hâlde ham ihtimaller toplandığı için %100'ü aşabilir.
+    const profitChance = possibleOutcomes.reduce(
+      (a, o) => a + ((o.price ?? 0) > totalCost ? o.chance : 0), 0
+    );
     const sourceCollectionNames = isKnifeRecipe
       ? ['Bıçak / Eldiven Havuzu (Simülatöre Özel Kural)']
       : totalVotes > 0
         ? Object.keys(collectionVotes).map(id => collectionById[id]?.name).filter(Boolean)
         : [];
-    setAnalysis({ avgFloat, totalCost, ev, outcomes: possibleOutcomes, sourceCollectionNames, isKnifeRecipe });
+    setAnalysis({ avgFloat, avgNormFloat, profitChance, totalCost, ev, outcomes: possibleOutcomes, sourceCollectionNames, isKnifeRecipe });
   }, [slots, allSkins, priceMap, skinToCollections, knifePool]);
 
   const lockedRarity = slots.find(s => s !== null)?.skin?.rarity?.name || null;
@@ -699,7 +810,7 @@ export default function TradeUpScreen({ inventory, setInventory, priceMap, allCo
     const def = skin.min_float ? skin.min_float + 0.05 : 0.15;
     // Fiyat SEÇİM ANINDA bir kez hesaplanıp slotta saklanır — render sırasında tekrar
     // tekrar hesaplanmadığı için diğer slotlar etkilenmez (bkz. handleFloatChange notu).
-    const price = getRealisticPrice(priceMap, skin, def, false, skin.rarity?.name);
+    const price = getRealisticPrice(priceMap, skin, def, false, skin.rarity?.name, false, { stable: true });
 
     // Covert seçilirse tarif 5'liye düşer. Kullanıcı boş bir ekranda ÖNCE 8. yuvaya
     // tıklayıp sonra Covert seçmiş olabilir — bu durumda eşyayı izinli aralığa
@@ -749,7 +860,7 @@ export default function TradeUpScreen({ inventory, setInventory, priceMap, allCo
       // TÜM slotlar için) yeniden RASTGELE hesaplanıyordu — bu yüzden bir slotu oynatmak
       // diğer tüm slotların görünen fiyatını da değiştiriyordu. Artık SADECE değişen
       // slotun fiyatı, SADECE burada, bir kez yeniden hesaplanıp saklanıyor.
-      const newPrice = getRealisticPrice(priceMap, n[idx].skin, val, false, n[idx].skin.rarity?.name);
+      const newPrice = getRealisticPrice(priceMap, n[idx].skin, val, false, n[idx].skin.rarity?.name, false, { stable: true });
       n[idx] = { ...n[idx], float: val, price: newPrice };
       return n;
     });
@@ -1114,6 +1225,12 @@ const ts = StyleSheet.create({
   statItem: { minWidth: 110 },
   statLbl: { color: C.textDim, fontSize: 10, fontWeight: '800' },
   statVal: { color: C.text, fontSize: 14, fontWeight: '800', marginTop: 3 },
+  statSub: { color: C.textDim, fontSize: 9, fontWeight: '700', marginTop: 1 },
+  // KÂR İHTİMALİ ÇUBUĞU
+  chanceBar: { marginTop: 14 },
+  chanceTrack: { height: 6, backgroundColor: C.bgAlt, borderRadius: R.xs, overflow: 'hidden' },
+  chanceFill: { height: '100%', borderRadius: R.xs },
+  chanceTxt: { fontSize: 11, fontWeight: '800', marginTop: 5, ...displayType(0.4) },
   sourceTxt: { color: C.accentDeep, fontSize: 10, marginTop: 12, fontWeight: '600' },
   emptyHint: { color: C.textDim, fontSize: 12, textAlign: 'center', marginTop: 10, lineHeight: 19 },
   outcomesTitle: { color: C.textSoft, fontSize: 11, fontWeight: '800', marginTop: 16, marginBottom: 8 },
@@ -1130,6 +1247,7 @@ const ts = StyleSheet.create({
   outcomeInfo: { flex: 1, minWidth: 0 },
   outcomeName: { fontSize: 10.5, fontWeight: '800' },
   outcomePct: { color: C.textDim, fontSize: 9.5, fontWeight: '700', marginTop: 1 },
+  outcomeWear: { color: C.textDim, fontSize: 9, fontWeight: '600' },
   outcomePrice: { color: C.success, fontSize: 11.5, fontWeight: '800', fontFamily: TU_MONO },
   outcomeMore: { color: C.textDim, fontSize: 10, fontWeight: '700', textAlign: 'center', paddingVertical: 6 },
 
@@ -1165,7 +1283,10 @@ const ts = StyleSheet.create({
   subTabBtn: { paddingVertical: 9, paddingHorizontal: 16, borderRadius: R.md, backgroundColor: C.surface, borderWidth: 1, borderColor: C.borderStrong },
   subTabBtnActive: { backgroundColor: C.activeBg, ...activeIndicator('bottom', 2) },
   subTabTxt: { color: C.textSoft, fontSize: 12, fontWeight: '800' },
-  subTabTxtActive: { color: C.onAccent },
+  // ⚠️ `onAccent` DEĞİL `activeTxt`: koyu temada onAccent neredeyse siyahtır
+  // (sarı buton üzerinde doğru) ama aktif sekmenin zemini koyu gri olduğu için
+  // "Contract" yazısı okunmaz hâle geliyordu (kullanıcı bildirimi, 31 Ağu 2026).
+  subTabTxtActive: { color: C.activeTxt },
   clearHistoryBtn: { backgroundColor: C.dangerSoft, margin: 14, marginBottom: 0, padding: 12, borderRadius: R.md, alignItems: 'center' },
   historyCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.surface, borderRadius: R.sm, borderWidth: 1, borderColor: C.border, padding: 12, marginBottom: 10 },
   historyImg: { width: 58, height: 44 },
