@@ -384,6 +384,7 @@ etmek daha güvenlidir; o durumda değiştirilecek yer yalnızca
 | **2026-08-30** | Koleksiyonlar sekmesi eklendi — **yeni dış servis YOK**; zaten indirilen `collections.json` yeniden kullanılıyor. Aktif drop havuzu listesi elle bakımlı (`src/armoryData.js`) |
 | **2026-08-30** | **Google Search Console doğrulama meta etiketi** eklendi (`public/index.html`). Analytics'ten AYRI bir şeydir |
 | **2026-08-30** | **YENİ DIŞ SERVİS: Google Fonts** — taktiksel tema arayüz fontları (bkz. §5.11). Yükleme başarısız olursa sistem fontuna düşer |
+| **2026-09-02** | **Skinport BİRİNCİL fiyat kaynağı oldu**, ByMykel/Steam kapsam yedeğine düştü. Sebep: Steam beslemesi 24.6 gündür donmuştu. Skinport `suggested_price` kullanılıyor ve Steam seviyesine kalibre ediliyor. Tazelik denetimi eklendi (`STALE_AFTER_DAYS`) — bayat kaynak Actions kaydında uyarı basar |
 | **2026-09-01** | **YENİ DIŞ SERVİS: Skinport API** (`api.skinport.com/v1/items`) — ⚠️ CORS başlığı GÖNDERMEZ, tarayıcıdan çağrılamaz; yalnızca GitHub Actions içinden erişilir. Fiyat için değil, **listeleme adedi (likidite)** için kullanılır |
 | **2026-09-01** | **YENİ ALTYAPI: GitHub Actions cron** — `.github/workflows/update-prices.yml` 2 saatte bir çalışıp `prices-data` YETİM dalına `latest.json` yazar. Ayrı dal olduğu için Cloudflare Pages yeniden derlemez ve `master` geçmişi kirlenmez |
 | **2026-09-01** | Uygulamanın birincil fiyat kaynağı kendi beslememiz oldu; ham ByMykel artık **yedek**. Birim (cent/dolar) dosyanın `metadata.currency` alanından okunuyor |

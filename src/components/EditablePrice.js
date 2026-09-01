@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { StyleSheet, Text, View, TextInput, TouchableOpacity, Platform } from 'react-native';
 import { C, R, webTransition } from '../theme';
+import { IconEdit } from './Icons';
 
 // ============================================================
 // DÜZENLENEBİLİR FİYAT
@@ -39,11 +40,18 @@ export default function EditablePrice({
   size = 'md',       // 'sm' (çıktı satırı) | 'md' (girdi kartı)
   prefix = '',       // ör. canlı fiyat yoksa '~'
   align = 'center',
-  label
+  label,
+  hint               // erişilebilirlik açıklaması
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
+  const [hover, setHover] = useState(false);
   const inputRef = useRef(null);
+
+  // ⚠️ NATIVE'DE HOVER YOKTUR (bkz. AGENTS.md platform tuzakları). Dokunmatik
+  // cihazda ipucu HER ZAMAN görünür olmalı, yoksa alanın tıklanabilir olduğu
+  // hiç anlaşılmaz.
+  const showHint = Platform.OS !== 'web' || hover;
 
   useEffect(() => {
     if (editing) {
@@ -91,10 +99,28 @@ export default function EditablePrice({
 
   return (
     <View style={[s.row, small && s.rowSm]}>
+      {/* ============================================================
+          DÜZENLENEBİLİRLİK İPUÇLARI — DÖRDÜ BİRDEN
+          ============================================================
+          Kullanıcı geri bildirimi (1 Eyl 2026): "elle fiyat ayarlanan kısım
+          yeterince belirgin değil." Önceki sürümde fiyat düz bir metindi;
+          tıklanabilir olduğunu gösteren HİÇBİR işaret yoktu.
+            1. Kalem ikonu       — eylemi doğrudan anlatır
+            2. Kesikli alt çizgi — "bu alan düzenlenebilir" konvansiyonu
+            3. Hover zemini      — imleç üstüne gelince kutu belirginleşir
+            4. cursor: text      — imlecin kendisi yazılabilirliği söyler */}
       <TouchableOpacity
         onPress={begin}
-        style={[s.btn, small && s.btnSm, overridden && s.btnOverridden]}
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
+        style={[
+          s.btn, small && s.btnSm,
+          s.editable,
+          hover && s.btnHover,
+          overridden && s.btnOverridden
+        ]}
         accessibilityLabel={label}
+        accessibilityHint={hint}
       >
         <Text
           style={[
@@ -105,6 +131,11 @@ export default function EditablePrice({
         >
           {prefix}${(value ?? 0).toFixed(2)}
         </Text>
+        <IconEdit
+          size={small ? 9 : 10}
+          color={overridden ? C.accentDeep : (showHint ? C.accent : C.textDim)}
+          strokeWidth={2.2}
+        />
       </TouchableOpacity>
       {overridden && onReset && (
         // Elle girilen fiyatı piyasa fiyatına döndürür.
@@ -121,12 +152,20 @@ const s = StyleSheet.create({
   rowSm: { justifyContent: 'flex-end' },
 
   btn: {
-    paddingHorizontal: 5, paddingVertical: 1, borderRadius: R.xs,
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    paddingHorizontal: 6, paddingVertical: 2, borderRadius: R.xs,
     borderWidth: 1, borderColor: 'transparent',
     ...(Platform.OS === 'web' ? { cursor: 'text' } : null),
     ...webTransition('background-color, border-color', 120)
   },
-  btnSm: { paddingHorizontal: 4 },
+  btnSm: { paddingHorizontal: 4, gap: 2 },
+  // Kesikli alt çizgi — "burası düzenlenebilir" konvansiyonu.
+  editable: {
+    borderBottomWidth: 1,
+    borderBottomColor: C.borderStrong,
+    ...(Platform.OS === 'web' ? { borderBottomStyle: 'dashed' } : null)
+  },
+  btnHover: { backgroundColor: C.surfaceAlt, borderColor: C.accentBorder },
   // Elle girilmiş fiyat GÖRSEL OLARAK AYRILIR — kullanıcı hangi rakamın
   // piyasadan, hangisinin kendisinden geldiğini bilmeli.
   btnOverridden: { borderColor: C.accentBorder, backgroundColor: C.accentSoft },

@@ -86,7 +86,7 @@ Güncellenmesi gereken tipik bölümler:
 | `src/components/LanguageSwitcher.js` | Globe ikonlu EN/TR değiştirici | Menü `Modal` ile açılır (RN-Web'de mutlak konumlu menü kırpılıyor) |
 | `src/components/Disclaimer.js` | Yasal sorumluluk reddi (footer) — **kapatılabilir** | **Üç maddeyi de kaldırma** — yasal bilgilendirme. `compact` tek satıra iner. Kapatma `localStorage`'a yazılır; `Platform` + `try/catch` korumalarını **silme** |
 | `src/api.js` | **Tüm** ByMykel CSGO-API çağrıları + `crates.json` ve `skins.json` önbelleği | Bileşen içine doğrudan `fetch` yazma. Önbellekleri kaldırma — `crates.json` 4 kez, `skins.json` 2 kez inerdi |
-| `scripts/update-prices.mjs` | Fiyat boru hattı: Skinport + Steam birleştirme, güven puanı, **aşınma eğrisi onarımı** | GitHub Actions'ta 2 saatte bir çalışır. Skinport FİYAT kaynağı DEĞİL, **likidite** kaynağıdır. Onarım eşiklerini değiştirmeden önce ölçüm yap |
+| `scripts/update-prices.mjs` | Fiyat boru hattı: **Skinport birincil fiyat**, Steam kapsam yedeği, kalibrasyon + aşınma eğrisi onarımı | GitHub Actions'ta 2 saatte bir. **`suggested_price` kullan, `median_price` DEĞİL.** Kalibrasyon katsayısını sabit yazma — her koşuda ölçülür. Tazelik uyarısını (`STALE_AFTER_DAYS`) kaldırma |
 | `.github/workflows/update-prices.yml` | Cron (2 saat) + `prices-data` yetim dalına push | Dalı `master`'a taşıma — Cloudflare Pages her fiyat güncellemesinde site build'i tetikler |
 | `src/TerminalOpening.js` | Armory terminali — **adım adım teklif seçimi** (1/5 → 5/5, %5 ile 6.) | **Çark KULLANMAZ, kasa DEĞİLDİR.** **DOLAR** kullanır (kredi değil). Teklif geçişine **animasyon EKLEME** — anında olmalı. Son seçenekte Pas Geç devre dışı |
 | `src/CapsuleOpening.js` | Sticker kapsülü (titreme/yırtılma/patlama) | **Çark KULLANMAZ**. Yarılar tek görselden `overflow:hidden` ile üretilir |
@@ -259,6 +259,10 @@ Bu durumda:
 | Kullanıcının girdiği fiyatın olasılıkları da değiştirmesine izin vermek | Kullanıcı fiyat yazarak kendi kazanma şansını değiştirebilirdi. Fiyat yalnızca EV/maliyet/kâr hesabına girer; `chance` içerikten gelir |
 | Fiyatı iki farklı yerden okumak (`entry.price` vs `entry.userPrice`) | Kartta bir sayı, özet panelinde başkası görünür. TEK yardımcı: `effectivePrice(entry)` |
 | `useState`'i onu okuyan `useEffect`'ten SONRA bildirmek | Geçici ölü bölge (TDZ) hatası — uygulama HİÇ açılmaz ("Cannot access 'x' before initialization", yaşandı) |
+| Cron sıklığını artırarak bayat veriyi çözmeye çalışmak | KAYNAK donmuşsa cron hiçbir şey değiştirmez. ByMykel 24.6 gün donduğu hâlde 2 saatlik cron aynı sayıları tekrar yayınlıyordu. Kaynağın YAŞINI ölç ve uyar |
+| Skinport'ta `median_price` kullanmak | O alan TÜM listelemelerin medyanıdır; stickerlı/nadir desenli ilanlar şişirir (Redline FT: median $50.47 / suggested $36.68 / max $20.322). **`suggested_price`** temiz referanstır |
+| İki piyasayı kalibrasyonsuz karıştırmak | Skinport üçüncü taraf, Steam'in ~%20 altında satar (ölçülen medyan oran 1.256). Kalibre etmeden geçmek tüm fiyatları bir anda düşürür ve yeni bir hata gibi görünür |
+| Düzenlenebilir bir alanı düz metin gibi bırakmak | Kullanıcı tıklanabilir olduğunu anlamıyor. En az: ikon + kesikli alt çizgi + hover + `cursor: text` |
 | Emoji'yi arayüz simgesi olarak kullanmak | Her platformda farklı çizilir ve renklendirilemez. `components/Icons.js` (SVG) kullan |
 | `FlatList numColumns` + bölüm başlığı | Başlık bir HÜCREYİ kaplar ve satırın ortasına düşer. Satırları elle grupla, satır başına tek öğe ver |
 | `useWindowDimensions().width` = 0 | Gizli/ilk karede 0 gelebilir; kart genişliği negatif çıkıp ızgara çöker — `Math.max(taban, …)` koy |
@@ -340,6 +344,8 @@ Bu durumda:
 | **2026-09-01** | **Otomatik fiyat güncelleme** — GitHub Actions cron (2 saat) → `prices-data` yetim dalı; uygulama kendi beslemesini çeker, ByMykel'e düşer |
 | **2026-09-01** | **Kümülatif kasa istatistikleri** (Toplam Açılan/Harcanan/Gelen) + elle sıfırlama + kutu değişince `key` ile otomatik sıfırlama |
 | **2026-09-01** | **Kategori içi arama** (`ContentsList`) — oranları DEĞİŞTİRMEZ; **Sınırsız Mod** butonuna takas ikonu + tooltip + `cursor:pointer` |
+| **2026-09-02** | **KRİTİK — fiyatlar 24.6 gündür bayattı:** ByMykel/Steam beslemesi 8 Ağustos'ta donmuştu, cron 2 saatte bir aynı sayıları yayınlıyordu. **Skinport birincil fiyat kaynağı oldu** (canlı, `suggested_price`), Steam kapsam yedeğine düştü; ×1.256 kalibrasyon her koşuda ölçülüyor. Kırık eğri %12 → %4.9. Tazelik uyarısı eklendi |
+| **2026-09-02** | **Fiyat alanı belirginleştirildi** — kalem ikonu, kesikli alt çizgi, hover zemini/çerçevesi ve `cursor: text` |
 | **2026-09-01** | **Düzenlenebilir fiyat** — girdi kartı ve çıktı satırındaki fiyata tıklanınca `<input>` açılıyor; toplam maliyet, EV, kâr ve kâr ihtimali anında yeniden hesaplanıyor. Olasılıklar DEĞİŞMİYOR |
 | **2026-09-01** | **Fiyat boru hattı yayına girdi** — `prices-data` dalı canlı: 35.156 eşya, 4.532 fiyat onarıldı |
 | **2026-09-01** | **Global arama** — artık kutuların yanı sıra EŞYALAR da bulunuyor (silah/charm/sticker/agent); tıklanınca aşınmaya göre fiyat + "nereden çıkar" kartı açılıyor (`ItemLookupModal`). Sıralama silahı öne alıyor |

@@ -238,13 +238,16 @@ function TradeCard({ entry, index, cardWidth, locked, onPress, onLockedPress, on
       {/* ⚠️ TIKLANINCA <input> OLUR: kullanıcı bu eşyayı üçüncü taraf bir
           siteden farklı bir fiyata almış olabilir. Girilen değer TOPLAM
           MALİYETE ve dolayısıyla kâr / ROI / kâr ihtimaline anında yansır. */}
-      <EditablePrice
-        value={effectivePrice(entry)}
-        overridden={entry.userPrice != null}
-        onChange={v => onPriceChange(index, v)}
-        onReset={() => onPriceChange(index, null)}
-        label={entry.skin.name}
-      />
+      <Tooltip text={t('tradeup.editPrice')} width={230}>
+        <EditablePrice
+          value={effectivePrice(entry)}
+          overridden={entry.userPrice != null}
+          onChange={v => onPriceChange(index, v)}
+          onReset={() => onPriceChange(index, null)}
+          label={entry.skin.name}
+          hint={t('tradeup.editPrice')}
+        />
+      </Tooltip>
       <CompactFloatSlider value={entry.float} min={min} max={max} onChange={v => onFloatChange(index, v)} />
       <TouchableOpacity style={card.cloneBtn} onPress={() => onClone(index)}>
         <Text style={card.cloneTxt}>{t('tradeup.clone')}</Text>
@@ -455,6 +458,7 @@ function SummaryContent({ analysis, filledCount, requiredCount, ready, profitAmo
                     size="sm"
                     align="right"
                     label={o.skin.name}
+                    hint={t('tradeup.editPriceOut')}
                   />
                 </View>
               ))}

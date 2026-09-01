@@ -46,6 +46,16 @@ const WEAR_RE = /^(.*) \((Factory New|Minimal Wear|Field-Tested|Well-Worn|Battle
 // aşınma eğrisini bozuyor; >=5 olanlarda bu neredeyse hiç görülmüyor.
 const MIN_QUANTITY = 5;
 
+// Kalibrasyon ölçümüne yalnızca DERİN piyasalar girer — sığ eşyalarda iki
+// kaynak da gürültülüdür ve oranı bozar.
+const CALIBRATION_MIN_QTY = 20;
+
+// Bir kaynağın anlık görüntüsü bu kadar günden eskiyse artık "güncel"
+// sayılmaz ve çıktı metadata'sında UYARI olarak işaretlenir.
+// ⚠️ BU KONTROLÜ KALDIRMAYIN: ByMykel beslemesi 24.6 GÜN boyunca sessizce
+// donmuştu; hiçbir yerde uyarı çıkmadığı için haftalarca fark edilmedi.
+const STALE_AFTER_DAYS = 3;
+
 // ⚠️ İKİ KAYNAĞIN FİYAT SEVİYESİ FARKLI OLDUĞU İÇİN "SAPMA" BİR HATA SİNYALİ
 // DEĞİLDİR. İlk sürümde "kaynaklar 2 kattan fazla ayrışıyorsa güvenme" kuralı
 // vardı; Skinport üçüncü taraf bir piyasa olduğu ve komisyon yapısı farklı
@@ -71,20 +81,26 @@ async function getJson(url, label) {
 // 1) KAYNAKLARI ÇEK
 // ------------------------------------------------------------
 async function loadSources() {
-  const out = { skinport: null, steam: null, steamUpdatedAt: null };
+  const out = { skinport: null, steam: null, steamUpdatedAt: null, skinportUpdatedAt: null };
 
   try {
     const sp = await getJson(SKINPORT, 'Skinport');
     out.skinport = new Map();
+    let newest = 0;
     for (const it of sp) {
       if (!it || !it.market_hash_name) continue;
-      // ⚠️ `median_price` tek bir uç listelemeden ETKİLENMEZ, `min_price`
-      // etkilenir. Medyan yoksa min'e düşülür ama güven puanı düşük kalır.
-      const p = it.median_price != null ? it.median_price : it.min_price;
+      // ⚠️ DOĞRU ALAN `suggested_price` — `median_price` DEĞİL (1 Eyl 2026).
+      // `median_price` o eşyanın TÜM listelemelerinin medyanıdır ve STICKERLI
+      // veya NADİR DESENLİ ilanlar onu yukarı çeker. Ölçülen örnek:
+      // AK-47 | Redline (FT) -> median $50.47, suggested $36.68, max $20322.
+      // `suggested_price` Skinport'un kendi temiz referans fiyatıdır.
+      const p = it.suggested_price != null ? it.suggested_price : it.median_price;
       if (p == null || !(p > 0)) continue;
       out.skinport.set(it.market_hash_name, { price: p, qty: it.quantity || 0 });
+      if (it.updated_at > newest) newest = it.updated_at;
     }
-    log('✅ Skinport: ' + out.skinport.size + ' kayıt');
+    out.skinportUpdatedAt = newest ? new Date(newest * 1000).toISOString() : null;
+    log('✅ Skinport: ' + out.skinport.size + ' kayıt (güncelleme: ' + out.skinportUpdatedAt + ')');
   } catch (e) {
     log('⚠️ Skinport alınamadı: ' + e.message);
   }
@@ -110,41 +126,88 @@ async function loadSources() {
 // ------------------------------------------------------------
 // 2) HAM BİRLEŞTİRME + GÜVEN PUANI
 // ------------------------------------------------------------
-// ⚠️ ROL DAĞILIMI — DEĞİŞTİRMEDEN ÖNCE OKUYUN:
-//   STEAM  = FİYATIN KENDİSİ. Simülatör Steam piyasasını taklit ediyor ve
-//            kullanıcı da karşılaştırmayı Steam'e bakarak yapıyor. Referans
-//            piyasa budur.
-//   SKINPORT = LİKİDİTE SİNYALİ (`quantity`). Steam bir eşyada kaç listeleme
-//            olduğunu SÖYLEMEZ; bu yüzden hangi Steam fiyatına güvenebileceğimizi
-//            tek başına bilemiyoruz. Skinport'un aynı eşyadaki listeleme adedi
-//            bu boşluğu dolduruyor.
+// ============================================================
+// ROL DAĞILIMI — 1 EYL 2026'DA TERSİNE ÇEVRİLDİ, OKUMADAN DEĞİŞTİRMEYİN
+// ============================================================
+// ESKİ KURGU: Steam = fiyat, Skinport = yalnızca likidite sinyali.
 //
-// ⚠️ SKINPORT FİYATINI BİRİNCİL YAPMAYIN (denendi, 1 Eyl 2026): `median_price`
-// uzun bir satış penceresinin medyanıdır ve ince eşyalarda Steam'den kat kat
-// sapıyor (USP-S | Bleeding Edge FT: Steam $1.70 / Skinport $4.09, ikisi de
-// ~84 listeleme). Skinport yalnızca Steam'de HİÇ kayıt yoksa fiyat kaynağı olur.
+// NEDEN BOZULDU: ByMykel/Steam beslemesi 24.6 GÜNDÜR DONMUŞTU (anlık görüntü
+// 2026-08-08, ölçüm 2026-09-01). Toplayıcı, Steam'in hız sınırları yüzünden
+// 34.500 eşyayı çok yavaş geziyor ve o tur hiç tamamlanmamış. Sonuç:
+// cron'umuz 2 saatte bir çalışsa da AYNI BAYAT sayıları tekrar tekrar
+// yayınlıyordu. Cron sıklığı, KAYNAK DONMUŞKEN hiçbir şey çözmez —
+// kullanıcının "fiyatlar çok geride kalmış" şikâyetinin tam sebebi buydu.
+//
+// YENİ KURGU:
+//   SKINPORT = BİRİNCİL FİYAT. Canlı (5 dk önbellek; ölçümde son güncelleme
+//              2 dakika öncesiydi), 25.000+ eşya, `quantity` de veriyor.
+//   STEAM    = KAPSAM YEDEĞİ. Yalnızca Skinport'ta bulunmayan kayıtlar için
+//              (kasa, bazı sticker/charm/souvenir).
+//
+// ⚠️ KALİBRASYON ZORUNLU: Skinport üçüncü taraf bir piyasadır ve Steam'in
+// ALTINDA satar. 10.624 likit eşyada ölçülen medyan oran Steam/suggested =
+// 1.255. Bu YAPISAL bir fark (komisyon + platform primi), fiyat sürüklenmesi
+// değil. Kalibre edilmezse tüm site fiyatları bir anda ~%20 düşer ve kullanıcı
+// bunu yeni bir hata sanar. Katsayı SABİT YAZILMAZ — her koşuda yeniden
+// ölçülür, böylece platform farkı değişirse kendini düzeltir.
+function measureCalibration({ skinport, steam }) {
+  if (!skinport || !steam) return 1;
+  const ratios = [];
+  for (const [key, sp] of skinport) {
+    const st = steam.get(key);
+    // Yalnızca DERİN piyasalar: sığ eşyalarda iki taraf da gürültülü.
+    if (st == null || !(sp.price > 0) || sp.qty < CALIBRATION_MIN_QTY) continue;
+    const r = st / sp.price;
+    // Uç oranlar (bozuk/eksik kayıtlar) medyanı kaydırmasın diye elenir.
+    if (r > 0.2 && r < 5) ratios.push(r);
+  }
+  if (ratios.length < 200) {
+    log('⚠️ Kalibrasyon için yeterli örtüşme yok (' + ratios.length + ') — katsayı 1');
+    return 1;
+  }
+  ratios.sort((a, b) => a - b);
+  const median = ratios[Math.floor(ratios.length / 2)];
+  log('📐 Kalibrasyon: ' + ratios.length + ' likit eşyada medyan Steam/Skinport = x' + median.toFixed(3));
+  // Makul bantta tut — kaynaklardan biri bozulursa fiyatlar uçmasın.
+  return Math.min(1.6, Math.max(0.8, median));
+}
+
 function mergeSources(sources) {
   const { skinport, steam } = sources;
+  const calibration = measureCalibration(sources);
+
   const keys = new Set();
   if (skinport) for (const k of skinport.keys()) keys.add(k);
   if (steam) for (const k of steam.keys()) keys.add(k);
 
   const merged = new Map();
+  let fromSkinport = 0, fromSteam = 0;
+
   for (const key of keys) {
     const sp = skinport ? skinport.get(key) : null;
     const st = steam ? steam.get(key) : null;
     const hasWear = WEAR_RE.test(key);
 
-    if (st != null) {
-      // Likidite bilinmiyorsa (Skinport'ta yok) aşınmasız eşyalara güvenilir,
-      // aşınmalı olanlara güvenilmez denir — tek listeleme sorunu onlarda çıkıyor.
-      const qty = sp ? sp.qty : (hasWear ? 0 : MIN_QUANTITY);
-      merged.set(key, { price: st, qty, trusted: qty >= MIN_QUANTITY, src: 'steam' });
-    } else if (sp) {
-      // Steam'de hiç yok — Skinport tek kaynak.
-      merged.set(key, { price: sp.price, qty: sp.qty, trusted: sp.qty >= MIN_QUANTITY, src: 'skinport' });
+    if (sp != null) {
+      // BİRİNCİL: canlı Skinport fiyatı, Steam seviyesine kalibre edilmiş.
+      fromSkinport++;
+      merged.set(key, {
+        price: sp.price * calibration,
+        qty: sp.qty,
+        trusted: sp.qty >= MIN_QUANTITY,
+        src: 'skinport'
+      });
+    } else if (st != null) {
+      // YEDEK: Skinport'ta yok (kasa, sticker, charm, souvenir...).
+      // Likidite bilinmediği için aşınmalı kayıtlara güvenilmez denir; tek
+      // listeleme sorunu onlarda çıkıyor ve eğri onarımı devreye giriyor.
+      fromSteam++;
+      merged.set(key, { price: st, qty: hasWear ? 0 : MIN_QUANTITY, trusted: !hasWear, src: 'steam' });
     }
   }
+
+  log('🔀 Birleştirme: ' + fromSkinport + ' Skinport (canlı) + ' + fromSteam + ' Steam (yedek)');
+  merged.calibration = calibration;
   return merged;
 }
 
@@ -255,13 +318,37 @@ async function main() {
   if (sources.skinport) srcList.push('skinport.com/v1/items');
   if (sources.steam) srcList.push('ByMykel/counter-strike-price-tracker');
 
+  // ------------------------------------------------------------
+  // TAZELİK DENETİMİ
+  // ------------------------------------------------------------
+  // ⚠️ SESSİZ BAYATLAMAYA KARŞI. ByMykel beslemesi 24.6 gün boyunca donmuştu
+  // ve hiçbir yerde uyarı çıkmadığı için kimse fark etmedi; site haftalarca
+  // eski fiyat gösterdi. Artık her kaynağın yaşı ölçülüp metadata'ya yazılıyor
+  // ve eskiyse konsola UYARI basılıyor (Actions kaydında görünür).
+  const ageDays = (iso) => (iso ? (Date.now() - new Date(iso).getTime()) / 86400000 : null);
+  const spAge = ageDays(sources.skinportUpdatedAt);
+  const stAge = ageDays(sources.steamUpdatedAt);
+  const staleSources = [];
+  if (spAge != null && spAge > STALE_AFTER_DAYS) staleSources.push('skinport(' + spAge.toFixed(1) + 'g)');
+  if (stAge != null && stAge > STALE_AFTER_DAYS) staleSources.push('steam(' + stAge.toFixed(1) + 'g)');
+  if (staleSources.length) {
+    log('⚠️ BAYAT KAYNAK: ' + staleSources.join(', ') + ' — ' + STALE_AFTER_DAYS + ' günden eski');
+  }
+
   const payload = {
     metadata: {
       updated_at: new Date().toISOString(),
       currency: 'USD',
       item_count: Object.keys(prices).length,
       sources: srcList,
+      // Birincil fiyat kaynağı ve onun tazeliği — arayüz bunu gösterebilir.
+      primary_source: sources.skinport ? 'skinport' : 'steam',
+      skinport_snapshot: sources.skinportUpdatedAt,
+      skinport_age_days: spAge != null ? parseFloat(spAge.toFixed(2)) : null,
       steam_snapshot: sources.steamUpdatedAt,
+      steam_age_days: stAge != null ? parseFloat(stAge.toFixed(2)) : null,
+      stale_sources: staleSources,
+      calibration: merged.calibration != null ? parseFloat(merged.calibration.toFixed(4)) : 1,
       repaired: [...merged.values()].filter(v => v.src === 'repaired').length
     },
     prices

@@ -219,6 +219,17 @@ export const IconGlobe = (p) => (
   </Icon>
 );
 
+// Düzenle — kalem
+// ⚠️ Fiyat alanının TIKLANABİLİR olduğunu belli etmek için var. Kullanıcı
+// geri bildirimi (1 Eyl 2026): "elle fiyat ayarlanan kısım yeterince
+// belirgin değil, değiştirilebildiği ilk bakışta anlaşılmıyor."
+export const IconEdit = (p) => (
+  <Icon {...p}>
+    <Path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3z" />
+    <Line x1="13.5" y1="6.5" x2="17.5" y2="10.5" />
+  </Icon>
+);
+
 // Mod değiştirme — karşılıklı iki ok (takas)
 // ⚠️ `IconRefresh` (dairesel ok) DEĞİL: o "yenile/sıfırla" demek. Buradaki
 // eylem iki durum arasında GEÇİŞ; karşılıklı oklar bunu doğru anlatıyor.
@@ -376,7 +387,7 @@ const p = StyleSheet.create({
 export default {
   Icon, IconSearch, IconInventory, IconCase, IconKey, IconList, IconChart,
   IconGem, IconTag, IconTrend, IconClock, IconArrowDown, IconArrowUp,
-  IconRefresh, IconBook, IconWallet, IconInfinity, IconGlobe, IconSun, IconMoon, IconSwap, IconClose, IconCheck,
+  IconRefresh, IconBook, IconWallet, IconInfinity, IconGlobe, IconSun, IconMoon, IconSwap, IconEdit, IconClose, IconCheck,
   IconLock, IconSelect, IconTrash, IconSell,
   StarIcon, DollarIcon, ValuePill, STAR_GREEN
 };
