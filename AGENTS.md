@@ -105,6 +105,7 @@ Güncellenmesi gereken tipik bölümler:
 | `src/components/ItemLookupModal.js` | **KATALOG** eşya kartı — aramadan açılır (aşınmaya göre fiyat + nereden çıkar) | `ItemInspectModal` ile karıştırma: burada kullanıcı eşyaya SAHİP DEĞİL. Aralık bilinmiyorsa 0–1 UYDURMA; canlı fiyat yoksa `~` ve uyarı göster |
 | `src/components/SellConfirmModal.js` | Satış onayı + Sınırsız Mod yönlendirmesi | Satışı doğrudan yapma — `requestSell` → modal → `finalizeSell` yolunu kullan |
 | `src/armoryData.js` | Aktif Armory koleksiyonları **ve aktif drop havuzu** isimleri | Valve rotasyon yapınca **sadece burası** güncellenir. Bu iki liste API'de YOKTUR, elle bakımlıdır |
+| `src/components/EditablePrice.js` | Tıklanınca `<input>`'e dönen fiyat (girdi kartı + çıktı satırı) | **Yalnızca PARAYI değiştirir** — `chance` (olasılık) ASLA kullanıcı girdisinden etkilenmemeli. Elle girilen fiyat görsel olarak ayrışmalı ve (×) ile sıfırlanabilmeli |
 | `src/components/Tooltip.js` | Hover'da açıklama kutucuğu | Kapsayıcıda `overflow: hidden` OLMAMALI. Animasyon EKLEME (hayalet kutucuk bırakıyor). Native'de dokunmayla açılır |
 | `src/components/ImagePreviewModal.js` | Eşya görselinin büyük hâli | Ek "yüksek çözünürlük" uç noktası YOK — aynı URL, daha büyük kutu |
 | `src/components/ContactWidget.js` | Sağ alt köşedeki iletişim formu | Hedef adres formda GÖSTERİLMEZ. `fetch` yazma — `api.sendContactMessage` kullan. Başarısızlıkta `mailto` yedeği ve yazılan metin KORUNUR |
@@ -255,6 +256,9 @@ Bu durumda:
 | Bilinmeyen float aralığı yerine 0.00–1.00 yazmak | Kullanıcıya var olmayan aşınmalar ve fiyatlar gösterilir (Dragon Lore gerçekte 0.00–0.70). Bilinmiyorsa satırı HİÇ basma |
 | Simüle fiyatı piyasa fiyatıymış gibi göstermek | AWP \| Dragon Lore ham ByMykel'de yok: simülasyon $103 diyor, gerçeği ~$17.800. `hasLivePrice` ile ayır, `~` ve uyarı bas |
 | Arama sıralamasını yalnızca eşleşme konumuna dayandırmak | CS2 adları "Silah \| Desen" biçiminde; "Dragon Lore" araması sticker'ı başa, AWP'yi alta koyuyordu. `\|` sonrası eşleşmeyi de baştan say ve silahı öne al |
+| Kullanıcının girdiği fiyatın olasılıkları da değiştirmesine izin vermek | Kullanıcı fiyat yazarak kendi kazanma şansını değiştirebilirdi. Fiyat yalnızca EV/maliyet/kâr hesabına girer; `chance` içerikten gelir |
+| Fiyatı iki farklı yerden okumak (`entry.price` vs `entry.userPrice`) | Kartta bir sayı, özet panelinde başkası görünür. TEK yardımcı: `effectivePrice(entry)` |
+| `useState`'i onu okuyan `useEffect`'ten SONRA bildirmek | Geçici ölü bölge (TDZ) hatası — uygulama HİÇ açılmaz ("Cannot access 'x' before initialization", yaşandı) |
 | Emoji'yi arayüz simgesi olarak kullanmak | Her platformda farklı çizilir ve renklendirilemez. `components/Icons.js` (SVG) kullan |
 | `FlatList numColumns` + bölüm başlığı | Başlık bir HÜCREYİ kaplar ve satırın ortasına düşer. Satırları elle grupla, satır başına tek öğe ver |
 | `useWindowDimensions().width` = 0 | Gizli/ilk karede 0 gelebilir; kart genişliği negatif çıkıp ızgara çöker — `Math.max(taban, …)` koy |
@@ -336,6 +340,8 @@ Bu durumda:
 | **2026-09-01** | **Otomatik fiyat güncelleme** — GitHub Actions cron (2 saat) → `prices-data` yetim dalı; uygulama kendi beslemesini çeker, ByMykel'e düşer |
 | **2026-09-01** | **Kümülatif kasa istatistikleri** (Toplam Açılan/Harcanan/Gelen) + elle sıfırlama + kutu değişince `key` ile otomatik sıfırlama |
 | **2026-09-01** | **Kategori içi arama** (`ContentsList`) — oranları DEĞİŞTİRMEZ; **Sınırsız Mod** butonuna takas ikonu + tooltip + `cursor:pointer` |
+| **2026-09-01** | **Düzenlenebilir fiyat** — girdi kartı ve çıktı satırındaki fiyata tıklanınca `<input>` açılıyor; toplam maliyet, EV, kâr ve kâr ihtimali anında yeniden hesaplanıyor. Olasılıklar DEĞİŞMİYOR |
+| **2026-09-01** | **Fiyat boru hattı yayına girdi** — `prices-data` dalı canlı: 35.156 eşya, 4.532 fiyat onarıldı |
 | **2026-09-01** | **Global arama** — artık kutuların yanı sıra EŞYALAR da bulunuyor (silah/charm/sticker/agent); tıklanınca aşınmaya göre fiyat + "nereden çıkar" kartı açılıyor (`ItemLookupModal`). Sıralama silahı öne alıyor |
 | **2026-09-01** | **Trade-Up'ta arama ve reklam boşluğu gizlendi** — ~169 px kazanıldı, sözleşme ızgarası kaydırmasız görünüyor |
 | **2026-09-01** | **Logo → ana menü**: mini logo da artık `goHome` çağırıyor (eskiden yalnızca başa kaydırıyordu) |

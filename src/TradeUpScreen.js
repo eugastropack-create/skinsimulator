@@ -9,6 +9,7 @@ import { useI18n } from './i18n';
 import { C, RARITY, shadow, R, activeIndicator, displayType, clipCut } from './theme';
 import { IconLock } from './components/Icons';
 import Tooltip from './components/Tooltip';
+import EditablePrice from './components/EditablePrice';
 
 const NEXT_RARITY_NAME = { 'Consumer Grade': 'Industrial Grade', 'Industrial Grade': 'Mil-Spec Grade', 'Mil-Spec Grade': 'Restricted', 'Restricted': 'Classified', 'Classified': 'Covert' };
 const RARITY_LABELS = { 'Consumer Grade': 'Consumer', 'Industrial Grade': 'Industrial', 'Mil-Spec Grade': 'Mil-Spec', 'Restricted': 'Restricted', 'Classified': 'Classified', 'Covert': 'Covert' };
@@ -25,6 +26,17 @@ const OUTCOME_RENDER_CAP = 24;
 // bu yüzden Covert seçildiği anda kalan 5 yuva KİLİTLENİR (🔒) ve doldurulamaz.
 const TOTAL_SLOTS = 10;
 const KNIFE_RECIPE_SLOTS = 5;
+
+// ============================================================
+// ETKİN FİYAT
+// ============================================================
+// Kullanıcı bir yuvanın fiyatını elle girdiyse O geçerlidir; girmediyse
+// piyasa/simüle fiyat kullanılır.
+//
+// ⚠️ TEK KAYNAK: toplam maliyet, kâr, ROI ve kâr ihtimali HEPSİ bunu
+// kullanmalıdır. Bir yerde `entry.price`, başka yerde `entry.userPrice`
+// okunursa kullanıcı kartta bir sayı görüp özet panelinde başkasını görür.
+const effectivePrice = (entry) => (entry?.userPrice != null ? entry.userPrice : (entry?.price ?? 0));
 
 // Bıçak/eldiven tespiti: ByMykel verisinde bunların ADI "★" ile başlar ve
 // hepsi rarity.name === 'Covert' taşır — yani nadirliğe bakarak normal Covert
@@ -195,7 +207,7 @@ const fc = StyleSheet.create({
 // Dikey KART formatındaki eşya kutucuğu. `locked` -> AKILLI YUVA KİLİTLEME:
 // mevcut seçime göre bu boş slotun doldurulmasının bir anlamı kalmadıysa
 // (üst nadirlikte hiç uygun çıktı bulunamıyorsa) kilitli gösterilir.
-function TradeCard({ entry, index, cardWidth, locked, onPress, onLockedPress, onRemove, onClone, onFloatChange, t }) {
+function TradeCard({ entry, index, cardWidth, locked, onPress, onLockedPress, onRemove, onClone, onFloatChange, onPriceChange, t }) {
   if (!entry) {
     if (locked) {
       return (
@@ -223,7 +235,16 @@ function TradeCard({ entry, index, cardWidth, locked, onPress, onLockedPress, on
       </TouchableOpacity>
       <Image source={{ uri: entry.skin.image }} style={card.img} resizeMode="contain" />
       <Text style={card.name} numberOfLines={1}>{entry.skin.name}</Text>
-      <Text style={card.price}>${entry.price.toFixed(2)}</Text>
+      {/* ⚠️ TIKLANINCA <input> OLUR: kullanıcı bu eşyayı üçüncü taraf bir
+          siteden farklı bir fiyata almış olabilir. Girilen değer TOPLAM
+          MALİYETE ve dolayısıyla kâr / ROI / kâr ihtimaline anında yansır. */}
+      <EditablePrice
+        value={effectivePrice(entry)}
+        overridden={entry.userPrice != null}
+        onChange={v => onPriceChange(index, v)}
+        onReset={() => onPriceChange(index, null)}
+        label={entry.skin.name}
+      />
       <CompactFloatSlider value={entry.float} min={min} max={max} onChange={v => onFloatChange(index, v)} />
       <TouchableOpacity style={card.cloneBtn} onPress={() => onClone(index)}>
         <Text style={card.cloneTxt}>{t('tradeup.clone')}</Text>
@@ -297,7 +318,7 @@ function OutcomePlaceholder({ t }) {
 // Artık panel `ready` (filledCount === requiredCount) olana kadar yalnızca bir
 // ilerleme göstergesi basar. `analysis` ARKA PLANDA hesaplanmaya devam eder —
 // yuva kilitleme (isDeadEnd) ve İmzala butonunun etkinliği ona bağlı.
-function SummaryContent({ analysis, filledCount, requiredCount, ready, profitAmount, profitPct, t }) {
+function SummaryContent({ analysis, filledCount, requiredCount, ready, profitAmount, profitPct, onOutcomePrice, t }) {
   if (!analysis) {
     return (
       <View style={ts.lockedWrap}>
@@ -423,8 +444,18 @@ function SummaryContent({ analysis, filledCount, requiredCount, ready, profitAmo
                       {o.outWear ? <Text style={ts.outcomeWear}>  ·  {o.outWear} ({o.outFloat.toFixed(3)})</Text> : null}
                     </Text>
                   </View>
-                  {/* Tahmini fiyat — ihtimalin yanında değeri de görünsün */}
-                  <Text style={ts.outcomePrice}>${(o.price ?? 0).toFixed(2)}</Text>
+                  {/* Tahmini fiyat — TIKLANINCA düzenlenebilir. Kullanıcı bu
+                      eşyayı satacağı gerçek fiyatı girip EV/kâr hesabını
+                      kendi piyasasına göre kalibre edebilir. */}
+                  <EditablePrice
+                    value={o.price ?? 0}
+                    overridden={!!o.userPriced}
+                    onChange={v => onOutcomePrice(o.skin.id || o.skin.name, v)}
+                    onReset={() => onOutcomePrice(o.skin.id || o.skin.name, null)}
+                    size="sm"
+                    align="right"
+                    label={o.skin.name}
+                  />
                 </View>
               ))}
             {analysis.outcomes.length > OUTCOME_RENDER_CAP && (
@@ -554,6 +585,30 @@ export default function TradeUpScreen({ inventory, setInventory, priceMap, allCo
     return () => { cancelled = true; };
   }, []);
 
+  // ⚠️ BU BLOK ANALİZ EFEKTİNDEN **ÖNCE** DURMALIDIR. Aşağıdaki `useEffect`
+  // `outcomePrices` okuyor; `const` bildirimi sonra gelirse JavaScript geçici
+  // ölü bölge (TDZ) hatası verir ve uygulama HİÇ açılmaz
+  // ("Cannot access 'outcomePrices' before initialization" — yaşandı).
+  // ============================================================
+  // ÇIKTI FİYATI GEÇERSİZ KILMA
+  // ============================================================
+  // Çıktılar yuva değil, hesaplanmış bir liste olduğu için kullanıcı girdisi
+  // ayrı bir haritada tutulur (anahtar: eşya kimliği).
+  // ⚠️ YALNIZCA PARAYI DEĞİŞTİRİR — `chance` (çıkma ihtimali) koleksiyon
+  // içeriğinden gelir ve buradan ETKİLENMEZ. Aksi hâlde kullanıcı fiyat
+  // yazarak kendi kazanma şansını değiştirebilirdi.
+  const [outcomePrices, setOutcomePrices] = useState({});
+  const setOutcomePrice = (key, val) => setOutcomePrices(prev => {
+    const n = { ...prev };
+    if (val == null) delete n[key]; else n[key] = val;
+    return n;
+  });
+  // Yuvalar tamamen boşaltılınca elle girilen çıktı fiyatları da anlamını
+  // yitirir (çıktı havuzu tamamen değişir) — birlikte temizlenir.
+  useEffect(() => {
+    if (slots.every(x => !x)) setOutcomePrices({});
+  }, [slots]);
+
   // OTOMATİK HESAPLAMA (Hesapla butonuna gerek yok)
   useEffect(() => {
     const validSlots = slots.filter(Boolean);
@@ -613,7 +668,9 @@ export default function TradeUpScreen({ inventory, setInventory, priceMap, allCo
     // yalnızca bilgi amaçlıdır.
     const avgFloat = validSlots.reduce((a, e) => a + e.float, 0) / validSlots.length;
     // Slotların fiyatları zaten seçim/float değişimi anında hesaplanıp entry.price'ta saklanıyor
-    const totalCost = validSlots.reduce((acc, e) => acc + e.price, 0);
+    // ⚠️ `e.price` DEĞİL `effectivePrice(e)`: kullanıcı elle fiyat girdiyse
+    // maliyet ondan hesaplanmalı (bkz. effectivePrice).
+    const totalCost = validSlots.reduce((acc, e) => acc + effectivePrice(e), 0);
 
     // GERÇEK CS2 KURALI: Çıktı havuzu girdi eşyaların AİT OLDUĞU koleksiyon(lar)dan
     // belirlenir. Her girdi kendi koleksiyonuna "oy" verir; 10 eşya farklı
@@ -729,6 +786,15 @@ export default function TradeUpScreen({ inventory, setInventory, priceMap, allCo
       possibleOutcomes = possibleOutcomes.map(o => ({ ...o, chance: (o.chance / totalChance) * 100 }));
     }
 
+    // ⚠️ ELLE GİRİLEN ÇIKTI FİYATLARINI EV'DEN ÖNCE UYGULA. Sonra uygulanırsa
+    // kart "Beklenen Değer $12" derken kâr ihtimali başka bir fiyat setine
+    // göre hesaplanır ve ikisi çelişir.
+    possibleOutcomes = possibleOutcomes.map(o => {
+      const key = o.skin.id || o.skin.name;
+      const ov = outcomePrices[key];
+      return ov != null ? { ...o, price: ov, userPriced: true } : o;
+    });
+
     const ev = possibleOutcomes.reduce((a, o) => a + o.price * (o.chance / 100), 0);
 
     // ============================================================
@@ -751,7 +817,7 @@ export default function TradeUpScreen({ inventory, setInventory, priceMap, allCo
         ? Object.keys(collectionVotes).map(id => collectionById[id]?.name).filter(Boolean)
         : [];
     setAnalysis({ avgFloat, avgNormFloat, profitChance, totalCost, ev, outcomes: possibleOutcomes, sourceCollectionNames, isKnifeRecipe });
-  }, [slots, allSkins, priceMap, skinToCollections, knifePool]);
+  }, [slots, allSkins, priceMap, skinToCollections, knifePool, outcomePrices]);
 
   const lockedRarity = slots.find(s => s !== null)?.skin?.rarity?.name || null;
   const filledCount = slots.filter(Boolean).length;
@@ -862,6 +928,20 @@ export default function TradeUpScreen({ inventory, setInventory, priceMap, allCo
       // slotun fiyatı, SADECE burada, bir kez yeniden hesaplanıp saklanıyor.
       const newPrice = getRealisticPrice(priceMap, n[idx].skin, val, false, n[idx].skin.rarity?.name, false, { stable: true });
       n[idx] = { ...n[idx], float: val, price: newPrice };
+      return n;
+    });
+  };
+
+  // Yuvanın fiyatını ELLE ayarlar. `null` gelirse elle girilen fiyat silinir
+  // ve piyasa fiyatına dönülür.
+  // ⚠️ `float` ve `price` alanlarına DOKUNMAZ: kullanıcı sonradan float'ı
+  // oynatırsa piyasa fiyatı güncellenmeye devam eder ama kendi girdiği rakam
+  // korunur — onu ancak kendisi (×) ile temizler.
+  const handlePriceChange = (idx, val) => {
+    setSlots(prev => {
+      const n = [...prev];
+      if (!n[idx]) return prev;
+      n[idx] = { ...n[idx], userPrice: val };
       return n;
     });
   };
@@ -985,6 +1065,7 @@ export default function TradeUpScreen({ inventory, setInventory, priceMap, allCo
           onRemove={(i) => setSlots(prev => { const n = [...prev]; n[i] = null; return n; })}
           onClone={cloneSlot}
           onFloatChange={handleFloatChange}
+          onPriceChange={handlePriceChange}
           t={t}
         />
       ))}
@@ -1002,6 +1083,7 @@ export default function TradeUpScreen({ inventory, setInventory, priceMap, allCo
       ready={contractReady}
       profitAmount={profitAmount}
       profitPct={profitPct}
+      onOutcomePrice={setOutcomePrice}
       t={t}
     />
   );
