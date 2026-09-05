@@ -12,6 +12,36 @@
     </script>
 
     <!--
+      GOOGLE ADSENSE — yayıncı kodu
+      ============================================================
+      Yayıncı kimliği: ca-pub-5440958179084157
+
+      ⚠️ BU ETİKET ÜÇ İŞİ BİRDEN YAPAR:
+        1. SİTE DOĞRULAMA — AdSense "sitenizi bağlayın" adımında bu script'i
+           head içinde arar. Kaldırılırsa site doğrulaması düşer.
+        2. OTOMATİK REKLAMLAR (Auto Ads) — AdSense panelinde açıksa Google
+           reklam yerleşimlerini kendisi seçer; ayrıca kod GEREKMEZ.
+        3. Elle yerleştirilen reklam birimleri için gereken kütüphaneyi yükler.
+
+      ⚠️ ELLE REKLAM BİRİMİ EKLEMEK İÇİN bu script YETMEZ — AdSense panelinden
+      üretilen `data-ad-slot` kimliği gerekir. Uygulamada reklam için ayrılmış
+      boşluk zaten var (App.js -> `s.adSlot`, arama çubuğunun altı); birim
+      kimliği alındığında oraya yerleştirilebilir.
+
+      ⚠️ GİZLİLİK: Reklam çerezleri, Rehber > Gizlilik Politikası bölümünde
+      EN + TR olarak açıklanıyor (src/content/guide.js). AdSense program
+      politikaları bu açıklamayı ZORUNLU tutuyor — o metni silmeyin.
+
+      ⚠️ Analytics'ten AYRIDIR: yukarıdaki gtag.js ölçüm etiketidir
+      (G-C4JPXC4L64), bu ise reklam yayıncılığıdır.
+    -->
+    <script
+      async
+      src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5440958179084157"
+      crossorigin="anonymous"
+    ></script>
+
+    <!--
       GOOGLE SEARCH CONSOLE — site sahipliği doğrulaması
       ============================================================
       ⚠️ BU ANALYTICS DEĞİLDİR. Analytics yukarıdaki gtag.js etiketidir

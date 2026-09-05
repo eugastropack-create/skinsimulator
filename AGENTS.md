@@ -344,6 +344,7 @@ Bu durumda:
 | **2026-09-01** | **Otomatik fiyat güncelleme** — GitHub Actions cron (2 saat) → `prices-data` yetim dalı; uygulama kendi beslemesini çeker, ByMykel'e düşer |
 | **2026-09-01** | **Kümülatif kasa istatistikleri** (Toplam Açılan/Harcanan/Gelen) + elle sıfırlama + kutu değişince `key` ile otomatik sıfırlama |
 | **2026-09-01** | **Kategori içi arama** (`ContentsList`) — oranları DEĞİŞTİRMEZ; **Sınırsız Mod** butonuna takas ikonu + tooltip + `cursor:pointer` |
+| **2026-09-02** | **Google AdSense yayıncı kodu** eklendi (`ca-pub-5440958179084157`, `public/index.html` head). Reklam çerezi açıklaması Gizlilik Politikası'nda — silmeyin |
 | **2026-09-02** | **KRİTİK — fiyatlar 24.6 gündür bayattı:** ByMykel/Steam beslemesi 8 Ağustos'ta donmuştu, cron 2 saatte bir aynı sayıları yayınlıyordu. **Skinport birincil fiyat kaynağı oldu** (canlı, `suggested_price`), Steam kapsam yedeğine düştü; ×1.256 kalibrasyon her koşuda ölçülüyor. Kırık eğri %12 → %4.9. Tazelik uyarısı eklendi |
 | **2026-09-02** | **Fiyat alanı belirginleştirildi** — kalem ikonu, kesikli alt çizgi, hover zemini/çerçevesi ve `cursor: text` |
 | **2026-09-01** | **Düzenlenebilir fiyat** — girdi kartı ve çıktı satırındaki fiyata tıklanınca `<input>` açılıyor; toplam maliyet, EV, kâr ve kâr ihtimali anında yeniden hesaplanıyor. Olasılıklar DEĞİŞMİYOR |

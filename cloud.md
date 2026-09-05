@@ -267,8 +267,38 @@ Site, reklam ağı incelemesinden geçebilmesi için şunlarla donatıldı:
 > `adresiniz@example.com`) **gerçek bir adresle değiştirilmelidir** — çalışan
 > bir iletişim yolu, reklam ağlarının incelemede aradığı şeylerden biridir.
 
-> Not: Reklam kodu (AdSense script'i) **henüz eklenmedi**; yalnızca alan ve
-> içerik altyapısı hazırlandı.
+### AdSense yayıncı kodu (2 Eyl 2026'da eklendi)
+
+`public/index.html` → `<head>` içinde:
+
+```
+https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5440958179084157
+```
+
+**Yayıncı kimliği:** `ca-pub-5440958179084157`
+
+Bu tek etiket üç işi birden yapar:
+1. **Site doğrulama** — AdSense "sitenizi bağlayın" adımında head içinde bu
+   script'i arar. Silinirse doğrulama düşer.
+2. **Otomatik Reklamlar (Auto Ads)** — AdSense panelinden açıldığında Google
+   yerleşimleri kendisi seçer; ek kod GEREKMEZ.
+3. Elle yerleştirilecek reklam birimleri için kütüphaneyi yükler.
+
+> ⚠️ **ELLE REKLAM BİRİMİ İÇİN BU SCRIPT YETMEZ** — AdSense panelinden üretilen
+> `data-ad-slot` kimliği gerekir. Rezerve boşluk zaten hazır
+> (`App.js` → `s.adSlot`, arama çubuğunun altı).
+
+> ⚠️ **GİZLİLİK ZORUNLULUĞU:** AdSense program politikaları, reklam çerezlerinin
+> açıklanmasını ZORUNLU tutar. Bu açıklama `src/content/guide.js` içindeki
+> Gizlilik Politikası bölümünde EN + TR olarak mevcut — **silmeyin**.
+
+> ⚠️ Analytics'ten AYRIDIR: `gtag.js` (G-C4JPXC4L64) ölçüm, bu ise reklam
+> yayıncılığıdır.
+
+**Doğrulandı (2 Eyl 2026, tarayıcıda):** script `<head>` içinde, `async` +
+`crossorigin="anonymous"`, `adsbygoogle.js` HTTP 200 (57.9 KB),
+`window.adsbygoogle` global'i oluştu, Google reklam isteği atıyor. Uygulama
+normal açılıyor, konsolda hata yok.
 
 ---
 
@@ -384,6 +414,7 @@ etmek daha güvenlidir; o durumda değiştirilecek yer yalnızca
 | **2026-08-30** | Koleksiyonlar sekmesi eklendi — **yeni dış servis YOK**; zaten indirilen `collections.json` yeniden kullanılıyor. Aktif drop havuzu listesi elle bakımlı (`src/armoryData.js`) |
 | **2026-08-30** | **Google Search Console doğrulama meta etiketi** eklendi (`public/index.html`). Analytics'ten AYRI bir şeydir |
 | **2026-08-30** | **YENİ DIŞ SERVİS: Google Fonts** — taktiksel tema arayüz fontları (bkz. §5.11). Yükleme başarısız olursa sistem fontuna düşer |
+| **2026-09-02** | **YENİ DIŞ SERVİS: Google AdSense** — yayıncı kodu `ca-pub-5440958179084157` head'e eklendi (bkz. §5.7). Reklam çerezi açıklaması Gizlilik Politikası'nda zaten vardı |
 | **2026-09-02** | **Skinport BİRİNCİL fiyat kaynağı oldu**, ByMykel/Steam kapsam yedeğine düştü. Sebep: Steam beslemesi 24.6 gündür donmuştu. Skinport `suggested_price` kullanılıyor ve Steam seviyesine kalibre ediliyor. Tazelik denetimi eklendi (`STALE_AFTER_DAYS`) — bayat kaynak Actions kaydında uyarı basar |
 | **2026-09-01** | **YENİ DIŞ SERVİS: Skinport API** (`api.skinport.com/v1/items`) — ⚠️ CORS başlığı GÖNDERMEZ, tarayıcıdan çağrılamaz; yalnızca GitHub Actions içinden erişilir. Fiyat için değil, **listeleme adedi (likidite)** için kullanılır |
 | **2026-09-01** | **YENİ ALTYAPI: GitHub Actions cron** — `.github/workflows/update-prices.yml` 2 saatte bir çalışıp `prices-data` YETİM dalına `latest.json` yazar. Ayrı dal olduğu için Cloudflare Pages yeniden derlemez ve `master` geçmişi kirlenmez |
