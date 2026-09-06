@@ -33,6 +33,31 @@
 //      log-doğrusal interpolasyonla YENİDEN ÜRETİLİR.
 
 import fs from 'node:fs/promises';
+import { resolvePrices } from './price-providers.mjs';
+
+// ============================================================
+// SAĞLAYICI SIRASI — SİSTEMİ DEĞİŞTİRMEK İÇİN TEK YER BURASI
+// ============================================================
+// Sırayla denenir, ilk ÇALIŞAN ve yeterince dolu olan kullanılır.
+//
+//   skinport → ÜCRETSİZ, anahtar istemez, ~25.000 kayıt. VARSAYILAN.
+//   cs2sh    → `CS2SH_API_KEY` tanımlıysa devreye girer (~36.600 kayıt,
+//              çok piyasalı). Anahtar YOKSA veya süresi biterse sağlayıcı
+//              kendini atlar ve sıra Skinport'a düşer — SİTE ÇÖKMEZ.
+//   csfloat  → `CSFLOAT_API_KEY` tanımlıysa. ⚠️ Anahtarsız 403 verir.
+//
+// ⚠️ VARSAYILAN NEDEN SKINPORT (cs2.sh anahtarı elde OLSA BİLE):
+//   1. cs2.sh 2 günlük deneme — birincil yapılırsa fiyatlar BUGÜN bir kayar,
+//      anahtar bitince İKİNCİ KEZ kayar. İki kesinti yerine sıfır.
+//   2. Ölçüldü: cs2.sh (csfloat/buff satış fiyatı) Steam'in çok altında ve
+//      kalibrasyon katsayısı 1.605 ile GÜVENLİK TAVANINA dayanıyor; yani
+//      kalibrasyon fiyatları tam Steam seviyesine çekemiyor. Skinport'ta
+//      aynı katsayı 1.25 — rahat bir bantta.
+// cs2.sh'ı denemek isterseniz TEK SATIR: PRICE_PROVIDERS="cs2sh,skinport"
+const PROVIDER_ORDER = (process.env.PRICE_PROVIDERS || 'skinport,cs2sh,csfloat')
+  .split(',')
+  .map(x => x.trim())
+  .filter(Boolean);
 
 const SKINPORT = 'https://api.skinport.com/v1/items?app_id=730&currency=USD';
 const BYMYKEL  = 'https://raw.githubusercontent.com/ByMykel/counter-strike-price-tracker/main/static/latest.json';
@@ -81,29 +106,21 @@ async function getJson(url, label) {
 // 1) KAYNAKLARI ÇEK
 // ------------------------------------------------------------
 async function loadSources() {
-  const out = { skinport: null, steam: null, steamUpdatedAt: null, skinportUpdatedAt: null };
+  const out = { skinport: null, steam: null, steamUpdatedAt: null, skinportUpdatedAt: null, providerId: null, providerLabel: null, providersTried: [] };
 
-  try {
-    const sp = await getJson(SKINPORT, 'Skinport');
-    out.skinport = new Map();
-    let newest = 0;
-    for (const it of sp) {
-      if (!it || !it.market_hash_name) continue;
-      // ⚠️ DOĞRU ALAN `suggested_price` — `median_price` DEĞİL (1 Eyl 2026).
-      // `median_price` o eşyanın TÜM listelemelerinin medyanıdır ve STICKERLI
-      // veya NADİR DESENLİ ilanlar onu yukarı çeker. Ölçülen örnek:
-      // AK-47 | Redline (FT) -> median $50.47, suggested $36.68, max $20322.
-      // `suggested_price` Skinport'un kendi temiz referans fiyatıdır.
-      const p = it.suggested_price != null ? it.suggested_price : it.median_price;
-      if (p == null || !(p > 0)) continue;
-      out.skinport.set(it.market_hash_name, { price: p, qty: it.quantity || 0 });
-      if (it.updated_at > newest) newest = it.updated_at;
-    }
-    out.skinportUpdatedAt = newest ? new Date(newest * 1000).toISOString() : null;
-    log('✅ Skinport: ' + out.skinport.size + ' kayıt (güncelleme: ' + out.skinportUpdatedAt + ')');
-  } catch (e) {
-    log('⚠️ Skinport alınamadı: ' + e.message);
+  // ⚠️ BİRİNCİL FİYAT ARTIK ADAPTÖRDEN GELİYOR (bkz. price-providers.mjs).
+  // Hangi servisin kullanıldığı bu dosyanın geri kalanını İLGİLENDİRMEZ;
+  // sözleşme her sağlayıcıda aynı: Map<market_hash_name, {price, qty}>.
+  const picked = await resolvePrices(PROVIDER_ORDER, { log });
+  if (picked.map) {
+    out.skinport = picked.map;                 // (tarihsel ad — "birincil kaynak")
+    out.skinportUpdatedAt = picked.map.updatedAt || null;
+    out.providerId = picked.id;
+    out.providerLabel = picked.label;
+  } else {
+    log('⚠️ Hiçbir fiyat sağlayıcısı çalışmadı — yalnızca Steam yedeği kullanılacak');
   }
+  out.providersTried = picked.tried;
 
   try {
     const raw = await getJson(BYMYKEL, 'ByMykel');
@@ -169,7 +186,15 @@ function measureCalibration({ skinport, steam }) {
   const median = ratios[Math.floor(ratios.length / 2)];
   log('📐 Kalibrasyon: ' + ratios.length + ' likit eşyada medyan Steam/Skinport = x' + median.toFixed(3));
   // Makul bantta tut — kaynaklardan biri bozulursa fiyatlar uçmasın.
-  return Math.min(1.6, Math.max(0.8, median));
+  // ⚠️ TAVANA/TABANA DAYANMAK SESSİZ KALMAMALI: bu, seçilen sağlayıcının fiyat
+  // seviyesinin Steam'den yapısal olarak çok uzak olduğu anlamına gelir ve
+  // kalibrasyon farkı KAPATAMAZ. Görünür olsun diye uyarı basılıyor.
+  const clamped = Math.min(1.6, Math.max(0.8, median));
+  if (clamped !== median) {
+    log('⚠️ Kalibrasyon sınıra dayandı (' + median.toFixed(3) + ' → ' + clamped.toFixed(3) +
+        ') - saglayicinin fiyat seviyesi Steam seviyesinden cok uzak');
+  }
+  return clamped;
 }
 
 function mergeSources(sources) {
@@ -329,7 +354,7 @@ async function main() {
   const spAge = ageDays(sources.skinportUpdatedAt);
   const stAge = ageDays(sources.steamUpdatedAt);
   const staleSources = [];
-  if (spAge != null && spAge > STALE_AFTER_DAYS) staleSources.push('skinport(' + spAge.toFixed(1) + 'g)');
+  if (spAge != null && spAge > STALE_AFTER_DAYS) staleSources.push((sources.providerId || 'primary') + '(' + spAge.toFixed(1) + 'g)');
   if (stAge != null && stAge > STALE_AFTER_DAYS) staleSources.push('steam(' + stAge.toFixed(1) + 'g)');
   if (staleSources.length) {
     log('⚠️ BAYAT KAYNAK: ' + staleSources.join(', ') + ' — ' + STALE_AFTER_DAYS + ' günden eski');
@@ -342,9 +367,11 @@ async function main() {
       item_count: Object.keys(prices).length,
       sources: srcList,
       // Birincil fiyat kaynağı ve onun tazeliği — arayüz bunu gösterebilir.
-      primary_source: sources.skinport ? 'skinport' : 'steam',
-      skinport_snapshot: sources.skinportUpdatedAt,
-      skinport_age_days: spAge != null ? parseFloat(spAge.toFixed(2)) : null,
+      primary_source: sources.providerId || (sources.steam ? 'steam' : null),
+      primary_label: sources.providerLabel || 'ByMykel/Steam',
+      providers_tried: sources.providersTried,
+      primary_snapshot: sources.skinportUpdatedAt,
+      primary_age_days: spAge != null ? parseFloat(spAge.toFixed(2)) : null,
       steam_snapshot: sources.steamUpdatedAt,
       steam_age_days: stAge != null ? parseFloat(stAge.toFixed(2)) : null,
       stale_sources: staleSources,

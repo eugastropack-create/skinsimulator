@@ -45,6 +45,18 @@ jobs:
           node-version: '20'
 
       - name: Fiyatları çek, birleştir ve onar
+        # ⚠️ API ANAHTARLARI REPO SECRET'INDAN GELİR, KODA YAZILMAZ.
+        # Bu depo AÇIK; anahtarı kaynağa gömmek onu herkese yayınlamaktır.
+        #
+        # Secret tanımlı DEĞİLSE değişken boş gelir, ilgili sağlayıcı kendini
+        # atlar ve boru hattı ücretsiz Skinport'a düşer — iş BAŞARISIZ OLMAZ.
+        # (Secret eklemek: Settings > Secrets and variables > Actions > New)
+        env:
+          CS2SH_API_KEY: ${{ secrets.CS2SH_API_KEY }}
+          CSFLOAT_API_KEY: ${{ secrets.CSFLOAT_API_KEY }}
+          # Sağlayıcı sırasını değiştirmek isterseniz (ör. cs2.sh denemek):
+          # repo değişkeni olarak PRICE_PROVIDERS="cs2sh,skinport" tanımlayın.
+          PRICE_PROVIDERS: ${{ vars.PRICE_PROVIDERS }}
         run: node scripts/update-prices.mjs
 
       - name: prices-data dalına yaz

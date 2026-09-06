@@ -613,6 +613,37 @@ export default function TradeUpScreen({ inventory, setInventory, priceMap, allCo
     if (slots.every(x => !x)) setOutcomePrices({});
   }, [slots]);
 
+  // ============================================================
+  // ÇIKTI HAVUZU İÇİN GERÇEK FLOAT ARALIĞI
+  // ============================================================
+  // ⚠️ KRİTİK BUG (2 Eyl 2026, ölçüldü): Trade-Up ÇIKTILARI
+  // `collections.json` içindeki kayıtlardan üretiliyor ve o dosyada
+  // `min_float`/`max_float` alanları **HİÇ YOKTUR** (1455 skinin 0'ında var).
+  // `t.min_float ?? 0` yedeği yüzünden çıktıların **%75.9'u** uydurma
+  // 0.00–1.00 aralığıyla hesaplanıyordu.
+  //
+  // İKİ AYRI SEMPTOM ÜRETİYORDU:
+  //   1. YANLIŞ AŞINMA — `SSG 08 | Slashed` gerçekte 0.15'ten başlar, yani
+  //      Factory New olması İMKÂNSIZDIR; kod onu FN üretebiliyordu.
+  //   2. YANLIŞ FİYAT — sonra "SSG 08 | Slashed (Factory New)" diye piyasada
+  //      VAR OLMAYAN bir market_hash_name kuruluyor, canlı fiyat bulunamıyor
+  //      ve eşya sessizce simüle fiyata düşüyordu.
+  //
+  // GİRDİ tarafında bu sorun yoktu: yuvalar `allSkins` (skins.json) üzerinden
+  // seçiliyor ve orada aralıklar dolu. Asimetri tam olarak buydu.
+  //
+  // ⚠️ EŞLEŞTİRME KİMLİKLE: ada göre eşleştirme bu projede daha önce hataya
+  // yol açtı (aynı ad birden fazla türde geçebiliyor).
+  const floatRangeById = useMemo(() => {
+    const m = new Map();
+    (allSkins || []).forEach(sk => {
+      if (sk?.id && (sk.min_float != null || sk.max_float != null)) {
+        m.set(sk.id, { min_float: sk.min_float, max_float: sk.max_float });
+      }
+    });
+    return m;
+  }, [allSkins]);
+
   // OTOMATİK HESAPLAMA (Hesapla butonuna gerek yok)
   useEffect(() => {
     const validSlots = slots.filter(Boolean);
@@ -699,18 +730,27 @@ export default function TradeUpScreen({ inventory, setInventory, priceMap, allCo
     });
 
     const buildOutcome = (t, priceRarityOverride) => {
+      // ⚠️ ARALIK `t`'DEN DEĞİL, `skins.json`'DAN GELİR. `t` koleksiyon
+      // kaydıdır ve float alanları taşımaz (bkz. floatRangeById açıklaması).
+      const range = floatRangeById.get(t.id);
+      const skin = range ? { ...t, ...range } : t;
+
+      const targetMin = skin.min_float ?? 0;
+      const targetMax = skin.max_float ?? 1;
+
       // Hedefin KENDİ aralığında, girdilerin NORMALİZE ortalama konumuna
-      // karşılık gelen nokta (bkz. yukarıdaki formül açıklaması).
-      const targetMin = t.min_float ?? 0;
-      const targetMax = t.max_float ?? 1;
+      // karşılık gelen nokta (gerçek CS2 formülü).
       const f = parseFloat((targetMin + avgNormFloat * (targetMax - targetMin)).toFixed(4));
+
       // ⚠️ `stable: true` ZORUNLU: liste fiyata göre sıralanıyor; varyanslı
       // simüle fiyat kullanılırsa her float oynatmasında satırlar yer değiştirir.
+      // ⚠️ Fiyat `skin` ile sorgulanır (aralığı dolu olan kopya): aşınma ondan
+      // türediği için market_hash_name de doğru kuruluyor.
       return {
-        skin: t,
+        skin,
         outFloat: f,
         outWear: getWearFromFloat(f),
-        price: getRealisticPrice(priceMap, t, f, false, priceRarityOverride ?? targetRarity, false, { stable: true }),
+        price: getRealisticPrice(priceMap, skin, f, false, priceRarityOverride ?? targetRarity, false, { stable: true }),
       };
     };
 
@@ -821,7 +861,7 @@ export default function TradeUpScreen({ inventory, setInventory, priceMap, allCo
         ? Object.keys(collectionVotes).map(id => collectionById[id]?.name).filter(Boolean)
         : [];
     setAnalysis({ avgFloat, avgNormFloat, profitChance, totalCost, ev, outcomes: possibleOutcomes, sourceCollectionNames, isKnifeRecipe });
-  }, [slots, allSkins, priceMap, skinToCollections, knifePool, outcomePrices]);
+  }, [slots, allSkins, priceMap, skinToCollections, knifePool, outcomePrices, floatRangeById]);
 
   const lockedRarity = slots.find(s => s !== null)?.skin?.rarity?.name || null;
   const filledCount = slots.filter(Boolean).length;
